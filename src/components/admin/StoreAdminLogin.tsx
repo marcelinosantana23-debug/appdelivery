@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Lock, Mail, Eye, EyeOff, Store, Shield, AlertCircle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { StoreLogo, getSafeDisplayName } from "@/components/common/StoreLogo";
 
 interface StoreAdminLoginProps {
   onBack: () => void;
@@ -60,12 +61,12 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/95 p-6 sm:p-8 shadow-2xl backdrop-blur-md text-slate-100">
           <div className="mb-6 text-center">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-red-600 text-3xl shadow-lg shadow-red-900/30">
-              {config.logo || "🏪"}
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-tr from-amber-500 to-red-600 text-3xl shadow-lg shadow-red-900/30">
+              <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover" />
             </div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-3 py-1 text-[11px] font-semibold text-slate-300 border border-slate-700 mb-2">
               <Store className="h-3 w-3 text-amber-400" />
-              Painel do Lojista • {config.name}
+              Painel do Lojista • {getSafeDisplayName(config.name, "Lanchonete")}
             </div>
             <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
               Acesso da Lanchonete

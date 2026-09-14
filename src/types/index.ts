@@ -42,12 +42,17 @@ export interface Tenant {
   address: string;
   hours: string;
   tagline: string;
+  announcement?: string;
   logo: string;
   bannerImage?: string;
   primaryColor: string;
+  secondaryColor?: string;
   primaryDark: string;
   primaryLight: string;
   accentColor: string;
+  themeMode?: "light" | "dark";
+  menuLayout?: "list" | "grid";
+  showFeaturedCarousel?: boolean;
   status: TenantStatus;
   isOpen: boolean;
   createdAt: number;

@@ -12,6 +12,7 @@ import { AdminPanel } from "@/components/admin/AdminPanel";
 import { SuperAdminPanel } from "@/components/admin/SuperAdminPanel";
 import { SuperAdminLogin } from "@/components/admin/SuperAdminLogin";
 import { StoreAdminLogin } from "@/components/admin/StoreAdminLogin";
+import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 import type { Product, Order } from "@/types";
 
 type View = "menu" | "checkout" | "tracking" | "admin" | "superadmin";
@@ -109,10 +110,12 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
                   className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-3 text-left hover:border-amber-200 hover:bg-amber-50/50 transition"
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className="text-xl">{t.logo || "🍔"}</span>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white border border-gray-200 text-lg shadow-sm">
+                      <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
+                    </div>
                     <div>
-                      <div className="text-xs font-bold text-gray-800">{t.name}</div>
-                      <div className="text-[11px] text-gray-400 font-mono">/loja/{t.slug}</div>
+                      <div className="text-xs font-bold text-gray-800">{getSafeDisplayName(t.name, "Lanchonete")}</div>
+                      <div className="text-[11px] text-gray-400 font-mono">/loja/{getSafeSlug(t.slug, "loja")}</div>
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-amber-600">Acessar &rarr;</span>
@@ -147,7 +150,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 pb-24 transition-colors">
       <Header
         onStoreAdminClick={onStoreAdminClick}
         onSuperAdminClick={onSuperAdminClick}

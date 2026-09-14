@@ -57,7 +57,7 @@ export function CategoryNav({ activeCategory, onCategoryClick, products = [] }: 
   }
 
   return (
-    <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md shadow-sm">
+    <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm border-b border-transparent dark:border-slate-800 transition-colors">
       <div
         ref={scrollRef}
         className="no-scrollbar mx-auto flex max-w-2xl gap-2 overflow-x-auto px-4 py-3"
@@ -69,12 +69,12 @@ export function CategoryNav({ activeCategory, onCategoryClick, products = [] }: 
             className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
               activeCategory === cat.id
                 ? "bg-primary text-white shadow-md"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700"
             }`}
           >
             <span className="text-base">{cat.icon}</span>
             <span>{cat.name}</span>
-            <span className={`text-xs ${activeCategory === cat.id ? "text-white/80" : "text-gray-400"}`}>
+            <span className={`text-xs ${activeCategory === cat.id ? "text-white/80" : "text-gray-400 dark:text-gray-400"}`}>
               ({cat.count})
             </span>
           </button>

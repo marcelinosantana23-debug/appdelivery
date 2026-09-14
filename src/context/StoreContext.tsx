@@ -18,6 +18,7 @@ import {
   loginApi,
   updateSuperAdminCredentialsApi,
 } from "@/services/api";
+import { getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 
 interface StoreContextValue {
   // Multi-tenant state
@@ -95,14 +96,22 @@ function applyThemeColors(config: StoreConfig) {
   document.documentElement.style.setProperty("--color-primary-dark", config.primaryDark || "#C1121F");
   document.documentElement.style.setProperty("--color-primary-light", config.primaryLight || "#F77F00");
   document.documentElement.style.setProperty("--color-accent", config.accentColor || "#FCBF49");
+  document.documentElement.style.setProperty("--color-secondary", config.secondaryColor || "#1E293B");
+
+  if (config.themeMode === "dark") {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
 }
 
 function tenantToStoreConfig(t: Tenant): StoreConfig {
   return {
     id: t.id,
-    slug: t.slug,
-    name: t.name,
-    tagline: t.tagline,
+    slug: getSafeSlug(t.slug, "loja"),
+    name: getSafeDisplayName(t.name, "Burger Town"),
+    tagline: t.tagline && !t.tagline.startsWith("data:") ? t.tagline : "",
+    announcement: t.announcement && !t.announcement.startsWith("data:") ? t.announcement : "",
     logo: t.logo || "🏪",
     bannerImage: t.bannerImage || "",
     whatsapp: t.whatsapp,
@@ -113,9 +122,13 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
     address: t.address,
     hours: t.hours,
     primaryColor: t.primaryColor || "#E63946",
+    secondaryColor: t.secondaryColor || "#1E293B",
     primaryDark: t.primaryDark || "#C1121F",
     primaryLight: t.primaryLight || "#F77F00",
     accentColor: t.accentColor || "#FCBF49",
+    themeMode: t.themeMode || "light",
+    menuLayout: t.menuLayout || "list",
+    showFeaturedCarousel: t.showFeaturedCarousel !== false,
     status: t.status,
     isOpen: t.isOpen,
   };
@@ -323,11 +336,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---------------- STORE CONFIG & SETTINGS ----------------
   const updateConfig = useCallback(
     async (partial: Partial<StoreConfig>) => {
-      setConfig((prev) => ({ ...prev, ...partial }));
+      setConfig((prev) => {
+        const next = { ...prev, ...partial };
+        applyThemeColors(next);
+        return next;
+      });
       if (currentTenant) {
         const updated = await updateTenantApi(currentTenant.id, partial);
         if (updated.success && updated.tenant) {
           setCurrentTenant(updated.tenant);
+          setTenants((prev) =>
+            prev.map((t) => (t.id === updated.tenant!.id ? updated.tenant! : t))
+          );
         }
       }
     },

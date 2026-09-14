@@ -5,6 +5,7 @@ export interface StoreConfig {
   slug?: string;
   name: string;
   tagline: string;
+  announcement?: string;
   logo: string;
   bannerImage?: string;
   whatsapp: string;
@@ -15,9 +16,13 @@ export interface StoreConfig {
   address: string;
   hours: string;
   primaryColor: string;
+  secondaryColor?: string;
   primaryDark: string;
   primaryLight: string;
   accentColor: string;
+  themeMode?: "light" | "dark";
+  menuLayout?: "list" | "grid";
+  showFeaturedCarousel?: boolean;
   status?: "active" | "inactive";
   isOpen?: boolean;
 }
@@ -27,6 +32,7 @@ export const defaultStoreConfig: StoreConfig = {
   slug: "burger-town",
   name: "Burger Town",
   tagline: "Hambúrgueres artesanais na chama",
+  announcement: "Entrega grátis para pedidos acima de R$ 50,00!",
   logo: "🍔",
   bannerImage: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
   whatsapp: "5511999999999",
@@ -37,9 +43,13 @@ export const defaultStoreConfig: StoreConfig = {
   address: "Rua das Chamas, 420 - Centro",
   hours: "18:00 - 23:30",
   primaryColor: "#E63946",
+  secondaryColor: "#1E293B",
   primaryDark: "#C1121F",
   primaryLight: "#F77F00",
   accentColor: "#FCBF49",
+  themeMode: "light",
+  menuLayout: "list",
+  showFeaturedCarousel: true,
   status: "active",
   isOpen: true,
 };

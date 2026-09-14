@@ -11,6 +11,7 @@ import {
   CornerUpLeft,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminMenu } from "./AdminMenu";
@@ -152,18 +153,20 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{config.logo || "🏪"}</span>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-800 border border-slate-700 text-xl shadow-inner">
+              <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover" />
+            </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm font-bold text-white sm:text-base leading-tight">
-                  {config.name}
+                  {getSafeDisplayName(config.name, "Minha Lanchonete")}
                 </h1>
                 <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400 border border-slate-700">
                   {isSuperAdmin ? "Super Admin" : "Admin da Loja"}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                /loja/{config.slug || "loja"} • {currentUser?.email}
+                /loja/{getSafeSlug(config.slug, "loja")} • {currentUser?.email}
               </p>
             </div>
           </div>

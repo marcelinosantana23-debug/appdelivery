@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Clock, MapPin, Store, ChevronDown, Check, Shield, AlertTriangle, Bike } from "lucide-react";
+import { Clock, MapPin, Store, ChevronDown, Check, Shield, AlertTriangle, Bike, Sparkles } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 
 interface HeaderProps {
   onAdminClick?: () => void;
@@ -16,9 +17,12 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
   const handleSuperAdmin = onSuperAdminClick || onAdminClick || (() => {});
 
   const hasBanner = Boolean(config.bannerImage);
+  const isImageLogo = Boolean(
+    config.logo && (config.logo.startsWith("data:image/") || config.logo.startsWith("http"))
+  );
 
   return (
-    <header className="relative w-full bg-white shadow-sm">
+    <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
       {/* Inactive store notification banner */}
       {!isStoreActive && (
         <div className="relative z-30 flex items-center justify-center gap-2 bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-md">
@@ -69,6 +73,7 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
                   <div className="max-h-60 overflow-y-auto space-y-1">
                     {tenants.map((t) => {
                       const isSelected = (currentTenant?.id || config.id) === t.id;
+                      const isTLogoImg = t.logo && (t.logo.startsWith("data:") || t.logo.startsWith("http"));
                       return (
                         <button
                           key={t.id}
@@ -83,10 +88,12 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
-                            <span className="text-base">{t.logo || "🍔"}</span>
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-800 border border-white/10 text-base">
+                              <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
+                            </div>
                             <div>
-                              <span className="block font-medium leading-tight">{t.name}</span>
-                              <span className="text-[10px] text-slate-400">/loja/{t.slug}</span>
+                              <span className="block font-medium leading-tight">{getSafeDisplayName(t.name, "Lanchonete")}</span>
+                              <span className="text-[10px] text-slate-400">/loja/{getSafeSlug(t.slug, "loja")}</span>
                             </div>
                           </div>
                           {isSelected && <Check className="h-4 w-4 text-amber-400" />}
@@ -131,19 +138,29 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
       {/* 2. INFORMAÇÕES DA LANCHONETE (Perfil iFood com avatar sobreposto) */}
       <div className="relative mx-auto max-w-2xl px-4 sm:px-6 pb-4">
         <div className="relative -mt-10 sm:-mt-12 flex items-end gap-3.5 sm:gap-4">
-          {/* Logo / Emoticon da Loja */}
-          <div className="relative z-10 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center rounded-2xl border-4 border-white bg-white text-4xl sm:text-5xl shadow-xl">
-            {config.logo || "🏪"}
+          {/* Logo / Foto de Perfil da Loja */}
+          <div className="relative z-10 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-4xl sm:text-5xl shadow-xl">
+            <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover object-center" fallbackEmoji="🏪" />
           </div>
 
           {/* Nome e Tagline da Loja */}
           <div className="flex-1 min-w-0 pb-1">
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 truncate">
-              {config.name}
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white truncate">
+              {getSafeDisplayName(config.name, "Burger Town")}
             </h1>
-            <p className="text-xs sm:text-sm text-gray-500 truncate">{config.tagline}</p>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
+              {config.tagline && !config.tagline.startsWith("data:") ? config.tagline : ""}
+            </p>
           </div>
         </div>
+
+        {/* Aviso da Loja / Promoção do Dia */}
+        {config.announcement && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 px-3.5 py-2 text-xs font-semibold text-amber-900 dark:text-amber-200">
+            <Sparkles className="h-4 w-4 shrink-0 text-amber-500 animate-pulse" />
+            <span className="flex-1 leading-snug">{config.announcement}</span>
+          </div>
+        )}
 
         {/* Badges de Status, Horário, Taxa de Entrega e Endereço */}
         <div className="mt-3 flex flex-wrap items-center gap-2 pt-1 text-xs">
@@ -151,8 +168,8 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold ${
               isStoreOpen && isStoreActive
-                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : "bg-red-50 text-red-700 border border-red-200"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60"
+                : "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800/60"
             }`}
           >
             <span
@@ -164,13 +181,13 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
           </span>
 
           {/* Horário de Funcionamento */}
-          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-600">
+          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80 px-2.5 py-1 text-gray-600 dark:text-gray-300">
             <Clock className="h-3.5 w-3.5 text-gray-400" />
             <span>{config.hours}</span>
           </span>
 
           {/* Taxa de Entrega */}
-          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-600">
+          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80 px-2.5 py-1 text-gray-600 dark:text-gray-300">
             <Bike className="h-3.5 w-3.5 text-primary" />
             <span>
               Entrega:{" "}
@@ -182,7 +199,7 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
         </div>
 
         {/* Endereço */}
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
           <span className="truncate">{config.address}</span>
         </div>

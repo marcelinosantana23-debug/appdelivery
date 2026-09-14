@@ -191,7 +191,7 @@ function ProductForm({
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL(file.type || "image/jpeg", 0.85);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
           setImage(dataUrl);
         } else {
           setImage(result);
