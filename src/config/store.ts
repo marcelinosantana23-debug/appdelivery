@@ -1,6 +1,8 @@
 export type PixKeyType = "cpf" | "cnpj" | "phone" | "email" | "random";
 
 export interface StoreConfig {
+  id?: string;
+  slug?: string;
   name: string;
   tagline: string;
   logo: string;
@@ -15,9 +17,13 @@ export interface StoreConfig {
   primaryDark: string;
   primaryLight: string;
   accentColor: string;
+  status?: "active" | "inactive";
+  isOpen?: boolean;
 }
 
 export const defaultStoreConfig: StoreConfig = {
+  id: "tenant-burger-town",
+  slug: "burger-town",
   name: "Burger Town",
   tagline: "Hambúrgueres artesanais na chama",
   logo: "🍔",
@@ -32,9 +38,17 @@ export const defaultStoreConfig: StoreConfig = {
   primaryDark: "#C1121F",
   primaryLight: "#F77F00",
   accentColor: "#FCBF49",
+  status: "active",
+  isOpen: true,
+};
+
+export const SUPER_ADMIN_CREDENTIALS = {
+  email: "superadmin@plataforma.com",
+  password: "admin123",
 };
 
 export const ADMIN_CREDENTIALS = {
   email: "admin@loja.com",
   password: "123456",
 };
+

@@ -1,22 +1,62 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Bell, BellOff, LogOut, Package, UtensilsCrossed, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  BellOff,
+  LogOut,
+  Package,
+  UtensilsCrossed,
+  Settings,
+  Shield,
+  CornerUpLeft,
+} from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminMenu } from "./AdminMenu";
 import { AdminSettings } from "./AdminSettings";
+import { SuperAdminPanel } from "./SuperAdminPanel";
+import type { Tenant } from "@/types";
 
 interface AdminPanelProps {
   onExit: () => void;
+  onGoToSuperAdmin?: () => void;
 }
 
 type AdminTab = "orders" | "menu" | "settings";
 
-export function AdminPanel({ onExit }: AdminPanelProps) {
-  const { isAdminAuthed, logout, isStoreOpen, toggleStore, orders, newOrderIds, config } = useStore();
+export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
+  const {
+    isAdminAuthed,
+    isSuperAdmin,
+    currentUser,
+    logout,
+    isStoreOpen,
+    toggleStore,
+    orders,
+    newOrderIds,
+    config,
+    currentTenant,
+    selectTenant,
+    tenants,
+  } = useStore();
+
   const [tab, setTab] = useState<AdminTab>("orders");
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(null);
   const lastOrderCount = useRef(orders.length);
+
+  // Enforce that a store admin only manages their own store
+  useEffect(() => {
+    if (currentUser?.role === "tenant_admin" && currentUser.tenantId) {
+      if (!currentTenant || currentTenant.id !== currentUser.tenantId) {
+        const myTenant = tenants.find((t) => t.id === currentUser.tenantId);
+        if (myTenant) {
+          selectTenant(myTenant.slug);
+        }
+      }
+    }
+  }, [currentUser, currentTenant, tenants, selectTenant]);
 
   const activeOrders = orders.filter(
     (o) => o.status !== "done" && o.status !== "cancelled"
@@ -31,7 +71,10 @@ export function AdminPanel({ onExit }: AdminPanelProps) {
 
   const playNotificationSound = () => {
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioContextClass();
       const notes = [880, 1100, 880, 1100];
       notes.forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -56,60 +99,123 @@ export function AdminPanel({ onExit }: AdminPanelProps) {
     return <AdminLogin onBack={onExit} />;
   }
 
+  // If user is Super Admin and has not drilled down into an individual store, show the Super Admin Dashboard
+  if (isSuperAdmin && !superAdminViewingStore) {
+    return (
+      <SuperAdminPanel
+        onManageStore={(tenant) => {
+          selectTenant(tenant.slug);
+          setSuperAdminViewingStore(tenant);
+        }}
+        onExit={onExit}
+      />
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-gray-900">
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 text-slate-100">
+      {/* Super Admin breadcrumb banner if drilling down */}
+      {isSuperAdmin && superAdminViewingStore && (
+        <div className="flex items-center justify-between border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs">
+          <div className="flex items-center gap-2 text-amber-300">
+            <Shield className="h-4 w-4 text-amber-400" />
+            <span>
+              Você está gerenciando a lanchonete:{" "}
+              <strong className="text-white font-bold">{currentTenant?.name || superAdminViewingStore.name}</strong>{" "}
+              (/loja/{currentTenant?.slug || superAdminViewingStore.slug})
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              if (onGoToSuperAdmin) {
+                onGoToSuperAdmin();
+              } else {
+                setSuperAdminViewingStore(null);
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1 font-semibold text-amber-200 border border-amber-500/40 hover:bg-amber-500/30 transition"
+          >
+            <CornerUpLeft className="h-3.5 w-3.5" />
+            <span>Voltar ao Painel Geral de Lojas</span>
+          </button>
+        </div>
+      )}
+
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3">
         <div className="flex items-center gap-3">
           <button
             onClick={onExit}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-800 text-gray-300 transition hover:bg-gray-700"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition hover:bg-slate-700"
+            title="Voltar para a vitrine"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{config.logo}</span>
-            <h1 className="text-base font-bold text-white">Painel Administrativo</h1>
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">{config.logo || "🏪"}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-bold text-white sm:text-base leading-tight">
+                  {config.name}
+                </h1>
+                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400 border border-slate-700">
+                  {isSuperAdmin ? "Super Admin" : "Admin da Loja"}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                /loja/{config.slug || "loja"} • {currentUser?.email}
+              </p>
+            </div>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSoundEnabled((s) => !s)}
-            className={`flex h-9 w-9 items-center justify-center rounded-full transition ${
-              soundEnabled ? "bg-green-500/20 text-green-400" : "bg-gray-800 text-gray-500"
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+              soundEnabled ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-500"
             }`}
-            title={soundEnabled ? "Som ativo" : "Som mudo"}
+            title={soundEnabled ? "Som de novos pedidos ativo" : "Som desativado"}
           >
             {soundEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
           </button>
+
           <button
             onClick={toggleStore}
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition ${
               isStoreOpen
-                ? "bg-green-500 text-white hover:bg-green-600"
-                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                ? "bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${isStoreOpen ? "bg-white animate-pulse" : "bg-gray-400"}`} />
-            {isStoreOpen ? "Aberta" : "Fechada"}
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isStoreOpen ? "bg-white animate-pulse" : "bg-slate-500"
+              }`}
+            />
+            {isStoreOpen ? "Loja Aberta" : "Loja Fechada"}
           </button>
+
           <button
-            onClick={logout}
-            className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-2 text-xs font-bold text-gray-300 transition hover:bg-red-500/20 hover:text-red-400"
-            title="Sair do painel"
+            onClick={() => {
+              logout();
+              setSuperAdminViewingStore(null);
+            }}
+            className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-red-500/20 hover:text-red-400"
+            title="Sair da conta"
           >
             <LogOut className="h-4 w-4" />
-            Sair
+            <span className="hidden sm:inline">Sair</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-800 bg-gray-900">
+      <div className="flex border-b border-slate-800 bg-slate-900">
         <TabButton active={tab === "orders"} onClick={() => setTab("orders")} icon={<Package className="h-4 w-4" />}>
           Pedidos
           {activeOrders > 0 && (
-            <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-xs font-bold text-white">
+            <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">
               {activeOrders}
             </span>
           )}
@@ -118,12 +224,12 @@ export function AdminPanel({ onExit }: AdminPanelProps) {
           Cardápio
         </TabButton>
         <TabButton active={tab === "settings"} onClick={() => setTab("settings")} icon={<Settings className="h-4 w-4" />}>
-          Configurações
+          Configurações da Loja
         </TabButton>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div className="flex-1 overflow-y-auto bg-gray-50 text-slate-900">
         {tab === "orders" && <AdminOrders newOrderIds={newOrderIds} />}
         {tab === "menu" && <AdminMenu />}
         {tab === "settings" && <AdminSettings />}
@@ -146,10 +252,10 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-sm font-bold transition ${
+      className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-xs sm:text-sm font-bold transition border-b-2 ${
         active
-          ? "border-b-2 border-primary text-white"
-          : "text-gray-500 hover:text-gray-300"
+          ? "border-amber-500 text-white bg-slate-800/50"
+          : "border-transparent text-slate-400 hover:text-slate-200"
       }`}
     >
       {icon}

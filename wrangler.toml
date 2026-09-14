@@ -1,0 +1,22 @@
+name = "delivery-app-multitenant"
+main = "src/worker.ts"
+compatibility_date = "2024-09-01"
+
+[vars]
+PLATFORM_NAME = "DeliveryHub Multi-tenant"
+ENVIRONMENT = "production"
+
+# Cloudflare D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "delivery_db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Cloudflare KV Namespace Binding (para cache e configurações rápidas de tenant)
+[[kv_namespaces]]
+binding = "STORE_KV"
+id = "00000000000000000000000000000000"
+
+[site]
+bucket = "./dist"

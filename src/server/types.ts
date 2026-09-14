@@ -1,0 +1,137 @@
+export type UserRole = "super_admin" | "tenant_admin";
+
+export type TenantStatus = "active" | "inactive";
+
+export type PixKeyType = "cpf" | "cnpj" | "phone" | "email" | "random";
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  email: string;
+  phone?: string;
+  whatsapp: string;
+  pixKey: string;
+  pixKeyType: PixKeyType;
+  deliveryFee: number;
+  address: string;
+  hours: string;
+  tagline: string;
+  logo: string;
+  primaryColor: string;
+  primaryDark: string;
+  primaryLight: string;
+  accentColor: string;
+  status: TenantStatus;
+  isOpen: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  password?: string;
+  name: string;
+  role: UserRole;
+  tenantId?: string | null;
+  status: "active" | "inactive";
+  createdAt: number;
+}
+
+export interface ProductOption {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface Product {
+  id: string;
+  tenantId?: string;
+  name: string;
+  description?: string;
+  price: number;
+  image?: string;
+  category?: string;
+  available?: boolean;
+  options?: ProductOption[];
+  createdAt?: number;
+}
+
+export type OrderType = "delivery" | "pickup";
+export type PaymentMethod = "pix" | "card" | "cash";
+export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "cancelled";
+
+export interface OrderItem {
+  id: string;
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    image?: string;
+    category?: string;
+    description?: string;
+    available?: boolean;
+    options?: ProductOption[];
+  };
+  quantity: number;
+  selectedOptions: ProductOption[];
+  notes: string;
+}
+
+export interface Order {
+  id: string;
+  tenantId: string;
+  customerName: string;
+  customerPhone: string;
+  orderType: OrderType;
+  paymentMethod: PaymentMethod;
+  address?: {
+    street: string;
+    number: string;
+    district: string;
+    complement: string;
+    reference: string;
+  };
+  changeFor?: string;
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+  status: OrderStatus;
+  items: OrderItem[];
+  statusHistory: { status: OrderStatus; timestamp: number }[];
+  createdAt: number;
+}
+
+// Cloudflare Workers Bindings via env object
+export interface CloudflareD1Result<T = unknown> {
+  results?: T[];
+  success: boolean;
+  meta?: Record<string, unknown>;
+}
+
+export interface CloudflareD1PreparedStatement {
+  bind(...values: unknown[]): CloudflareD1PreparedStatement;
+  all<T = unknown>(): Promise<CloudflareD1Result<T>>;
+  run<T = unknown>(): Promise<CloudflareD1Result<T>>;
+  first<T = unknown>(colName?: string): Promise<T | null>;
+}
+
+export interface CloudflareD1Database {
+  prepare(query: string): CloudflareD1PreparedStatement;
+  exec(query: string): Promise<unknown>;
+}
+
+export interface CloudflareKVNamespace {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+export interface Env {
+  DB?: CloudflareD1Database;
+  STORE_KV?: CloudflareKVNamespace;
+  PLATFORM_NAME?: string;
+  ENVIRONMENT?: string;
+  JWT_SECRET?: string;
+}

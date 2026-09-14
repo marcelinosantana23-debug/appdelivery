@@ -1,0 +1,8 @@
+{
+  "name": "DeliveryHub - Plataforma Multi-tenant de Delivery",
+  "description": "Sistema multi-lojas completo com 3 níveis de acesso (Super Admin, Lojista e Cliente), API Hono, Cloudflare Workers D1 e vitrines dinâmicas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

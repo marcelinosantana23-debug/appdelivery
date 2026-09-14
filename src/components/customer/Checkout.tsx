@@ -10,7 +10,7 @@ interface CheckoutProps {
 }
 
 export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
-  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, config } = useStore();
+  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config } = useStore();
 
   const [orderType, setOrderType] = useState<OrderType>("delivery");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
@@ -25,6 +25,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   });
   const [changeFor, setChangeFor] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (cart.length === 0) {
     return (
@@ -59,10 +60,11 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return;
-    if (!isStoreOpen) return;
+    if (!isStoreOpen || !isStoreActive) return;
 
+    setIsSubmitting(true);
     const order: Order = {
       id: generateOrderId(),
       items: cart,
@@ -80,10 +82,19 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       statusHistory: [{ status: "received", timestamp: Date.now() }],
     };
 
-    addOrder(order);
-    window.open(getWhatsAppUrl(order, config), "_blank");
-    clearCart();
-    onOrderPlaced(order);
+    try {
+      await addOrder(order);
+      const url = getWhatsAppUrl(order, config);
+      if (url) {
+        window.open(url, "_blank");
+      }
+      clearCart();
+      onOrderPlaced(order);
+    } catch {
+      // ignore
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -99,11 +110,15 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       </div>
 
       <div className="mx-auto max-w-lg space-y-5 px-4 py-5">
-        {!isStoreOpen && (
+        {!isStoreActive ? (
+          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 font-medium">
+            Esta lanchonete está temporariamente desativada pela plataforma. Não é possível finalizar pedidos.
+          </div>
+        ) : !isStoreOpen ? (
           <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
             A lanchonete está fechada no momento. Não é possível finalizar pedidos.
           </div>
-        )}
+        ) : null}
 
         {/* Order type */}
         <Section title="Como deseja receber?">
@@ -270,11 +285,11 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
 
         <button
           onClick={handleSubmit}
-          disabled={!isStoreOpen}
+          disabled={!isStoreOpen || !isStoreActive || isSubmitting}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-500 py-4 font-bold text-white shadow-lg transition active:scale-[0.98] hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <MessageCircle className="h-5 w-5" />
-          Finalizar pedido via WhatsApp
+          {isSubmitting ? "Enviando pedido..." : "Finalizar pedido via WhatsApp"}
         </button>
 
         <div className="h-4" />

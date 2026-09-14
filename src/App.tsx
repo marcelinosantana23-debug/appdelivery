@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { StoreProvider, useStore } from "@/context/StoreContext";
 import { Header } from "@/components/customer/Header";
 import { CategoryNav } from "@/components/customer/CategoryNav";
@@ -9,16 +9,33 @@ import { CartDrawer } from "@/components/customer/CartDrawer";
 import { Checkout } from "@/components/customer/Checkout";
 import { OrderTracking } from "@/components/customer/OrderTracking";
 import { AdminPanel } from "@/components/admin/AdminPanel";
+import { SuperAdminPanel } from "@/components/admin/SuperAdminPanel";
+import { SuperAdminLogin } from "@/components/admin/SuperAdminLogin";
+import { StoreAdminLogin } from "@/components/admin/StoreAdminLogin";
 import type { Product, Order } from "@/types";
 
-type View = "menu" | "checkout" | "tracking" | "admin";
+type View = "menu" | "checkout" | "tracking" | "admin" | "superadmin";
 
-function CustomerApp({ onAdminClick }: { onAdminClick: () => void }) {
-  const { products, isStoreOpen, config } = useStore();
+interface CustomerAppProps {
+  onStoreAdminClick: () => void;
+  onSuperAdminClick: () => void;
+}
+
+function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps) {
+  const {
+    products,
+    isStoreOpen,
+    isStoreActive,
+    config,
+    isLoadingStore,
+    storeNotFound,
+    tenants,
+    selectTenant,
+  } = useStore();
   const [activeCategory, setActiveCategory] = useState("lanches");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
-  const [view, setView] = useState<"menu" | "checkout" | "tracking">("menu");
+  const [customerView, setCustomerView] = useState<"menu" | "checkout" | "tracking">("menu");
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -53,40 +70,103 @@ function CustomerApp({ onAdminClick }: { onAdminClick: () => void }) {
     }
   };
 
-  if (view === "checkout") {
+  if (isLoadingStore) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
+        <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-sm border border-gray-100 max-w-sm w-full">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" />
+          <div>
+            <h3 className="font-bold text-gray-800 text-base">Carregando cardápio...</h3>
+            <p className="text-xs text-gray-500 mt-1">Buscando dados isolados da loja no D1/KV</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (storeNotFound) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
+        <div className="w-full max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-2xl">
+            🍔
+          </div>
+          <h2 className="mt-4 text-xl font-bold text-gray-900">Lanchonete Não Encontrada</h2>
+          <p className="mt-2 text-xs text-gray-500">
+            O endereço acessado não corresponde a nenhuma loja ativa cadastrada na plataforma.
+          </p>
+          <div className="mt-6 space-y-2">
+            <span className="block text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              Lojas disponíveis na plataforma:
+            </span>
+            {tenants
+              .filter((t) => t.status === "active")
+              .slice(0, 4)
+              .map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => selectTenant(t.slug)}
+                  className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-3 text-left hover:border-amber-200 hover:bg-amber-50/50 transition"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xl">{t.logo || "🍔"}</span>
+                    <div>
+                      <div className="text-xs font-bold text-gray-800">{t.name}</div>
+                      <div className="text-[11px] text-gray-400 font-mono">/loja/{t.slug}</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-amber-600">Acessar &rarr;</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (customerView === "checkout") {
     return (
       <Checkout
-        onClose={() => setView("menu")}
+        onClose={() => setCustomerView("menu")}
         onOrderPlaced={(order) => {
           setTrackedOrder(order);
-          setView("tracking");
+          setCustomerView("tracking");
         }}
       />
     );
   }
 
-  if (view === "tracking" && trackedOrder) {
+  if (customerView === "tracking" && trackedOrder) {
     return (
       <OrderTracking
         order={trackedOrder}
-        onBack={() => setView("menu")}
-        onHome={() => setView("menu")}
+        onBack={() => setCustomerView("menu")}
+        onHome={() => setCustomerView("menu")}
       />
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      <Header onAdminClick={onAdminClick} />
+      <Header
+        onStoreAdminClick={onStoreAdminClick}
+        onSuperAdminClick={onSuperAdminClick}
+      />
       <CategoryNav activeCategory={activeCategory} onCategoryClick={handleCategoryClick} />
 
-      {!isStoreOpen && (
+      {!isStoreActive ? (
         <div className="mx-auto max-w-2xl px-4 pt-4">
-          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-center text-sm text-red-600">
+          <div className="rounded-xl bg-red-50 border border-red-300 px-4 py-3 text-center text-sm font-semibold text-red-700">
+            {config.name} está temporariamente desativada pela plataforma. Pedidos estão suspensos.
+          </div>
+        </div>
+      ) : !isStoreOpen ? (
+        <div className="mx-auto max-w-2xl px-4 pt-4">
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-center text-sm text-amber-700">
             {config.name} está fechado no momento. Você pode navegar pelo cardápio, mas não é possível finalizar pedidos.
           </div>
         </div>
-      )}
+      ) : null}
 
       <MenuList products={products} onProductClick={setSelectedProduct} />
 
@@ -108,7 +188,7 @@ function CustomerApp({ onAdminClick }: { onAdminClick: () => void }) {
         onClose={() => setCartOpen(false)}
         onCheckout={() => {
           setCartOpen(false);
-          setView("checkout");
+          setCustomerView("checkout");
         }}
       />
     </div>
@@ -116,13 +196,110 @@ function CustomerApp({ onAdminClick }: { onAdminClick: () => void }) {
 }
 
 function AppContent() {
-  const [view, setView] = useState<View>("menu");
+  const { isSuperAdmin, isAdminAuthed, selectTenant, currentTenant, config } = useStore();
 
-  if (view === "admin") {
-    return <AdminPanel onExit={() => setView("menu")} />;
+  const getInitialView = (): View => {
+    if (typeof window === "undefined") return "menu";
+    const path = window.location.pathname;
+    if (path.startsWith("/superadmin")) return "superadmin";
+    if (path.startsWith("/admin")) return "admin";
+    return "menu";
+  };
+
+  const [view, setView] = useState<View>(getInitialView);
+
+  // Sync with browser URL history
+  const navigateTo = useCallback(
+    (targetView: View) => {
+      if (typeof window !== "undefined") {
+        if (targetView === "superadmin") {
+          window.history.pushState({ view: "superadmin" }, "", "/superadmin");
+        } else if (targetView === "admin") {
+          window.history.pushState({ view: "admin" }, "", "/admin");
+        } else {
+          const slug = currentTenant?.slug || config.slug || "burger-town";
+          window.history.pushState({ view: "menu" }, "", `/loja/${slug}`);
+        }
+      }
+      setView(targetView);
+    },
+    [currentTenant?.slug, config.slug]
+  );
+
+  // Listen for back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path.startsWith("/superadmin")) {
+        setView("superadmin");
+      } else if (path.startsWith("/admin")) {
+        setView("admin");
+      } else {
+        setView("menu");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // 1. SUPER ADMIN VIEW
+  if (view === "superadmin") {
+    // If not authenticated as Super Admin, show the dedicated restricted login screen
+    if (!isSuperAdmin) {
+      return (
+        <SuperAdminLogin
+          onBack={() => navigateTo("menu")}
+          onSuccess={() => setView("superadmin")}
+        />
+      );
+    }
+
+    // Authenticated Super Admin Dashboard
+    return (
+      <SuperAdminPanel
+        onManageStore={(tenant) => {
+          selectTenant(tenant.slug);
+          navigateTo("admin");
+        }}
+        onViewStoreFront={(tenant) => {
+          selectTenant(tenant.slug);
+          navigateTo("menu");
+        }}
+        onExit={() => navigateTo("menu")}
+      />
+    );
   }
 
-  return <CustomerApp onAdminClick={() => setView("admin")} />;
+  // 2. STORE ADMIN VIEW
+  if (view === "admin") {
+    // If not authenticated, show the store admin login screen
+    if (!isAdminAuthed) {
+      return (
+        <StoreAdminLogin
+          onBack={() => navigateTo("menu")}
+          onSuccess={() => setView("admin")}
+          onGoToSuperAdmin={() => navigateTo("superadmin")}
+        />
+      );
+    }
+
+    // Authenticated Store Admin Panel (locked to their tenant if role === tenant_admin)
+    return (
+      <AdminPanel
+        onExit={() => navigateTo("menu")}
+        onGoToSuperAdmin={isSuperAdmin ? () => navigateTo("superadmin") : undefined}
+      />
+    );
+  }
+
+  // 3. DEFAULT CUSTOMER STORE VIEW
+  return (
+    <CustomerApp
+      onStoreAdminClick={() => navigateTo("admin")}
+      onSuperAdminClick={() => navigateTo("superadmin")}
+    />
+  );
 }
 
 export default function App() {

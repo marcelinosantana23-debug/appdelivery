@@ -6,7 +6,7 @@ import { formatPrice } from "@/utils/order";
 import type { Product, ProductOption } from "@/types";
 
 export function AdminMenu() {
-  const { products, setProducts, config } = useStore();
+  const { products, config, addProduct, editProduct, removeProduct } = useStore();
   const [editing, setEditing] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
@@ -15,24 +15,27 @@ export function AdminMenu() {
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSave = (product: Product) => {
-    setProducts((prev) => {
-      const exists = prev.find((p) => p.id === product.id);
-      if (exists) return prev.map((p) => (p.id === product.id ? product : p));
-      return [...prev, product];
-    });
+  const handleSave = async (product: Product) => {
+    const isExisting = products.some((p) => p.id === product.id);
+    if (isExisting) {
+      await editProduct(product.id, product);
+    } else {
+      const { id: _id, tenantId: _tenantId, ...rest } = product;
+      await addProduct(rest);
+    }
     setShowForm(false);
     setEditing(null);
   };
 
-  const handleDelete = (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+  const handleDelete = async (id: string) => {
+    await removeProduct(id);
   };
 
-  const toggleAvailable = (id: string) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, available: !p.available } : p))
-    );
+  const toggleAvailable = async (id: string) => {
+    const p = products.find((x) => x.id === id);
+    if (p) {
+      await editProduct(id, { available: !p.available });
+    }
   };
 
   return (

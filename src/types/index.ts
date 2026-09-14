@@ -6,6 +6,7 @@ export interface ProductOption {
 
 export interface Product {
   id: string;
+  tenantId?: string;
   name: string;
   description: string;
   price: number;
@@ -13,6 +14,46 @@ export interface Product {
   category: string;
   available: boolean;
   options: ProductOption[];
+}
+
+export type UserRole = "super_admin" | "tenant_admin";
+export type TenantStatus = "active" | "inactive";
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  tenantId: string | null;
+  status: "active" | "inactive";
+  createdAt: number;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  email: string;
+  phone?: string;
+  whatsapp: string;
+  pixKey: string;
+  pixKeyType: "cpf" | "cnpj" | "phone" | "email" | "random";
+  deliveryFee: number;
+  address: string;
+  hours: string;
+  tagline: string;
+  logo: string;
+  primaryColor: string;
+  primaryDark: string;
+  primaryLight: string;
+  accentColor: string;
+  status: TenantStatus;
+  isOpen: boolean;
+  createdAt: number;
+  updatedAt: number;
+  productCount?: number;
+  orderCount?: number;
+  revenue?: number;
 }
 
 export interface Category {
@@ -23,11 +64,23 @@ export interface Category {
 
 export interface CartItem {
   id: string;
-  product: Product;
+  product: {
+    id: string;
+    tenantId?: string;
+    name: string;
+    description?: string;
+    price: number;
+    image?: string;
+    category?: string;
+    available?: boolean;
+    options?: ProductOption[];
+  };
   quantity: number;
   selectedOptions: ProductOption[];
   notes: string;
 }
+
+export type OrderItem = CartItem;
 
 export type OrderType = "delivery" | "pickup";
 export type PaymentMethod = "pix" | "card" | "cash";
@@ -35,6 +88,7 @@ export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "ca
 
 export interface Order {
   id: string;
+  tenantId?: string;
   items: CartItem[];
   orderType: OrderType;
   paymentMethod: PaymentMethod;
@@ -55,3 +109,4 @@ export interface Order {
   createdAt: number;
   statusHistory: { status: OrderStatus; timestamp: number }[];
 }
+

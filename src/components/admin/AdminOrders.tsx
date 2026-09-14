@@ -18,7 +18,7 @@ const nextStatusMap: Record<string, OrderStatus> = {
 };
 
 export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
-  const { orders, updateOrderStatus, clearNewOrderFlag, config } = useStore();
+  const { orders, updateOrderStatus, clearNewOrderFlag } = useStore();
   const [filter, setFilter] = useState<"active" | "all">("active");
 
   const filtered = filter === "active"
