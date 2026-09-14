@@ -1,5 +1,19 @@
-import { useState } from "react";
-import { Save, Check, Palette, Store as StoreIcon, DollarSign, Clock, MapPin, QrCode, MessageCircle } from "lucide-react";
+import { useState, useRef } from "react";
+import {
+  Save,
+  Check,
+  Palette,
+  Store as StoreIcon,
+  DollarSign,
+  Clock,
+  MapPin,
+  QrCode,
+  MessageCircle,
+  Upload,
+  Image as ImageIcon,
+  CheckCircle2,
+  Trash2,
+} from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import type { PixKeyType } from "@/config/store";
 
@@ -27,6 +41,7 @@ export function AdminSettings() {
 
   const [form, setForm] = useState({
     name: config.name,
+    bannerImage: config.bannerImage || "",
     whatsapp: config.whatsapp,
     pixKey: config.pixKey,
     pixKeyType: config.pixKeyType,
@@ -39,6 +54,8 @@ export function AdminSettings() {
     accentColor: config.accentColor,
   });
   const [saved, setSaved] = useState(false);
+  const [isProcessingBanner, setIsProcessingBanner] = useState(false);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const stats = {
     total: orders.length,
@@ -52,9 +69,65 @@ export function AdminSettings() {
     setSaved(false);
   };
 
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingBanner(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (!result) {
+        setIsProcessingBanner(false);
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 1280;
+        const maxHeight = 720;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / maxWidth > height / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL(file.type || "image/jpeg", 0.85);
+          set("bannerImage", dataUrl);
+        } else {
+          set("bannerImage", result);
+        }
+        setIsProcessingBanner(false);
+      };
+      img.onerror = () => {
+        set("bannerImage", result);
+        setIsProcessingBanner(false);
+      };
+      img.src = result;
+    };
+    reader.onerror = () => {
+      setIsProcessingBanner(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = () => {
     updateConfig({
       name: form.name.trim(),
+      bannerImage: form.bannerImage,
       whatsapp: form.whatsapp.trim(),
       pixKey: form.pixKey.trim(),
       pixKeyType: form.pixKeyType,
@@ -129,6 +202,94 @@ export function AdminSettings() {
         </div>
 
         <div className="space-y-4">
+          {/* Foto da Lanchonete / Banner da Vitrine */}
+          <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                <ImageIcon className="h-4 w-4 text-primary" />
+                <span>Foto da Lanchonete / Banner da Vitrine</span>
+              </label>
+              <span className="text-[11px] text-gray-400">Formato capa delivery</span>
+            </div>
+
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleBannerChange}
+            />
+
+            <button
+              type="button"
+              onClick={() => bannerInputRef.current?.click()}
+              disabled={isProcessingBanner}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-white py-3 px-4 text-sm font-semibold text-gray-700 transition hover:border-primary hover:bg-orange-50/40 hover:text-primary active:scale-[0.99] disabled:opacity-50"
+            >
+              <Upload className="h-4 w-4 text-primary" />
+              <span>
+                {isProcessingBanner
+                  ? "Processando banner..."
+                  : form.bannerImage
+                  ? "Trocar foto da lanchonete / banner"
+                  : "Selecionar foto da lanchonete / banner da vitrine"}
+              </span>
+            </button>
+
+            {/* Pré-visualização do Banner */}
+            {form.bannerImage ? (
+              <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="relative aspect-[16/6] w-full overflow-hidden bg-slate-900 sm:aspect-[21/7]">
+                  <img
+                    src={form.bannerImage}
+                    alt="Pré-visualização do Banner da Vitrine"
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/25" />
+
+                  {/* Mock da marca sobreposta como na vitrine */}
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2.5 text-white">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-xl backdrop-blur-md border border-white/30">
+                      {config.logo || "🏪"}
+                    </div>
+                    <div>
+                      <span className="block font-bold text-sm leading-tight drop-shadow-md">
+                        {form.name || config.name}
+                      </span>
+                      <span className="text-[10px] text-white/80 font-medium">Pré-visualização na vitrine</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      set("bannerImage", "");
+                      if (bannerInputRef.current) bannerInputRef.current.value = "";
+                    }}
+                    className="absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-md hover:bg-red-600 transition"
+                    title="Remover banner"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 text-xs text-gray-600 bg-gray-50 border-t border-gray-100">
+                  <div className="flex items-center gap-1.5 font-medium text-emerald-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Banner carregado com sucesso</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400">
+                    {form.bannerImage.startsWith("data:") ? "Foto selecionada da galeria" : "Imagem ativa"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-center text-xs text-gray-400">
+                Sem banner personalizado. A vitrine exibirá a paleta de cores temática.
+              </p>
+            )}
+          </div>
+
           <FormField label="Nome da Lanchonete" icon={<StoreIcon className="h-4 w-4" />}>
             <input
               value={form.name}

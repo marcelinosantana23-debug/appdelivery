@@ -18,6 +18,7 @@ export interface Tenant {
   hours: string;
   tagline: string;
   logo: string;
+  bannerImage?: string;
   primaryColor: string;
   primaryDark: string;
   primaryLight: string;

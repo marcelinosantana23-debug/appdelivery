@@ -1,5 +1,15 @@
-import { useState } from "react";
-import { Plus, Pencil, Pause, Play, Trash2, X, Search } from "lucide-react";
+import { useState, useRef } from "react";
+import {
+  Plus,
+  Pencil,
+  Pause,
+  Play,
+  Trash2,
+  X,
+  Search,
+  Upload,
+  CheckCircle2,
+} from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { categories } from "@/data/mockData";
 import { formatPrice } from "@/utils/order";
@@ -141,7 +151,64 @@ function ProductForm({
   const [options, setOptions] = useState<ProductOption[]>(product?.options || []);
   const [newOptName, setNewOptName] = useState("");
   const [newOptPrice, setNewOptPrice] = useState("");
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { config } = useStore();
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingImage(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (!result) {
+        setIsProcessingImage(false);
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 800;
+        const maxHeight = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL(file.type || "image/jpeg", 0.85);
+          setImage(dataUrl);
+        } else {
+          setImage(result);
+        }
+        setIsProcessingImage(false);
+      };
+      img.onerror = () => {
+        setImage(result);
+        setIsProcessingImage(false);
+      };
+      img.src = result;
+    };
+    reader.onerror = () => {
+      setIsProcessingImage(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const addOption = () => {
     if (!newOptName.trim()) return;
@@ -231,14 +298,58 @@ function ProductForm({
               </select>
             </Field>
           </div>
-          <Field label="URL da imagem">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-500">
+              Foto do produto
+            </label>
             <input
-              value={image}
-              onChange={(e) => setImage(e.target.value)}
-              className="form-input"
-              placeholder="https://..."
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageChange}
             />
-          </Field>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessingImage}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 py-3.5 px-4 text-sm font-semibold text-gray-700 transition hover:border-primary hover:bg-orange-50/50 hover:text-primary active:scale-[0.99] disabled:opacity-50"
+            >
+              <Upload className="h-4 w-4 text-primary" />
+              <span>{isProcessingImage ? "Processando foto..." : "Selecionar foto da galeria"}</span>
+            </button>
+
+            {/* Prévia da foto escolhida */}
+            {image && (
+              <div className="mt-3 flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-2.5">
+                <img
+                  src={image}
+                  alt="Prévia do produto"
+                  className="h-16 w-16 shrink-0 rounded-xl object-cover border border-gray-200 bg-white shadow-sm"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Foto carregada com sucesso</span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-gray-500 truncate">
+                    {image.startsWith("data:") ? "Foto selecionada da galeria" : "Imagem cadastrada"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImage("");
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition"
+                  title="Remover foto"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
           <label className="flex items-center gap-2">
             <input
               type="checkbox"

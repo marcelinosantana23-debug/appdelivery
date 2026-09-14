@@ -6,6 +6,7 @@ export interface StoreConfig {
   name: string;
   tagline: string;
   logo: string;
+  bannerImage?: string;
   whatsapp: string;
   pixKey: string;
   pixKeyType: PixKeyType;
@@ -27,6 +28,7 @@ export const defaultStoreConfig: StoreConfig = {
   name: "Burger Town",
   tagline: "Hambúrgueres artesanais na chama",
   logo: "🍔",
+  bannerImage: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
   whatsapp: "5511999999999",
   pixKey: "contato@burgertown.com.br",
   pixKeyType: "email",

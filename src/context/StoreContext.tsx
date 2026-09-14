@@ -81,6 +81,7 @@ interface StoreContextValue {
     deliveryFee?: number;
     address?: string;
     primaryColor?: string;
+    bannerImage?: string;
   }) => Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string }>;
   toggleTenantStatus: (slugOrId: string, status: TenantStatus) => Promise<boolean>;
   deleteTenant: (slugOrId: string) => Promise<boolean>;
@@ -103,6 +104,7 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
     name: t.name,
     tagline: t.tagline,
     logo: t.logo || "🏪",
+    bannerImage: t.bannerImage || "",
     whatsapp: t.whatsapp,
     pixKey: t.pixKey,
     pixKeyType: t.pixKeyType || "email",
@@ -481,6 +483,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       deliveryFee?: number;
       address?: string;
       primaryColor?: string;
+      bannerImage?: string;
     }) => {
       const res = await createTenantApi(data);
       if (res.success && res.tenant) {

@@ -25,6 +25,7 @@ const initialTenants: Tenant[] = [
     hours: "18:00 - 23:30",
     tagline: "Hambúrgueres artesanais na chama",
     logo: "🍔",
+    bannerImage: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
     primaryColor: "#E63946",
     primaryDark: "#C1121F",
     primaryLight: "#F77F00",
@@ -48,6 +49,7 @@ const initialTenants: Tenant[] = [
     hours: "18:30 - 00:00",
     tagline: "Pizzas no forno a lenha com massa fermentada",
     logo: "🍕",
+    bannerImage: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80",
     primaryColor: "#059669",
     primaryDark: "#047857",
     primaryLight: "#10B981",
@@ -394,6 +396,7 @@ export class Database {
       hours: "18:00 - 23:30",
       tagline: `Cardápio Online - ${data.name}`,
       logo: "🏪",
+      bannerImage: data.bannerImage || "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
       primaryColor: data.primaryColor || "#E63946",
       primaryDark: "#C1121F",
       primaryLight: "#F77F00",
@@ -463,7 +466,7 @@ export class Database {
           `UPDATE tenants SET 
             name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
             delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
-            logo = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
+            logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
             accent_color = ?, status = ?, is_open = ?, updated_at = ?
           WHERE id = ?`
         )
@@ -477,6 +480,7 @@ export class Database {
             updated.hours,
             updated.tagline,
             updated.logo,
+            updated.bannerImage || "",
             updated.primaryColor,
             updated.primaryDark,
             updated.primaryLight,
@@ -487,8 +491,40 @@ export class Database {
             tenant.id
           )
           .run();
-      } catch (e) {
-        console.warn("D1 updateTenant error:", e);
+      } catch {
+        // Fallback in case D1 table does not have banner_image column yet
+        try {
+          await this.env.DB.prepare(
+            `UPDATE tenants SET 
+              name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
+              delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
+              logo = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
+              accent_color = ?, status = ?, is_open = ?, updated_at = ?
+            WHERE id = ?`
+          )
+            .bind(
+              updated.name,
+              updated.whatsapp,
+              updated.pixKey,
+              updated.pixKeyType,
+              updated.deliveryFee,
+              updated.address,
+              updated.hours,
+              updated.tagline,
+              updated.logo,
+              updated.primaryColor,
+              updated.primaryDark,
+              updated.primaryLight,
+              updated.accentColor,
+              updated.status,
+              updated.isOpen ? 1 : 0,
+              updated.updatedAt,
+              tenant.id
+            )
+            .run();
+        } catch (e2) {
+          console.warn("D1 updateTenant error:", e2);
+        }
       }
     }
 
@@ -909,6 +945,7 @@ export class Database {
       hours: row.hours,
       tagline: row.tagline,
       logo: row.logo,
+      bannerImage: row.banner_image || row.cover_image || "",
       primaryColor: row.primary_color,
       primaryDark: row.primary_dark,
       primaryLight: row.primary_light,

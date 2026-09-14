@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Store,
   Plus,
@@ -22,8 +22,11 @@ import {
   AlertCircle,
   Database,
   RefreshCw,
+  Upload,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { updateTenantApi } from "@/services/api";
 import type { Tenant, TenantStatus } from "@/types";
 
 interface SuperAdminPanelProps {
@@ -127,14 +130,140 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     deliveryFee: 5.0,
     address: "",
     primaryColor: "#E63946",
+    bannerImage: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingNewBanner, setIsProcessingNewBanner] = useState(false);
   const [createdSuccess, setCreatedSuccess] = useState<{
     tenant: Tenant;
     email: string;
     pass: string;
   } | null>(null);
   const [formError, setFormError] = useState("");
+  const newTenantBannerInputRef = useRef<HTMLInputElement>(null);
+
+  // Store Config Modal State (Super Admin editing existing store)
+  const [isStoreConfigModalOpen, setIsStoreConfigModalOpen] = useState(false);
+  const [editingTenantConfig, setEditingTenantConfig] = useState<Tenant | null>(null);
+  const [configForm, setConfigForm] = useState({
+    name: "",
+    bannerImage: "",
+    whatsapp: "",
+    pixKey: "",
+    pixKeyType: "email" as Tenant["pixKeyType"],
+    deliveryFee: 5.0,
+    address: "",
+    hours: "18:00 - 23:30",
+    tagline: "",
+    primaryColor: "#E63946",
+  });
+  const [isConfigSaving, setIsConfigSaving] = useState(false);
+  const [isProcessingConfigBanner, setIsProcessingConfigBanner] = useState(false);
+  const [configSuccessMessage, setConfigSuccessMessage] = useState("");
+  const [configErrorMessage, setConfigErrorMessage] = useState("");
+  const editConfigBannerInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper to convert and compress image file to Base64
+  const processImageFile = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (!result) return resolve("");
+
+        const img = new Image();
+        img.onload = () => {
+          const maxWidth = 1280;
+          const maxHeight = 720;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth || height > maxHeight) {
+            if (width / maxWidth > height / maxHeight) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL(file.type || "image/jpeg", 0.85));
+          } else {
+            resolve(result);
+          }
+        };
+        img.onerror = () => resolve(result);
+        img.src = result;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleOpenStoreConfig = (tenant: Tenant) => {
+    setEditingTenantConfig(tenant);
+    setConfigForm({
+      name: tenant.name || "",
+      bannerImage: tenant.bannerImage || "",
+      whatsapp: tenant.whatsapp || "",
+      pixKey: tenant.pixKey || "",
+      pixKeyType: tenant.pixKeyType || "email",
+      deliveryFee: tenant.deliveryFee ?? 5.0,
+      address: tenant.address || "",
+      hours: tenant.hours || "18:00 - 23:30",
+      tagline: tenant.tagline || "",
+      primaryColor: tenant.primaryColor || "#E63946",
+    });
+    setConfigSuccessMessage("");
+    setConfigErrorMessage("");
+    setIsStoreConfigModalOpen(true);
+  };
+
+  const handleSaveStoreConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTenantConfig) return;
+
+    setIsConfigSaving(true);
+    setConfigErrorMessage("");
+    setConfigSuccessMessage("");
+
+    try {
+      const res = await updateTenantApi(editingTenantConfig.id, {
+        name: configForm.name.trim(),
+        bannerImage: configForm.bannerImage,
+        whatsapp: configForm.whatsapp.trim(),
+        pixKey: configForm.pixKey.trim(),
+        pixKeyType: configForm.pixKeyType,
+        deliveryFee: Number(configForm.deliveryFee) || 0,
+        address: configForm.address.trim(),
+        hours: configForm.hours.trim(),
+        tagline: configForm.tagline.trim(),
+        primaryColor: configForm.primaryColor,
+      });
+
+      if (res.success) {
+        await refreshTenants();
+        setConfigSuccessMessage("Configurações da loja e banner atualizados com sucesso!");
+        setTimeout(() => {
+          setIsStoreConfigModalOpen(false);
+          setEditingTenantConfig(null);
+        }, 1500);
+      } else {
+        setConfigErrorMessage(res.error || "Erro ao salvar configurações da loja.");
+      }
+    } catch (err: any) {
+      setConfigErrorMessage(err.message || "Erro inesperado ao salvar.");
+    } finally {
+      setIsConfigSaving(false);
+    }
+  };
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -654,14 +783,25 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   </div>
 
                   {/* Actions Footer */}
-                  <div className="border-t border-slate-800/80 bg-slate-950/40 p-3 flex items-center justify-between">
-                    <button
-                      onClick={() => onManageStore(t)}
-                      className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 py-2 px-3 text-xs font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
-                    >
-                      <Settings className="h-3.5 w-3.5" />
-                      <span>Gerenciar Cardápio & Pedidos</span>
-                    </button>
+                  <div className="border-t border-slate-800/80 bg-slate-950/40 p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onManageStore(t)}
+                        className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 py-2 px-3 text-xs font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                        <span>Gerenciar Cardápio & Pedidos</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenStoreConfig(t)}
+                        className="flex items-center gap-1.5 rounded-xl bg-slate-800/90 border border-slate-700 py-2 px-3 text-xs font-semibold text-slate-200 transition hover:bg-slate-750 hover:text-white"
+                        title="Configurações da Loja e Foto/Banner da Vitrine"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5 text-amber-400" />
+                        <span>Configurações & Banner</span>
+                      </button>
+                    </div>
 
                     <button
                       onClick={() => handleDelete(t)}
@@ -1021,6 +1161,77 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   </div>
                 </div>
 
+                {/* Foto da Lanchonete / Banner da Vitrine */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                      <ImageIcon className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Foto da Lanchonete / Banner da Vitrine</span>
+                    </label>
+                    <span className="text-[11px] text-slate-500">Opcional</span>
+                  </div>
+
+                  <input
+                    ref={newTenantBannerInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setIsProcessingNewBanner(true);
+                      try {
+                        const base64 = await processImageFile(file);
+                        setFormData((prev) => ({ ...prev, bannerImage: base64 }));
+                      } catch {
+                        // ignore error
+                      } finally {
+                        setIsProcessingNewBanner(false);
+                      }
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => newTenantBannerInputRef.current?.click()}
+                    disabled={isProcessingNewBanner}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-900/60 py-2.5 px-3 text-xs font-medium text-slate-300 hover:border-amber-500 hover:text-amber-300 transition"
+                  >
+                    <Upload className="h-3.5 w-3.5 text-amber-400" />
+                    <span>
+                      {isProcessingNewBanner
+                        ? "Processando banner..."
+                        : formData.bannerImage
+                        ? "Trocar Foto da Lanchonete / Banner"
+                        : "Selecionar Foto da Lanchonete / Banner da Vitrine"}
+                    </span>
+                  </button>
+
+                  {formData.bannerImage && (
+                    <div className="relative aspect-[16/6] w-full overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
+                      <img
+                        src={formData.bannerImage}
+                        alt="Banner Preview"
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/20" />
+                      <div className="absolute bottom-2 left-2 text-white text-[11px] font-bold">
+                        Pré-visualização da Capa da Vitrine
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData((prev) => ({ ...prev, bannerImage: "" }));
+                          if (newTenantBannerInputRef.current) newTenantBannerInputRef.current.value = "";
+                        }}
+                        className="absolute top-2 right-2 rounded-lg bg-black/60 p-1.5 text-white hover:bg-red-600 transition"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="pt-2">
                   <button
                     type="submit"
@@ -1197,6 +1408,262 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     <>
                       <Key className="h-3.5 w-3.5" />
                       <span>Salvar Novas Credenciais</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Super Admin Store Settings & Banner Modal */}
+      {isStoreConfigModalOpen && editingTenantConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl animate-scale-in text-white my-auto">
+            <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-xl border border-amber-500/30">
+                  {editingTenantConfig.logo || "🏪"}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Configurações da Loja</h3>
+                  <p className="text-xs text-slate-400">
+                    {editingTenantConfig.name} • <span className="font-mono text-amber-400">/loja/{editingTenantConfig.slug}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStoreConfigModalOpen(false);
+                  setEditingTenantConfig(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {configSuccessMessage && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{configSuccessMessage}</span>
+              </div>
+            )}
+
+            {configErrorMessage && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{configErrorMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveStoreConfig} className="space-y-4">
+              {/* Foto da Lanchonete / Banner da Vitrine */}
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <ImageIcon className="h-4 w-4 text-amber-400" />
+                    <span>Foto da Lanchonete / Banner da Vitrine</span>
+                  </label>
+                  <span className="text-[11px] text-slate-400">Capa da vitrine</span>
+                </div>
+
+                <input
+                  ref={editConfigBannerInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsProcessingConfigBanner(true);
+                    try {
+                      const base64 = await processImageFile(file);
+                      setConfigForm((prev) => ({ ...prev, bannerImage: base64 }));
+                    } catch {
+                      // ignore
+                    } finally {
+                      setIsProcessingConfigBanner(false);
+                    }
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => editConfigBannerInputRef.current?.click()}
+                  disabled={isProcessingConfigBanner}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/90 py-3 px-4 text-xs font-semibold text-slate-200 transition hover:border-amber-500 hover:text-amber-300 active:scale-[0.99] disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4 text-amber-400" />
+                  <span>
+                    {isProcessingConfigBanner
+                      ? "Processando imagem..."
+                      : configForm.bannerImage
+                      ? "Trocar Foto da Lanchonete / Banner"
+                      : "Selecionar Foto da Lanchonete / Banner da Vitrine"}
+                  </span>
+                </button>
+
+                {/* Pré-visualização do Banner */}
+                {configForm.bannerImage ? (
+                  <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
+                    <div className="relative aspect-[16/6] w-full overflow-hidden">
+                      <img
+                        src={configForm.bannerImage}
+                        alt="Prévia do Banner"
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+
+                      <div className="absolute bottom-2.5 left-2.5 flex items-center gap-2">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-lg backdrop-blur-md border border-white/30 text-white">
+                          {editingTenantConfig.logo || "🏪"}
+                        </div>
+                        <div>
+                          <span className="block font-bold text-xs text-white leading-tight drop-shadow">
+                            {configForm.name || editingTenantConfig.name}
+                          </span>
+                          <span className="text-[10px] text-white/80">Pré-visualização do topo da vitrine</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfigForm((prev) => ({ ...prev, bannerImage: "" }));
+                          if (editConfigBannerInputRef.current) editConfigBannerInputRef.current.value = "";
+                        }}
+                        className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white hover:bg-red-600 transition"
+                        title="Remover banner"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-center text-[11px] text-slate-500">
+                    Sem banner. A vitrine exibirá a cor padrão do tema.
+                  </p>
+                )}
+              </div>
+
+              {/* Informações da Loja */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nome da Lanchonete</label>
+                  <input
+                    type="text"
+                    required
+                    value={configForm.name}
+                    onChange={(e) => setConfigForm((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">WhatsApp para Pedidos</label>
+                  <input
+                    type="text"
+                    value={configForm.whatsapp}
+                    onChange={(e) => setConfigForm((prev) => ({ ...prev, whatsapp: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Taxa de Entrega (R$)</label>
+                  <input
+                    type="number"
+                    step="0.50"
+                    value={configForm.deliveryFee}
+                    onChange={(e) =>
+                      setConfigForm((prev) => ({ ...prev, deliveryFee: parseFloat(e.target.value) || 0 }))
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Horário de Funcionamento</label>
+                  <input
+                    type="text"
+                    value={configForm.hours}
+                    onChange={(e) => setConfigForm((prev) => ({ ...prev, hours: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-300 font-semibold mb-1">Endereço da Loja</label>
+                  <input
+                    type="text"
+                    value={configForm.address}
+                    onChange={(e) => setConfigForm((prev) => ({ ...prev, address: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-300 font-semibold mb-1">Tagline / Slogan</label>
+                  <input
+                    type="text"
+                    value={configForm.tagline}
+                    onChange={(e) => setConfigForm((prev) => ({ ...prev, tagline: e.target.value }))}
+                    placeholder="Cardápio Online - Sabores Inesquecíveis"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Chave PIX</label>
+                  <input
+                    type="text"
+                    value={configForm.pixKey}
+                    onChange={(e) => setConfigForm((prev) => ({ ...prev, pixKey: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Cor do Tema</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={configForm.primaryColor}
+                      onChange={(e) => setConfigForm((prev) => ({ ...prev, primaryColor: e.target.value }))}
+                      className="h-8 w-8 cursor-pointer rounded-lg border border-slate-700 bg-transparent p-0"
+                    />
+                    <span className="font-mono text-slate-300">{configForm.primaryColor}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsStoreConfigModalOpen(false);
+                    setEditingTenantConfig(null);
+                  }}
+                  className="w-1/3 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isConfigSaving || isProcessingConfigBanner}
+                  className="w-2/3 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-amber-500/25 transition hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isConfigSaving ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Salvando Configurações...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Salvar Configurações da Loja</span>
                     </>
                   )}
                 </button>

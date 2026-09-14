@@ -57,6 +57,7 @@ export async function createTenantApi(data: {
   deliveryFee?: number;
   address?: string;
   primaryColor?: string;
+  bannerImage?: string;
 }): Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string; message?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants`, {

@@ -152,7 +152,7 @@ api.get("/tenants", async (c) => {
 api.post("/tenants", async (c) => {
   try {
     const body = await c.req.json();
-    const { name, slug, email, password, whatsapp, pixKey, pixKeyType, deliveryFee, address, primaryColor } = body;
+    const { name, slug, email, password, whatsapp, pixKey, pixKeyType, deliveryFee, address, primaryColor, bannerImage } = body;
 
     if (!name || !email || !password) {
       return c.json(
@@ -174,6 +174,7 @@ api.post("/tenants", async (c) => {
       deliveryFee: Number(deliveryFee) || 5.0,
       address: address || "Centro",
       primaryColor: primaryColor || "#E63946",
+      bannerImage: bannerImage || "",
     });
 
     // 2. Create tenant admin user account
