@@ -14,6 +14,14 @@ import {
   Copy,
   LogOut,
   Sparkles,
+  Key,
+  Lock,
+  Mail,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Database,
+  RefreshCw,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import type { Tenant, TenantStatus } from "@/types";
@@ -33,12 +41,79 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     refreshTenants,
     logout,
     currentUser,
+    updateSuperAdminCredentials,
   } = useStore();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // State for Super Admin Credentials Modal
+  const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [credentialsError, setCredentialsError] = useState("");
+  const [credentialsSuccess, setCredentialsSuccess] = useState("");
+
+  const openCredentialsModal = () => {
+    setNewEmail(currentUser?.email || "");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowPassword(false);
+    setCredentialsError("");
+    setCredentialsSuccess("");
+    setIsCredentialsModalOpen(true);
+  };
+
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCredentialsError("");
+    setCredentialsSuccess("");
+
+    if (!newEmail.trim() || !newPassword.trim()) {
+      setCredentialsError("Por favor, preencha o novo e-mail e a nova senha.");
+      return;
+    }
+
+    if (newPassword.length < 4) {
+      setCredentialsError("A nova senha deve possuir pelo menos 4 caracteres.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setCredentialsError("As senhas informadas não coincidem. Digite a mesma senha nos dois campos.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail.trim())) {
+      setCredentialsError("Por favor, insira um formato de e-mail válido.");
+      return;
+    }
+
+    setCredentialsLoading(true);
+    try {
+      const res = await updateSuperAdminCredentials(newEmail.trim(), newPassword.trim());
+      if (res.success) {
+        setCredentialsSuccess(
+          res.message ||
+            "Credenciais atualizadas com sucesso no banco de dados Cloudflare D1! Utilize o novo e-mail e senha nos próximos logins."
+        );
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        setCredentialsError(res.error || "Erro ao atualizar credenciais.");
+      }
+    } catch (err: any) {
+      setCredentialsError(err.message || "Erro de conexão ao salvar no banco de dados.");
+    } finally {
+      setCredentialsLoading(false);
+    }
+  };
 
   // Form State for New Tenant
   const [formData, setFormData] = useState({
@@ -176,13 +251,31 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   Super Admin
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Logado como: <strong className="text-slate-200">{currentUser?.email}</strong>
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-slate-400">
+                  Logado como: <strong className="text-slate-200">{currentUser?.email}</strong>
+                </p>
+                <button
+                  onClick={openCredentialsModal}
+                  className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/30 transition border border-amber-500/30"
+                  title="Clique para alterar e-mail e senha"
+                >
+                  Alterar dados
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={openCredentialsModal}
+              className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-300 shadow-sm transition hover:bg-amber-500/25 active:scale-[0.98] sm:text-sm sm:px-3.5"
+              title="Alterar e-mail e senha do Super Admin"
+            >
+              <Key className="h-4 w-4 text-amber-400" />
+              <span className="hidden sm:inline">Alterar E-mail / Senha</span>
+              <span className="sm:hidden">Credenciais</span>
+            </button>
             <button
               onClick={() => {
                 setIsModalOpen(true);
@@ -215,6 +308,40 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
+        {/* Super Admin Security / Database Banner */}
+        <section className="mb-6 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-slate-900/80 to-slate-900/60 p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/20 text-amber-300 shadow-inner">
+                <Database className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-bold text-white sm:text-base">
+                    Gestão de Acesso do Super Admin
+                  </h2>
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Cloudflare D1 Ativo
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-300">
+                  E-mail atual: <strong className="text-amber-300 font-mono">{currentUser?.email}</strong>. Você pode alterar seu e-mail e senha a qualquer momento com persistência no banco de dados.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={openCredentialsModal}
+              className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/20 px-4 py-2.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/30 active:scale-[0.98] shadow-md shadow-amber-500/10"
+            >
+              <Key className="h-4 w-4 text-amber-400" />
+              Alterar E-mail e Senha
+            </button>
+          </div>
+        </section>
+
         {/* KPI Platform Cards */}
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
@@ -905,6 +1032,176 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Super Admin Credentials Modal */}
+      {isCredentialsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/20 text-amber-400">
+                  <Key className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white sm:text-lg">
+                    Alterar Acesso do Super Admin
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Atualização persistida no banco de dados Cloudflare D1
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCredentialsModalOpen(false)}
+                className="rounded-xl border border-slate-700 bg-slate-800 p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Cloudflare D1 Integration Badge */}
+            <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3 flex items-start gap-2.5 text-xs text-slate-300">
+              <Database className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold text-white">Persistência Cloudflare D1 (env.DB):</span>
+                <p className="text-slate-400 mt-0.5">
+                  Os novos dados serão gravados na tabela de usuários via API Hono e serão exigidos imediatamente no próximo login em <code className="text-amber-300 font-mono">/superadmin</code>.
+                </p>
+              </div>
+            </div>
+
+            {/* Current Email Info */}
+            <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-xs">
+              <span className="text-slate-400">E-mail atual cadastrado:</span>
+              <span className="font-mono font-medium text-amber-300 select-all">
+                {currentUser?.email || "superadmin@plataforma.com"}
+              </span>
+            </div>
+
+            {/* Success Message */}
+            {credentialsSuccess && (
+              <div className="mb-5 rounded-xl border border-emerald-500/40 bg-emerald-950/50 p-4 text-xs text-emerald-200">
+                <div className="flex items-center gap-2 font-bold text-emerald-400 mb-1">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Sucesso! Credenciais Salvas</span>
+                </div>
+                <p>{credentialsSuccess}</p>
+                <div className="mt-2.5 pt-2 border-t border-emerald-500/20 text-[11px] text-emerald-300">
+                  Guarde sua nova senha em um local seguro. Caso saia do painel, faça login com as novas credenciais.
+                </div>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {credentialsError && (
+              <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-red-800 bg-red-950/50 p-3.5 text-xs text-red-200">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
+                <span>{credentialsError}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Novo E-mail do Super Admin *
+                </label>
+                <div className="relative flex items-center">
+                  <Mail className="absolute left-3 h-4 w-4 text-slate-500" />
+                  <input
+                    type="email"
+                    required
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="exemplo@seudominio.com"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 transition font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Nova Senha de Acesso *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                  >
+                    {showPassword ? (
+                      <>
+                        <EyeOff className="h-3 w-3" /> Ocultar
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3 w-3" /> Exibir
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3 h-4 w-4 text-slate-500" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Mínimo 4 caracteres (Ex: SuperSenha#2025)"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 transition font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Confirmar Nova Senha *
+                </label>
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3 h-4 w-4 text-slate-500" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repita a nova senha exatamente igual"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 transition font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCredentialsModalOpen(false)}
+                  className="w-1/3 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="submit"
+                  disabled={credentialsLoading}
+                  className="w-2/3 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-amber-500/25 transition hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {credentialsLoading ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Salvando no D1...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Key className="h-3.5 w-3.5" />
+                      <span>Salvar Novas Credenciais</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

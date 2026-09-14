@@ -65,6 +65,58 @@ api.post("/auth/login", async (c) => {
   }
 });
 
+// ----------------- SUPER ADMIN CREDENTIALS UPDATE -----------------
+api.put("/superadmin/credentials", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { email, password, userId } = body;
+
+    if (!email || !password) {
+      return c.json(
+        { success: false, error: "Novo e-mail e nova senha são obrigatórios." },
+        400
+      );
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+
+    if (cleanPassword.length < 4) {
+      return c.json(
+        { success: false, error: "A nova senha deve possuir no mínimo 4 caracteres." },
+        400
+      );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return c.json(
+        { success: false, error: "Formato de e-mail inválido. Verifique o endereço digitado." },
+        400
+      );
+    }
+
+    // Instantiates Database using Hono c.env (Cloudflare D1 binding via env.DB)
+    const db = getDb(c);
+    const updatedUser = await db.updateSuperAdminCredentials(userId, cleanEmail, cleanPassword);
+
+    if (!updatedUser) {
+      return c.json({ success: false, error: "Usuário Super Admin não encontrado." }, 404);
+    }
+
+    return c.json({
+      success: true,
+      message: "Credenciais do Super Admin atualizadas com sucesso no banco de dados Cloudflare D1!",
+      user: updatedUser,
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, error: e.message || "Erro ao atualizar credenciais do Super Admin." },
+      500
+    );
+  }
+});
+
 // ----------------- PLATFORM STATS -----------------
 api.get("/platform/stats", async (c) => {
   const db = getDb(c);

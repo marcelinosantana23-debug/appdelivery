@@ -605,6 +605,83 @@ export class Database {
       .map(({ password: _, ...rest }) => rest as User);
   }
 
+  async updateSuperAdminCredentials(
+    userId: string | null | undefined,
+    email: string,
+    password: string
+  ): Promise<User | null> {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Cloudflare D1 integration via env.DB
+    if (this.env?.DB) {
+      try {
+        let query = "UPDATE users SET email = ?, password = ? WHERE role = 'super_admin'";
+        const binds: unknown[] = [cleanEmail, password];
+
+        if (userId) {
+          query += " AND id = ?";
+          binds.push(userId);
+        }
+
+        await this.env.DB.prepare(query).bind(...binds).run();
+
+        // Retrieve the updated user record from D1
+        const row = await this.env.DB.prepare(
+          "SELECT * FROM users WHERE role = 'super_admin' AND LOWER(email) = ? LIMIT 1"
+        )
+          .bind(cleanEmail)
+          .first<any>();
+
+        if (row) {
+          // Keep in-memory store in sync
+          const memoryUser =
+            globalStore.users.find(
+              (u) => u.role === "super_admin" && (userId ? u.id === userId : true)
+            ) || globalStore.users.find((u) => u.role === "super_admin");
+
+          if (memoryUser) {
+            memoryUser.email = cleanEmail;
+            memoryUser.password = password;
+          }
+
+          return this.mapUserRow(row);
+        }
+      } catch (e) {
+        console.warn("D1 updateSuperAdminCredentials error:", e);
+      }
+    }
+
+    // 2. Fallback memory store update
+    let user = globalStore.users.find(
+      (u) => u.role === "super_admin" && (userId ? u.id === userId : true)
+    );
+
+    if (!user) {
+      user = globalStore.users.find((u) => u.role === "super_admin");
+    }
+
+    if (!user) {
+      const newUser: User = {
+        id: userId || "user-superadmin",
+        email: cleanEmail,
+        password: password,
+        name: "Diretor da Plataforma",
+        role: "super_admin",
+        tenantId: null,
+        status: "active",
+        createdAt: Date.now(),
+      };
+      globalStore.users.push(newUser);
+      const { password: _, ...safeUser } = newUser;
+      return safeUser as User;
+    }
+
+    user.email = cleanEmail;
+    user.password = password;
+    const { password: _, ...safeUser } = user;
+    return safeUser as User;
+  }
+
   // ===================== PRODUCTS =====================
 
   async getProductsByTenant(tenantId: string): Promise<Product[]> {

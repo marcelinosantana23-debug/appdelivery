@@ -219,3 +219,25 @@ export async function fetchPlatformStatsApi() {
     return { success: false, error: err.message };
   }
 }
+
+export async function updateSuperAdminCredentialsApi(data: {
+  email: string;
+  password: string;
+  userId?: string;
+}): Promise<{
+  success: boolean;
+  message?: string;
+  user?: User;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/superadmin/credentials`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao conectar ao servidor" };
+  }
+}

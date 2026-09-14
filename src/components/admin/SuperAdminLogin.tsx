@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { ArrowLeft, Lock, Mail, Eye, EyeOff, Shield, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Lock, Mail, Eye, EyeOff, Shield, AlertCircle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { SUPER_ADMIN_CREDENTIALS } from "@/config/store";
 
 interface SuperAdminLoginProps {
   onBack: () => void;
@@ -47,12 +46,6 @@ export function SuperAdminLogin({ onBack, onSuccess }: SuperAdminLoginProps) {
     }
   };
 
-  const fillCredentials = () => {
-    setEmail(SUPER_ADMIN_CREDENTIALS.email);
-    setPassword(SUPER_ADMIN_CREDENTIALS.password);
-    setError("");
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 p-4">
       {/* Background glow */}
@@ -87,24 +80,6 @@ export function SuperAdminLogin({ onBack, onSuccess }: SuperAdminLoginProps) {
             <p className="mt-1.5 text-xs text-slate-400">
               Autenticação obrigatória para acessar o painel de controle e gerenciamento de todas as lanchonetes.
             </p>
-          </div>
-
-          {/* Demo Quick Fill */}
-          <div className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
-                Acesso Rápido de Demonstração
-              </span>
-              <span className="text-[10px] text-amber-400/80 font-mono">superadmin@plataforma.com</span>
-            </div>
-            <button
-              type="button"
-              onClick={fillCredentials}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/20 px-3 py-2 text-xs font-bold text-amber-200 transition hover:bg-amber-500/30 active:scale-[0.98]"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5 text-amber-400" />
-              Preencher Credenciais Super Admin
-            </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

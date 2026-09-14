@@ -16,6 +16,7 @@ import {
   createTenantOrderApi,
   updateTenantOrderStatusApi,
   loginApi,
+  updateSuperAdminCredentialsApi,
 } from "@/services/api";
 
 interface StoreContextValue {
@@ -64,6 +65,10 @@ interface StoreContextValue {
   isSuperAdmin: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
   logout: () => void;
+  updateSuperAdminCredentials: (
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string; message?: string }>;
 
   // Super Admin actions
   createNewTenant: (data: {
@@ -290,6 +295,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       console.warn("Could not remove session from localStorage", e);
     }
   }, []);
+
+  const updateSuperAdminCredentials = useCallback(
+    async (email: string, password: string): Promise<{ success: boolean; error?: string; message?: string }> => {
+      const res = await updateSuperAdminCredentialsApi({
+        email,
+        password,
+        userId: currentUser?.id,
+      });
+
+      if (res.success && res.user) {
+        setCurrentUser(res.user);
+        try {
+          localStorage.setItem("delivery_user_session", JSON.stringify(res.user));
+        } catch (e) {
+          console.warn("Could not save updated session to localStorage", e);
+        }
+        return { success: true, message: res.message };
+      }
+      return { success: false, error: res.error || "Erro ao atualizar credenciais" };
+    },
+    [currentUser?.id]
+  );
 
   // ---------------- STORE CONFIG & SETTINGS ----------------
   const updateConfig = useCallback(
@@ -536,6 +563,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         isSuperAdmin,
         login,
         logout,
+        updateSuperAdminCredentials,
         createNewTenant,
         toggleTenantStatus,
         deleteTenant,
