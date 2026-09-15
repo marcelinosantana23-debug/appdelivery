@@ -10,13 +10,13 @@ ENVIRONMENT = "production"
 [[d1_databases]]
 binding = "DB"
 database_name = "delivery_db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "f9d56732-ee68-4120-99c2-2bad2de74d8b"
 migrations_dir = "migrations"
 
 # Cloudflare KV Namespace Binding (para cache e configurações rápidas de tenant)
 [[kv_namespaces]]
 binding = "STORE_KV"
-id = "00000000000000000000000000000000"
+id = "958f3736bcc74c488fe31b6a3855263f"
 
 [site]
 bucket = "./dist"
