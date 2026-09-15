@@ -9,7 +9,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.route("/api", api);
 
 // Health check on root
-app.get("/", (c) => {
+app.get("/health", (c) => {
   return c.json({
     name: "Multi-tenant Delivery API",
     platform: "Cloudflare Workers",
