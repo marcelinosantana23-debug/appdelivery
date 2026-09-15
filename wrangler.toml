@@ -18,5 +18,5 @@ migrations_dir = "migrations"
 binding = "STORE_KV"
 id = "958f3736bcc74c488fe31b6a3855263f"
 
-[site]
-bucket = "./dist"
+[assets]
+directory = "./dist"
