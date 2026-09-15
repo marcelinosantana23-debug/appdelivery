@@ -8,7 +8,16 @@ const app = new Hono<{ Bindings: Env }>();
 // Mount all /api routes
 app.route("/api", api);
 
-// Health check on root
+// Health checks on worker root
+app.get("/", (c) => {
+  return c.json({
+    name: "Multi-tenant Delivery API",
+    platform: "Cloudflare Workers",
+    status: "online",
+    docs: "/api/health",
+  });
+});
+
 app.get("/health", (c) => {
   return c.json({
     name: "Multi-tenant Delivery API",
