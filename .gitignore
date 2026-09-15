@@ -21,3 +21,7 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Bun lock files
+bun.lock
+bun.lockb
