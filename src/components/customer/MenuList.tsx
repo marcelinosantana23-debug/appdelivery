@@ -35,9 +35,6 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
       `Olá! Acessei o link da ${config.name} e gostaria de informações sobre o cardápio.`
     )}`;
 
-    const isLogoImg =
-      config.logo && (config.logo.startsWith("data:image/") || config.logo.startsWith("http"));
-
     return (
       <div className="mx-auto max-w-2xl px-4 py-12">
         <div className="rounded-3xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-sm">

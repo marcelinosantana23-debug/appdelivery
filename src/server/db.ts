@@ -12,6 +12,35 @@ import { mockProducts } from "../data/mockData";
 // Seed data para demonstração e inicialização
 const initialTenants: Tenant[] = [
   {
+    id: "tenant-ms-preparacoes",
+    name: "MS Preparações",
+    slug: "marcelino",
+    email: "marcelinosantana23@gmail.com",
+    phone: "11999999999",
+    whatsapp: "5511999999999",
+    pixKey: "marcelinosantana23@gmail.com",
+    pixKeyType: "email",
+    deliveryFee: 5.0,
+    address: "Rua das Preparações, 100 - Centro",
+    hours: "18:00 - 23:30",
+    tagline: "O melhor sabor e lanches artesanais preparados na hora",
+    announcement: "🔥 Bem-vindo à MS Preparações! Peça pelo WhatsApp ou direto no cardápio.",
+    logo: "🍔",
+    bannerImage: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#E63946",
+    secondaryColor: "#1E293B",
+    primaryDark: "#C1121F",
+    primaryLight: "#F77F00",
+    accentColor: "#FCBF49",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 5 * 86400000,
+    updatedAt: Date.now(),
+  },
+  {
     id: "tenant-burger-town",
     name: "Burger Town",
     slug: "burger-town",
@@ -107,9 +136,88 @@ const initialUsers: User[] = [
     status: "active",
     createdAt: Date.now() - 15 * 86400000,
   },
+  {
+    id: "user-marcelino",
+    email: "marcelinosantana23@gmail.com",
+    password: "admin",
+    name: "Marcelino Santana (MS Preparações)",
+    role: "tenant_admin",
+    tenantId: "tenant-ms-preparacoes",
+    status: "active",
+    createdAt: Date.now() - 5 * 86400000,
+  },
 ];
 
 const initialProducts: Product[] = [
+  // MS Preparações products (Lanchonete MS Preparações)
+  {
+    id: "msp-1",
+    tenantId: "tenant-ms-preparacoes",
+    name: "X-Salada Especial MS",
+    description: "Pão brioche selado na manteiga, hambúrguer artesanal 160g, queijo prato derretido, alface americana, tomate fresco e maionese verde da casa.",
+    price: 26.9,
+    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
+    category: "lanches",
+    available: true,
+    options: [
+      { id: "extra-bacon", name: "Bacon crocante extra", price: 4.5 },
+      { id: "extra-queijo", name: "Queijo duplo", price: 4.0 },
+      { id: "molho-especial", name: "Molho especial extra", price: 2.5 },
+    ],
+  },
+  {
+    id: "msp-2",
+    tenantId: "tenant-ms-preparacoes",
+    name: "Smash Burger Duplo Bacon",
+    description: "Dois smash burgers de 90g ultra crocantes, muito queijo cheddar cremoso derretido, fatias de bacon e cebola caramelizada.",
+    price: 31.9,
+    image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80",
+    category: "lanches",
+    available: true,
+    options: [
+      { id: "extra-hamburguer", name: "Hambúrguer extra smash", price: 7.0 },
+      { id: "extra-cheddar", name: "Cheddar cremoso extra", price: 3.5 },
+    ],
+  },
+  {
+    id: "msp-3",
+    tenantId: "tenant-ms-preparacoes",
+    name: "X-Tudo Campeão MS",
+    description: "O mais completo: pão artesanal, hambúrguer 180g, presunto, queijo, ovo frito na chapa, bacon, alface, tomate, milho e batata palha.",
+    price: 34.9,
+    image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
+    category: "lanches",
+    available: true,
+    options: [],
+  },
+  {
+    id: "msp-4",
+    tenantId: "tenant-ms-preparacoes",
+    name: "Batata Frita Crocante Rústica",
+    description: "Porção de batatas selecionadas com tempero secreto da casa e alecrim, servidas com maionese artesanal.",
+    price: 18.0,
+    image: "https://images.unsplash.com/photo-1576107232684-1279f3908594?auto=format&fit=crop&w=600&q=80",
+    category: "porções",
+    available: true,
+    options: [
+      { id: "cheddar-bacon", name: "Com Cheddar e Farofa de Bacon", price: 6.0 },
+    ],
+  },
+  {
+    id: "msp-5",
+    tenantId: "tenant-ms-preparacoes",
+    name: "Refrigerante Gelado Lata 350ml",
+    description: "Coca-Cola, Guaraná Antarctica ou Sprite super gelados.",
+    price: 6.0,
+    image: "https://images.pexels.com/photos/50593/coca-cola-cold-drink-soft-drink-coke-50593.jpeg?auto=compress&cs=tinysrgb&w=600",
+    category: "bebidas",
+    available: true,
+    options: [
+      { id: "coca-original", name: "Coca-Cola Original", price: 0 },
+      { id: "coca-zero", name: "Coca-Cola Zero", price: 0 },
+      { id: "guarana", name: "Guaraná Antarctica", price: 0 },
+    ],
+  },
   // Burger Town products
   ...mockProducts.map((p) => ({
     ...p,
@@ -322,6 +430,10 @@ export class Database {
     this.env = env;
   }
 
+  private getKv() {
+    return this.env?.KV || this.env?.STORE_KV;
+  }
+
   // ===================== TENANTS =====================
 
   async getTenants(): Promise<Tenant[]> {
@@ -344,6 +456,20 @@ export class Database {
     if (!idOrSlug) return null;
     const clean = idOrSlug.trim().toLowerCase();
 
+    // 1. Tentar obter do Cloudflare KV para resposta ultra rápida
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        const cached = await kv.get(`tenant:${clean}`);
+        if (cached) {
+          return JSON.parse(cached) as Tenant;
+        }
+      } catch (e) {
+        console.warn("KV getTenant error:", e);
+      }
+    }
+
+    // 2. Consultar banco de dados D1 (Cloudflare Workers SQL)
     if (this.env?.DB) {
       try {
         const row = await this.env.DB.prepare(
@@ -351,15 +477,41 @@ export class Database {
         )
           .bind(clean, clean)
           .first<any>();
-        if (row) return this.mapTenantRow(row);
+        if (row) {
+          const tenant = this.mapTenantRow(row);
+          if (kv) {
+            try {
+              await kv.put(`tenant:${tenant.id}`, JSON.stringify(tenant));
+              await kv.put(`tenant:${tenant.slug.toLowerCase()}`, JSON.stringify(tenant));
+            } catch (e) {
+              console.warn("KV sync tenant error:", e);
+            }
+          }
+          return tenant;
+        }
       } catch (e) {
         console.warn("D1 getTenantByIdOrSlug error:", e);
       }
     }
 
+    // 3. Fallback em memória
     const found = globalStore.tenants.find(
-      (t) => t.id === idOrSlug || t.slug.toLowerCase() === clean
+      (t) =>
+        t.id === idOrSlug ||
+        t.slug.toLowerCase() === clean ||
+        (clean === "ms-preparacoes" && t.slug === "marcelino") ||
+        (clean === "marcelino" && t.slug === "ms-preparacoes")
     );
+
+    if (found && kv) {
+      try {
+        await kv.put(`tenant:${found.id}`, JSON.stringify(found));
+        await kv.put(`tenant:${found.slug.toLowerCase()}`, JSON.stringify(found));
+      } catch (e) {
+        console.warn("KV sync fallback tenant error:", e);
+      }
+    }
+
     return found || null;
   }
 
@@ -452,6 +604,15 @@ export class Database {
     }
 
     globalStore.tenants.unshift(newTenant);
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`tenant:${newTenant.id}`, JSON.stringify(newTenant));
+        await kv.put(`tenant:${newTenant.slug.toLowerCase()}`, JSON.stringify(newTenant));
+      } catch (e) {
+        console.warn("KV put tenant error:", e);
+      }
+    }
     return newTenant;
   }
 
@@ -537,6 +698,15 @@ export class Database {
     if (idx >= 0) {
       globalStore.tenants[idx] = updated;
     }
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`tenant:${updated.id}`, JSON.stringify(updated));
+        await kv.put(`tenant:${updated.slug.toLowerCase()}`, JSON.stringify(updated));
+      } catch (e) {
+        console.warn("KV update tenant error:", e);
+      }
+    }
     return updated;
   }
 
@@ -553,6 +723,16 @@ export class Database {
         await this.env.DB.prepare("DELETE FROM tenants WHERE id = ?").bind(tenant.id).run();
       } catch (e) {
         console.warn("D1 deleteTenant error:", e);
+      }
+    }
+
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.delete(`tenant:${tenant.id}`);
+        await kv.delete(`tenant:${tenant.slug.toLowerCase()}`);
+      } catch (e) {
+        console.warn("KV delete tenant error:", e);
       }
     }
 
@@ -777,6 +957,15 @@ export class Database {
     }
 
     globalStore.products.unshift(newProduct);
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`product:${newProduct.id}`, JSON.stringify(newProduct));
+        await kv.delete(`products:${tenantId}`);
+      } catch (e) {
+        console.warn("KV product error:", e);
+      }
+    }
     return newProduct;
   }
 
@@ -808,16 +997,40 @@ export class Database {
       }
     }
 
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`product:${updated.id}`, JSON.stringify(updated));
+        if (updated.tenantId) {
+          await kv.delete(`products:${updated.tenantId}`);
+        }
+      } catch (e) {
+        console.warn("KV sync product error:", e);
+      }
+    }
+
     return updated;
   }
 
   async deleteProduct(productId: string): Promise<boolean> {
+    const existing = globalStore.products.find((p) => p.id === productId);
     globalStore.products = globalStore.products.filter((p) => p.id !== productId);
     if (this.env?.DB) {
       try {
         await this.env.DB.prepare("DELETE FROM products WHERE id = ?").bind(productId).run();
       } catch (e) {
         console.warn("D1 deleteProduct error:", e);
+      }
+    }
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.delete(`product:${productId}`);
+        if (existing?.tenantId) {
+          await kv.delete(`products:${existing.tenantId}`);
+        }
+      } catch (e) {
+        console.warn("KV delete product error:", e);
       }
     }
     return true;
@@ -842,6 +1055,24 @@ export class Database {
     }
 
     return globalStore.orders.filter((o) => o.tenantId === tenantId);
+  }
+
+  async getOrderById(orderId: string): Promise<Order | null> {
+    if (!orderId) return null;
+    const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
+
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        const cached = await kv.get(`order:${cleanId}`);
+        if (cached) return JSON.parse(cached) as Order;
+      } catch (e) {
+        console.warn("KV get order error:", e);
+      }
+    }
+
+    const found = globalStore.orders.find((o) => o.id === orderId || o.id === cleanId);
+    return found || null;
   }
 
   async createOrder(tenantId: string, orderData: Omit<Order, "id" | "tenantId" | "createdAt">): Promise<Order> {
@@ -886,11 +1117,22 @@ export class Database {
     }
 
     globalStore.orders.unshift(newOrder);
+
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`order:${newOrder.id}`, JSON.stringify(newOrder));
+      } catch (e) {
+        console.warn("KV put order error:", e);
+      }
+    }
+
     return newOrder;
   }
 
   async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order | null> {
-    const order = globalStore.orders.find((o) => o.id === orderId);
+    const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
+    const order = globalStore.orders.find((o) => o.id === orderId || o.id === cleanId);
     if (!order) return null;
 
     order.status = status;
@@ -901,10 +1143,19 @@ export class Database {
         await this.env.DB.prepare(
           "UPDATE orders SET status = ?, status_history_json = ? WHERE id = ?"
         )
-          .bind(status, JSON.stringify(order.statusHistory), orderId)
+          .bind(status, JSON.stringify(order.statusHistory), order.id)
           .run();
       } catch (e) {
         console.warn("D1 updateOrderStatus error:", e);
+      }
+    }
+
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`order:${order.id}`, JSON.stringify(order));
+      } catch (e) {
+        console.warn("KV update order error:", e);
       }
     }
 

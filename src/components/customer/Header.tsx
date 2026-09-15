@@ -17,9 +17,6 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
   const handleSuperAdmin = onSuperAdminClick || onAdminClick || (() => {});
 
   const hasBanner = Boolean(config.bannerImage);
-  const isImageLogo = Boolean(
-    config.logo && (config.logo.startsWith("data:image/") || config.logo.startsWith("http"))
-  );
 
   return (
     <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
@@ -73,7 +70,6 @@ export function Header({ onAdminClick, onStoreAdminClick, onSuperAdminClick }: H
                   <div className="max-h-60 overflow-y-auto space-y-1">
                     {tenants.map((t) => {
                       const isSelected = (currentTenant?.id || config.id) === t.id;
-                      const isTLogoImg = t.logo && (t.logo.startsWith("data:") || t.logo.startsWith("http"));
                       return (
                         <button
                           key={t.id}

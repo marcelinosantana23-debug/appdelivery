@@ -131,6 +131,7 @@ export interface CloudflareKVNamespace {
 
 export interface Env {
   DB?: CloudflareD1Database;
+  KV?: CloudflareKVNamespace;
   STORE_KV?: CloudflareKVNamespace;
   PLATFORM_NAME?: string;
   ENVIRONMENT?: string;
