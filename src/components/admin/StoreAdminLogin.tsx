@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Lock, Mail, Eye, EyeOff, Store, Shield, AlertCircle } from "lucide-react";
+import { ArrowLeft, Lock, Mail, Eye, EyeOff, Store, Shield, AlertCircle, AlertTriangle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo, getSafeDisplayName } from "@/components/common/StoreLogo";
 
@@ -16,16 +16,32 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isSuperAdminBlocked, setIsSuperAdminBlocked] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsSuperAdminBlocked(false);
     setLoading(true);
 
     try {
-      const res = await login(email, password);
+      // Passa portal 'store' para que o backend e o context validem RBAC estritamente
+      const res = await login(email, password, "store");
+
       if (!res.success) {
-        setError(res.error || "E-mail ou senha incorretos.");
+        if (
+          res.isSuperAdminAttempt ||
+          res.role === "super_admin" ||
+          res.error?.includes("SUPER_ADMIN") ||
+          res.error?.includes("super-admin")
+        ) {
+          setIsSuperAdminBlocked(true);
+          setError(
+            "Acesso negado: Administradores da plataforma (SUPER_ADMIN) devem acessar exclusivamente pelo portal /super-admin."
+          );
+        } else {
+          setError(res.error || "E-mail ou senha incorretos.");
+        }
         setLoading(false);
         return;
       }
@@ -37,6 +53,15 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
       const msg = err instanceof Error ? err.message : "Erro de conexão ao autenticar.";
       setError(msg);
       setLoading(false);
+    }
+  };
+
+  const handleNavigateSuperAdmin = () => {
+    if (onGoToSuperAdmin) {
+      onGoToSuperAdmin();
+    } else if (typeof window !== "undefined") {
+      window.history.pushState({ view: "superadmin" }, "", "/super-admin");
+      window.location.reload();
     }
   };
 
@@ -87,7 +112,10 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (isSuperAdminBlocked) setIsSuperAdminBlocked(false);
+                  }}
                   placeholder="admin@sualoja.com"
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition focus:border-amber-500"
                 />
@@ -118,7 +146,29 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
               </div>
             </div>
 
-            {error && (
+            {/* Alerta Destacado de RBAC: Barrando usuário SUPER_ADMIN */}
+            {isSuperAdminBlocked && (
+              <div className="rounded-2xl border border-amber-500/60 bg-amber-950/80 p-4 text-xs text-amber-200 animate-fade-in shadow-lg space-y-2">
+                <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
+                  <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
+                  <span>Acesso Recusado: Perfil SUPER_ADMIN</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  A tela de login da lanchonete recusa e barra usuários com role <strong>SUPER_ADMIN</strong>.
+                  O Super Administrador deve logar exclusivamente pela rota <strong>/super-admin</strong>.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleNavigateSuperAdmin}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 px-4 font-bold text-slate-950 shadow-md hover:bg-amber-400 transition active:scale-[0.98]"
+                >
+                  <Shield className="h-4 w-4" />
+                  <span>Acessar Login Super Admin (/super-admin)</span>
+                </button>
+              </div>
+            )}
+
+            {!isSuperAdminBlocked && error && (
               <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-950/60 p-3 text-xs text-red-300 animate-fade-in">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-400 mt-0.5" />
                 <span>{error}</span>
@@ -130,22 +180,20 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
               disabled={loading}
               className="w-full rounded-xl bg-gradient-to-r from-red-600 to-amber-600 py-3 text-xs font-bold text-white shadow-lg shadow-red-600/30 transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
             >
-              {loading ? "Entrando..." : "Entrar no Painel da Loja"}
+              {loading ? "Verificando..." : "Entrar no Painel da Loja"}
             </button>
           </form>
 
-          {onGoToSuperAdmin && (
-            <div className="mt-5 border-t border-slate-800/80 pt-4 text-center">
-              <button
-                type="button"
-                onClick={onGoToSuperAdmin}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-300 transition"
-              >
-                <Shield className="h-3.5 w-3.5" />
-                <span>É o administrador da plataforma? Acessar Super Admin</span>
-              </button>
-            </div>
-          )}
+          <div className="mt-5 border-t border-slate-800/80 pt-4 text-center">
+            <button
+              type="button"
+              onClick={handleNavigateSuperAdmin}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-300 transition"
+            >
+              <Shield className="h-3.5 w-3.5" />
+              <span>É o administrador da plataforma? Acessar /super-admin</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

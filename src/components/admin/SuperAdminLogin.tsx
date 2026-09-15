@@ -21,7 +21,7 @@ export function SuperAdminLogin({ onBack, onSuccess }: SuperAdminLoginProps) {
     setLoading(true);
 
     try {
-      const res = await login(email, password);
+      const res = await login(email, password, "superadmin");
       if (!res.success) {
         setError(res.error || "E-mail ou senha incorretos.");
         setLoading(false);

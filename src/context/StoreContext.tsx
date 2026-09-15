@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import type { CartItem, Product, ProductOption, Order, OrderStatus, Tenant, User, UserRole, TenantStatus } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import {
@@ -19,6 +19,7 @@ import {
   updateSuperAdminCredentialsApi,
 } from "@/services/api";
 import { getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { playNewOrderChime } from "@/utils/audio";
 
 interface StoreContextValue {
   // Multi-tenant state
@@ -52,19 +53,26 @@ interface StoreContextValue {
   cartCount: number;
   cartSubtotal: number;
 
-  // Orders
+  // Orders & Real-time
   orders: Order[];
   addOrder: (order: Order) => Promise<Order | null>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   newOrderIds: string[];
   clearNewOrderFlag: (orderId: string) => void;
+  soundEnabled: boolean;
+  toggleSound: () => void;
+  playAlertSound: () => void;
 
   // Auth & Roles
   currentUser: User | null;
   userRole: UserRole | null;
   isAdminAuthed: boolean;
   isSuperAdmin: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
+  login: (
+    email: string,
+    password: string,
+    portal?: "store" | "superadmin"
+  ) => Promise<{ success: boolean; error?: string; role?: UserRole; isSuperAdminAttempt?: boolean }>;
   logout: () => void;
   updateSuperAdminCredentials: (
     email: string,
@@ -142,6 +150,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("delivery_sound_enabled");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("delivery_sound_enabled", String(next));
+      } catch {
+        // Ignore localStorage error
+      }
+      return next;
+    });
+  }, []);
+
+  const playAlertSound = useCallback(() => {
+    playNewOrderChime();
+  }, []);
+
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem("delivery_user_session");
@@ -270,9 +303,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------------- AUTH ----------------
   const login = useCallback(
-    async (email: string, password: string): Promise<{ success: boolean; error?: string; role?: UserRole }> => {
-      const res = await loginApi(email, password);
+    async (
+      email: string,
+      password: string,
+      portal?: "store" | "superadmin"
+    ): Promise<{
+      success: boolean;
+      error?: string;
+      role?: UserRole;
+      isSuperAdminAttempt?: boolean;
+    }> => {
+      const res = await loginApi(email, password, portal);
+
+      // RBAC: Se o portal da lanchonete for usado por um Super Admin, recusa e barra
+      if (
+        portal === "store" &&
+        (res.isSuperAdmin ||
+          res.user?.role === "super_admin" ||
+          res.code === "SUPER_ADMIN_BLOCKED_ON_STORE")
+      ) {
+        return {
+          success: false,
+          error:
+            "Acesso negado: Administradores da plataforma (SUPER_ADMIN) devem acessar exclusivamente pelo portal /super-admin.",
+          role: "super_admin",
+          isSuperAdminAttempt: true,
+        };
+      }
+
       if (res.success && res.user) {
+        // Validação adicional de segurança de roles
+        if (portal === "store" && res.user.role === "super_admin") {
+          return {
+            success: false,
+            error:
+              "Acesso negado: Administradores da plataforma (SUPER_ADMIN) devem acessar exclusivamente pelo portal /super-admin.",
+            role: "super_admin",
+            isSuperAdminAttempt: true,
+          };
+        }
+
+        if (portal === "superadmin" && res.user.role !== "super_admin") {
+          return {
+            success: false,
+            error:
+              "Acesso negado: Este portal é restrito exclusivamente a Super Administradores da plataforma.",
+            role: res.user.role,
+          };
+        }
+
         setCurrentUser(res.user);
         try {
           localStorage.setItem("delivery_user_session", JSON.stringify(res.user));
@@ -287,7 +366,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const storeCfg = tenantToStoreConfig(res.tenant);
           setConfig(storeCfg);
           applyThemeColors(storeCfg);
-          if (typeof window !== "undefined" && !window.location.pathname.startsWith("/admin") && !window.location.pathname.startsWith("/superadmin")) {
+          if (
+            typeof window !== "undefined" &&
+            !window.location.pathname.startsWith("/admin") &&
+            !window.location.pathname.startsWith("/superadmin") &&
+            !window.location.pathname.startsWith("/super-admin")
+          ) {
             window.history.pushState(null, "", `/loja/${res.tenant.slug}`);
           }
           await Promise.all([
@@ -491,6 +575,103 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setNewOrderIds((prev) => prev.filter((id) => id !== orderId));
   }, []);
 
+  // ---------------- ESCUTA DE PEDIDOS EM TEMPO REAL (D1/KV + POLLING A CADA 3s + SSE) ----------------
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (orders.length > 0 && knownOrderIdsRef.current.size === 0) {
+      knownOrderIdsRef.current = new Set(orders.map((o) => o.id));
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+    const tenantId = currentTenant.id;
+    let isMounted = true;
+
+    // Polling contínuo a cada 3 segundos garantindo sincronização no Hono/D1
+    const syncOrders = async () => {
+      try {
+        const res = await fetchTenantOrdersApi(tenantId);
+        if (!isMounted) return;
+
+        if (res.success && res.orders) {
+          const incoming: Order[] = res.orders;
+          const prevIds = knownOrderIdsRef.current;
+
+          // Se já conhecíamos pedidos anteriores e novos foram recebidos (ex: cliente fez pedido na vitrine)
+          if (prevIds.size > 0) {
+            const newlyArrived = incoming.filter((o) => !prevIds.has(o.id));
+            if (newlyArrived.length > 0) {
+              if (soundEnabled) {
+                playNewOrderChime();
+              }
+              const freshIds = newlyArrived.map((o) => o.id);
+              setNewOrderIds((prev) => Array.from(new Set([...freshIds, ...prev])));
+
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(
+                  new CustomEvent("new-delivery-order-received", {
+                    detail: { orders: newlyArrived },
+                  })
+                );
+              }
+            }
+          }
+
+          setOrders(incoming);
+          knownOrderIdsRef.current = new Set(incoming.map((o) => o.id));
+        }
+      } catch (err) {
+        console.warn("Erro na sincronização de pedidos em tempo real:", err);
+      }
+    };
+
+    const intervalId = setInterval(syncOrders, 3000);
+
+    // Canal Server-Sent Events (SSE) para entrega instantânea
+    let eventSource: EventSource | null = null;
+    if (typeof EventSource !== "undefined") {
+      try {
+        eventSource = new EventSource(`/api/tenants/${tenantId}/orders/stream`);
+        eventSource.addEventListener("orders", (e) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(e.data);
+            if (data?.orders && Array.isArray(data.orders)) {
+              const incoming: Order[] = data.orders;
+              const prevIds = knownOrderIdsRef.current;
+              if (prevIds.size > 0) {
+                const newlyArrived = incoming.filter((o) => !prevIds.has(o.id));
+                if (newlyArrived.length > 0) {
+                  if (soundEnabled) {
+                    playNewOrderChime();
+                  }
+                  const freshIds = newlyArrived.map((o) => o.id);
+                  setNewOrderIds((prev) => Array.from(new Set([...freshIds, ...prev])));
+                }
+              }
+              setOrders(incoming);
+              knownOrderIdsRef.current = new Set(incoming.map((o) => o.id));
+            }
+          } catch (err) {
+            console.warn("SSE parse error:", err);
+          }
+        });
+      } catch (err) {
+        console.warn("SSE not available:", err);
+      }
+    }
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [currentTenant?.id, soundEnabled]);
+
   // ---------------- SUPER ADMIN ACTIONS ----------------
   const createNewTenant = useCallback(
     async (data: {
@@ -580,6 +761,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         updateOrderStatus,
         newOrderIds,
         clearNewOrderFlag,
+        soundEnabled,
+        toggleSound,
+        playAlertSound,
         currentUser,
         userRole,
         isAdminAuthed,

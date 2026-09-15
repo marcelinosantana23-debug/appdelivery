@@ -204,7 +204,7 @@ function AppContent() {
   const getInitialView = (): View => {
     if (typeof window === "undefined") return "menu";
     const path = window.location.pathname;
-    if (path.startsWith("/superadmin")) return "superadmin";
+    if (path.startsWith("/super-admin") || path.startsWith("/superadmin")) return "superadmin";
     if (path.startsWith("/admin")) return "admin";
     return "menu";
   };
@@ -216,7 +216,7 @@ function AppContent() {
     (targetView: View) => {
       if (typeof window !== "undefined") {
         if (targetView === "superadmin") {
-          window.history.pushState({ view: "superadmin" }, "", "/superadmin");
+          window.history.pushState({ view: "superadmin" }, "", "/super-admin");
         } else if (targetView === "admin") {
           window.history.pushState({ view: "admin" }, "", "/admin");
         } else {
@@ -233,7 +233,7 @@ function AppContent() {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path.startsWith("/superadmin")) {
+      if (path.startsWith("/super-admin") || path.startsWith("/superadmin")) {
         setView("superadmin");
       } else if (path.startsWith("/admin")) {
         setView("admin");

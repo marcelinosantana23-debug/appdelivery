@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { streamSSE } from "hono/streaming";
 import { Database } from "./db";
 import type { Env, OrderStatus, TenantStatus, OrderItem } from "./types";
 
@@ -61,7 +62,7 @@ api.get("/health", (c) => {
   return c.json({
     status: "ok",
     runtime: "Cloudflare Workers / Hono",
-    platform: c.env?.PLATFORM_NAME || "DeliveryHub Multi-tenant",
+    platform: c.env?.PLATFORM_NAME || "Top Food Multi-tenant",
     cloudflare: {
       d1Database: hasD1 ? "Conectado (c.env.DB)" : "Modo desenvolvimento local em memória",
       kvStorage: hasKV ? "Conectado (c.env.KV / c.env.STORE_KV)" : "Modo desenvolvimento local em memória",
@@ -682,7 +683,7 @@ api.patch("/pedidos/:id", handleStatusUpdate);
 api.post("/auth/login", async (c) => {
   try {
     const body = await c.req.json();
-    const { email, password } = body;
+    const { email, password, portal } = body;
 
     if (!email || !password) {
       return c.json({ success: false, error: "E-mail e senha são obrigatórios" }, 400);
@@ -693,6 +694,32 @@ api.post("/auth/login", async (c) => {
 
     if (!user) {
       return c.json({ success: false, error: "Credenciais inválidas ou conta inativa" }, 401);
+    }
+
+    // RBAC: Isolamento estrito de logins
+    // 1. Tela da lanchonete (portal === 'store') RECUSA e BARRA usuários com role SUPER_ADMIN
+    if (portal === "store" && user.role === "super_admin") {
+      return c.json(
+        {
+          success: false,
+          error: "Acesso negado: Administradores da plataforma (SUPER_ADMIN) devem acessar exclusivamente pelo portal /super-admin.",
+          code: "SUPER_ADMIN_BLOCKED_ON_STORE",
+          isSuperAdmin: true,
+        },
+        403
+      );
+    }
+
+    // 2. Portal Super Admin (portal === 'superadmin') recusa usuários sem privilégios globais
+    if (portal === "superadmin" && user.role !== "super_admin") {
+      return c.json(
+        {
+          success: false,
+          error: "Acesso negado: Este portal é restrito exclusivamente a Super Administradores da plataforma. Utilize a tela de login da sua lanchonete em /admin.",
+          code: "NOT_SUPER_ADMIN",
+        },
+        403
+      );
     }
 
     let tenant = null;
@@ -983,6 +1010,57 @@ api.get("/tenants/:slugOrId/orders", async (c) => {
 
   const orders = await db.getOrdersByTenant(tenant.id);
   return c.json({ success: true, orders }, 200);
+});
+
+// SSE Stream para escuta de pedidos em tempo real no painel do restaurante
+api.get("/tenants/:slugOrId/orders/stream", async (c) => {
+  const db = getDb(c);
+  const slugOrId = c.req.param("slugOrId");
+  const tenant = await db.getTenantByIdOrSlug(slugOrId);
+
+  if (!tenant) {
+    return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+  }
+
+  return streamSSE(c, async (stream) => {
+    let lastOrderCount = -1;
+    await stream.writeSSE({
+      event: "connected",
+      data: JSON.stringify({
+        message: "Canal de pedidos em tempo real conectado",
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+      }),
+    });
+
+    try {
+      const initialOrders = await db.getOrdersByTenant(tenant.id);
+      lastOrderCount = initialOrders.length;
+      await stream.writeSSE({
+        event: "orders",
+        data: JSON.stringify({ orders: initialOrders }),
+      });
+    } catch (e) {
+      console.warn("SSE initial orders error:", e);
+    }
+
+    for (let i = 0; i < 60; i++) {
+      if (stream.aborted) break;
+      await stream.sleep(3000);
+      try {
+        const currentOrders = await db.getOrdersByTenant(tenant.id);
+        if (currentOrders.length !== lastOrderCount) {
+          lastOrderCount = currentOrders.length;
+          await stream.writeSSE({
+            event: "orders",
+            data: JSON.stringify({ orders: currentOrders, timestamp: Date.now() }),
+          });
+        }
+      } catch (err) {
+        console.warn("SSE loop error:", err);
+      }
+    }
+  });
 });
 
 api.post("/tenants/:slugOrId/orders", async (c) => {

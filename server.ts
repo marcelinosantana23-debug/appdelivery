@@ -58,7 +58,7 @@ async function startServer() {
 
       // Pass bindings environment to Cloudflare/Hono worker
       const response = await workerApp.fetch(webRequest, {
-        PLATFORM_NAME: "DeliveryHub Multi-tenant",
+        PLATFORM_NAME: "Top Food Multi-tenant",
         ENVIRONMENT: process.env.NODE_ENV || "development",
       });
 

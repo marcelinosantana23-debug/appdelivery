@@ -40,10 +40,12 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
     currentTenant,
     selectTenant,
     tenants,
+    soundEnabled,
+    toggleSound,
+    playAlertSound,
   } = useStore();
 
   const [tab, setTab] = useState<AdminTab>("orders");
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(null);
   const lastOrderCount = useRef(orders.length);
 
@@ -173,14 +175,32 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>Ao vivo (3s)</span>
+          </div>
+
           <button
-            onClick={() => setSoundEnabled((s) => !s)}
-            className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
-              soundEnabled ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-500"
+            onClick={() => {
+              toggleSound();
+              if (!soundEnabled) {
+                playAlertSound();
+              }
+            }}
+            className={`flex h-9 items-center gap-1.5 px-2.5 rounded-xl transition ${
+              soundEnabled
+                ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                : "bg-slate-800 text-slate-500 hover:bg-slate-700"
             }`}
-            title={soundEnabled ? "Som de novos pedidos ativo" : "Som desativado"}
+            title={soundEnabled ? "Som de novos pedidos ativado (clique para silenciar)" : "Som desativado (clique para ativar)"}
           >
             {soundEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            <span className="text-xs font-semibold hidden md:inline">
+              {soundEnabled ? "Som ativo" : "Silenciado"}
+            </span>
           </button>
 
           <button

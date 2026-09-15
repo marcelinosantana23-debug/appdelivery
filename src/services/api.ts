@@ -9,18 +9,24 @@ import type {
 
 const BASE_URL = "/api";
 
-export async function loginApi(email: string, password: string): Promise<{
+export async function loginApi(
+  email: string,
+  password: string,
+  portal?: "store" | "superadmin"
+): Promise<{
   success: boolean;
   user?: User;
   tenant?: Tenant | null;
   token?: string;
   error?: string;
+  code?: string;
+  isSuperAdmin?: boolean;
 }> {
   try {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, portal }),
     });
     return await res.json();
   } catch (err: any) {

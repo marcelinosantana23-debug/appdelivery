@@ -404,7 +404,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-white sm:text-lg">DeliveryHub Platform</h1>
+                <h1 className="text-base font-bold text-white sm:text-lg">Top Food Platform</h1>
                 <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">
                   Super Admin
                 </span>

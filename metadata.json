@@ -1,6 +1,6 @@
 {
-  "name": "DeliveryHub - Plataforma Multi-tenant de Delivery",
-  "description": "Sistema multi-lojas completo com 3 níveis de acesso (Super Admin, Lojista e Cliente), API Hono, Cloudflare Workers D1 e vitrines dinâmicas.",
+  "name": "Top Food - Plataforma Multi-tenant de Delivery",
+  "description": "Sistema multi-lojas Top Food com vitrines dinâmicas no Cloudflare D1/KV, painel do lojista com pedidos em tempo real, RBAC isolado e Super Admin.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
