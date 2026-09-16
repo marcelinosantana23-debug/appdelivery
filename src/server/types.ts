@@ -2,6 +2,17 @@ export type UserRole = "super_admin" | "tenant_admin";
 
 export type TenantStatus = "active" | "inactive";
 
+export interface TenantCredential {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  userId: string;
+  email: string;
+  password?: string;
+  name: string;
+  status: string;
+}
+
 export type PixKeyType = "cpf" | "cnpj" | "phone" | "email" | "random";
 
 export interface Tenant {

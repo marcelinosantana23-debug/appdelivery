@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { serveStatic } from "hono/cloudflare-workers";
 import api from "./server/api";
 import type { Env } from "./server/types";
 
@@ -44,40 +43,28 @@ app.get("/health", (c) => {
   });
 });
 
-// 3. Servir arquivos estáticos da pasta dist ou assets via serveStatic
-app.use("/assets/*", serveStatic({ root: "./" }));
-app.use("/favicon.ico", serveStatic({ path: "./favicon.ico" }));
-app.use("/vite.svg", serveStatic({ path: "./vite.svg" }));
-
-// 4. Middleware de Fallback SPA: Qualquer requisição GET de rota navegável (que não seja /api/*) entrega index.html
+// 3. Static assets & SPA fallback using Cloudflare Workers Static Assets binding (wrangler.toml: [assets])
 app.get("*", async (c, next) => {
   const path = c.req.path;
   if (path.startsWith("/api") || path === "/health") {
     return next();
   }
 
-  // A. Cloudflare Workers Static Assets binding (wrangler.toml: [assets] com binding = "ASSETS")
+  // Cloudflare Workers Static Assets binding (wrangler.toml: [assets] com binding = "ASSETS")
   const assets = c.env?.ASSETS;
   if (assets && typeof assets.fetch === "function") {
     try {
-      // Se a requisição tem extensão de arquivo (.js, .css, .png, etc.), tenta servir o asset primeiro
-      const hasExtension = /\.[a-zA-Z0-9]+$/.test(path);
-      if (hasExtension) {
-        const assetRes = await assets.fetch(c.req.raw);
-        if (assetRes.status !== 404) {
-          return assetRes;
-        }
+      // O binding ASSETS com not_found_handling = "single-page-application"
+      // serve automaticamente os arquivos estáticos (/assets/*, favicon, etc.)
+      // e faz o fallback de rotas SPA (/admin, /loja/*) para /index.html sem loop de redirecionamento.
+      const res = await assets.fetch(c.req.raw);
+      if (res.status === 404 && path !== "/index.html") {
+        const indexUrl = new URL("/index.html", c.req.url);
+        return await assets.fetch(new Request(indexUrl.toString(), c.req.raw));
       }
-
-      // Fallback SPA: Ao atualizar a página (F5) em rotas internas (/admin, /super-admin, /loja/:slug, /checkout, etc.),
-      // entrega o index.html com HTTP 200 para que o roteador client-side renderize perfeitamente
-      const indexReq = new Request(new URL("/index.html", c.req.url).toString(), c.req.raw);
-      const indexRes = await assets.fetch(indexReq);
-      if (indexRes.status < 400) {
-        return indexRes;
-      }
+      return res;
     } catch (err) {
-      console.warn("Assets fetch error in SPA fallback:", err);
+      console.warn("Assets fetch error in Cloudflare Worker:", err);
     }
   }
 

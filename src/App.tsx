@@ -12,6 +12,7 @@ import { AdminPanel } from "@/components/admin/AdminPanel";
 import { SuperAdminPanel } from "@/components/admin/SuperAdminPanel";
 import { SuperAdminLogin } from "@/components/admin/SuperAdminLogin";
 import { StoreAdminLogin } from "@/components/admin/StoreAdminLogin";
+import { SuperAdminInspectorBar } from "@/components/admin/SuperAdminInspectorBar";
 import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 import type { Product, Order } from "@/types";
 
@@ -32,6 +33,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
     storeNotFound,
     tenants,
     selectTenant,
+    isSuperAdmin,
   } = useStore();
   const [activeCategory, setActiveCategory] = useState("lanches");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -87,41 +89,56 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
 
   if (storeNotFound) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
-        <div className="w-full max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-2xl">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-slate-950 p-6 text-center">
+        {isSuperAdmin && (
+          <SuperAdminInspectorBar
+            onGoToStoreAdmin={onStoreAdminClick}
+            onGoToSuperAdmin={onSuperAdminClick}
+          />
+        )}
+        <div className="w-full max-w-md rounded-3xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-2xl">
             🍔
           </div>
-          <h2 className="mt-4 text-xl font-bold text-gray-900">Lanchonete Não Encontrada</h2>
-          <p className="mt-2 text-xs text-gray-500">
-            O endereço acessado não corresponde a nenhuma loja ativa cadastrada na plataforma.
+          <h2 className="mt-4 text-xl font-bold text-gray-900 dark:text-white">Lanchonete Não Encontrada</h2>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            O endereço acessado não corresponde a nenhuma vitrine ativa ou o link está indisponível.
           </p>
-          <div className="mt-6 space-y-2">
-            <span className="block text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              Lojas disponíveis na plataforma:
-            </span>
-            {tenants
-              .filter((t) => t.status === "active")
-              .slice(0, 4)
-              .map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => selectTenant(t.slug)}
-                  className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-3 text-left hover:border-amber-200 hover:bg-amber-50/50 transition"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white border border-gray-200 text-lg shadow-sm">
-                      <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
+
+          {/* Super Admin can inspect any available store; normal customers are strictly isolated */}
+          {isSuperAdmin ? (
+            <div className="mt-6 space-y-2 text-left">
+              <span className="block text-[11px] font-bold text-amber-500 uppercase tracking-wider">
+                Vitrines disponíveis (Modo Super Admin):
+              </span>
+              {tenants
+                .filter((t) => t.status === "active")
+                .map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => selectTenant(t.slug)}
+                    className="flex w-full items-center justify-between rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 p-3 text-left hover:border-amber-200 hover:bg-amber-50/50 dark:hover:bg-slate-800 transition"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 text-lg shadow-sm">
+                        <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-gray-800 dark:text-white">{getSafeDisplayName(t.name, "Lanchonete")}</div>
+                        <div className="text-[11px] text-gray-400 font-mono">/loja/{getSafeSlug(t.slug, "loja")}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-gray-800">{getSafeDisplayName(t.name, "Lanchonete")}</div>
-                      <div className="text-[11px] text-gray-400 font-mono">/loja/{getSafeSlug(t.slug, "loja")}</div>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-amber-600">Acessar &rarr;</span>
-                </button>
-              ))}
-          </div>
+                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Inspecionar &rarr;</span>
+                  </button>
+                ))}
+            </div>
+          ) : (
+            <div className="mt-6">
+              <p className="text-xs text-gray-400">
+                Por favor, confira o endereço ou link fornecido pelo estabelecimento.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -151,6 +168,14 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 pb-24 transition-colors">
+      {/* Super Admin Top Inspector Bar - ONLY rendered if authenticated as Super Admin */}
+      {isSuperAdmin && (
+        <SuperAdminInspectorBar
+          onGoToStoreAdmin={onStoreAdminClick}
+          onGoToSuperAdmin={onSuperAdminClick}
+        />
+      )}
+
       <Header
         onStoreAdminClick={onStoreAdminClick}
         onSuperAdminClick={onSuperAdminClick}
@@ -194,6 +219,25 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
           setCustomerView("checkout");
         }}
       />
+
+      {/* Rodapé institucional com identidade isolada da vitrine */}
+      <footer className="mt-16 border-t border-gray-200/60 dark:border-slate-800/60 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+        <div className="mx-auto max-w-2xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-700 dark:text-gray-300">{config.name}</span>
+            <span>•</span>
+            <span>Cardápio Digital Oficial</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onStoreAdminClick}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-[11px] underline"
+            >
+              Área do Lojista
+            </button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

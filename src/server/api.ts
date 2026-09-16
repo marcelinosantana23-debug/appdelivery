@@ -825,24 +825,150 @@ api.get("/platform/stats", async (c) => {
   return c.json({ success: true, stats }, 200);
 });
 
+api.get("/superadmin/tenants/credentials", async (c) => {
+  try {
+    const db = getDb(c);
+    const credentials = await db.getAllTenantCredentials();
+    return c.json({ success: true, credentials }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao buscar credenciais dos lojistas" }, 500);
+  }
+});
+
+api.get("/superadmin/tenant-credentials", async (c) => {
+  try {
+    const db = getDb(c);
+    const credentials = await db.getAllTenantCredentials();
+    return c.json({ success: true, credentials }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao buscar credenciais dos lojistas" }, 500);
+  }
+});
+
 api.get("/tenants", async (c) => {
   const db = getDb(c);
   const tenants = await db.getTenants();
   const enriched = await Promise.all(
     tenants.map(async (t) => {
-      const [products, orders] = await Promise.all([
+      const [products, orders, creds] = await Promise.all([
         db.getProductsByTenant(t.id),
         db.getOrdersByTenant(t.id),
+        db.getTenantCredentials(t.id),
       ]);
       return {
         ...t,
         productCount: products.length,
         orderCount: orders.length,
         revenue: orders.reduce((sum, o) => sum + (o.total || 0), 0),
+        adminEmail: creds?.email || t.email,
+        adminPassword: creds?.password || "123456",
+        adminUserId: creds?.userId,
       };
     })
   );
   return c.json({ success: true, tenants: enriched }, 200);
+});
+
+api.get("/tenants/:slugOrId/credentials", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const credentials = await db.getTenantCredentials(slugOrId);
+    if (!credentials) {
+      return c.json({ success: false, error: "Lanchonete ou credenciais não encontradas" }, 404);
+    }
+    return c.json({ success: true, credentials }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao consultar credenciais" }, 500);
+  }
+});
+
+api.put("/superadmin/tenants/:slugOrId/credentials", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const body = await c.req.json();
+    const { email, password, name } = body;
+
+    if (!email || !password) {
+      return c.json(
+        { success: false, error: "E-mail de login e senha são obrigatórios para a lanchonete." },
+        400
+      );
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+
+    if (cleanPassword.length < 4) {
+      return c.json(
+        { success: false, error: "A senha da lanchonete deve possuir no mínimo 4 caracteres." },
+        400
+      );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return c.json(
+        { success: false, error: "Formato de e-mail inválido para o login da lanchonete." },
+        400
+      );
+    }
+
+    const res = await db.updateTenantCredentials(slugOrId, cleanEmail, cleanPassword, name);
+    return c.json({
+      success: true,
+      message: "Credenciais do lojista salvas com sucesso no banco de dados!",
+      credentials: res.credentials,
+      tenant: res.tenant,
+    }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao atualizar credenciais do lojista." }, 500);
+  }
+});
+
+api.put("/tenants/:slugOrId/credentials", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const body = await c.req.json();
+    const { email, password, name } = body;
+
+    if (!email || !password) {
+      return c.json(
+        { success: false, error: "E-mail de login e senha são obrigatórios para a lanchonete." },
+        400
+      );
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+
+    if (cleanPassword.length < 4) {
+      return c.json(
+        { success: false, error: "A senha da lanchonete deve possuir no mínimo 4 caracteres." },
+        400
+      );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return c.json(
+        { success: false, error: "Formato de e-mail inválido para o login da lanchonete." },
+        400
+      );
+    }
+
+    const res = await db.updateTenantCredentials(slugOrId, cleanEmail, cleanPassword, name);
+    return c.json({
+      success: true,
+      message: "Credenciais do lojista salvas com sucesso no banco de dados!",
+      credentials: res.credentials,
+      tenant: res.tenant,
+    }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao atualizar credenciais do lojista." }, 500);
+  }
 });
 
 api.post("/tenants", async (c) => {
@@ -910,6 +1036,14 @@ api.put("/tenants/:slugOrId", async (c) => {
     const tenant = await db.getTenantByIdOrSlug(slugOrId);
     if (!tenant) {
       return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    if (body.adminPassword || body.adminEmail) {
+      const credEmail = (body.adminEmail || body.email || tenant.email).trim().toLowerCase();
+      const credPass = (body.adminPassword || "").trim();
+      if (credPass.length >= 4) {
+        await db.updateTenantCredentials(tenant.id, credEmail, credPass, body.name || tenant.name);
+      }
     }
 
     const updated = await db.updateTenant(tenant.id, body);
@@ -1150,6 +1284,36 @@ api.patch("/tenants/:slugOrId/orders/:orderId/status", async (c) => {
     return c.json({ success: true, order: updated }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao atualizar pedido" }, 500);
+  }
+});
+
+// Endpoint público para consulta e rastreamento em tempo real do status de um pedido
+api.get("/orders/:orderId", async (c) => {
+  try {
+    const db = getDb(c);
+    const orderId = c.req.param("orderId");
+    const order = await db.getOrderById(orderId);
+    if (!order) {
+      return c.json({ success: false, error: "Pedido não encontrado" }, 404);
+    }
+    return c.json({ success: true, order }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao buscar pedido" }, 500);
+  }
+});
+
+// Endpoint com escopo de tenant para rastreamento de pedido
+api.get("/tenants/:slugOrId/orders/:orderId", async (c) => {
+  try {
+    const db = getDb(c);
+    const orderId = c.req.param("orderId");
+    const order = await db.getOrderById(orderId);
+    if (!order) {
+      return c.json({ success: false, error: "Pedido não encontrado" }, 404);
+    }
+    return c.json({ success: true, order }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao buscar pedido" }, 500);
   }
 });
 

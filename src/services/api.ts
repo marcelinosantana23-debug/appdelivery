@@ -5,6 +5,7 @@ import type {
   Order,
   OrderStatus,
   TenantStatus,
+  TenantCredential,
 } from "@/types";
 
 const BASE_URL = "/api";
@@ -248,3 +249,72 @@ export async function updateSuperAdminCredentialsApi(data: {
     return { success: false, error: err.message || "Erro ao conectar ao servidor" };
   }
 }
+
+export async function fetchAllTenantCredentialsApi(): Promise<{
+  success: boolean;
+  credentials: TenantCredential[];
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/superadmin/tenants/credentials`);
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, credentials: [], error: err.message || "Erro ao buscar credenciais" };
+  }
+}
+
+export async function fetchTenantCredentialsApi(slugOrId: string): Promise<{
+  success: boolean;
+  credentials?: TenantCredential;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/credentials`);
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao buscar credenciais da loja" };
+  }
+}
+
+export async function updateTenantCredentialsApi(
+  slugOrId: string,
+  data: {
+    email: string;
+    password: string;
+    name?: string;
+  }
+): Promise<{
+  success: boolean;
+  message?: string;
+  credentials?: TenantCredential;
+  tenant?: Tenant;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/superadmin/tenants/${encodeURIComponent(slugOrId)}/credentials`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao salvar credenciais da loja" };
+  }
+}
+
+export async function fetchOrderDetailsApi(
+  orderId: string,
+  slugOrId?: string
+): Promise<{ success: boolean; order?: Order; error?: string }> {
+  try {
+    const cleanId = encodeURIComponent(orderId);
+    const url = slugOrId
+      ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${cleanId}`
+      : `${BASE_URL}/orders/${cleanId}`;
+    const res = await fetch(url);
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao consultar status do pedido" };
+  }
+}
+

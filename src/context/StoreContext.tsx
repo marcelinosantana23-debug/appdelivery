@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import type { CartItem, Product, ProductOption, Order, OrderStatus, Tenant, User, UserRole, TenantStatus } from "@/types";
+import type { CartItem, Product, ProductOption, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import {
   fetchTenantsApi,
@@ -17,6 +17,9 @@ import {
   updateTenantOrderStatusApi,
   loginApi,
   updateSuperAdminCredentialsApi,
+  fetchTenantCredentialsApi,
+  fetchAllTenantCredentialsApi,
+  updateTenantCredentialsApi,
 } from "@/services/api";
 import { getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 import { playNewOrderChime } from "@/utils/audio";
@@ -94,6 +97,16 @@ interface StoreContextValue {
   }) => Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string }>;
   toggleTenantStatus: (slugOrId: string, status: TenantStatus) => Promise<boolean>;
   deleteTenant: (slugOrId: string) => Promise<boolean>;
+  updateTenantCredentials: (
+    slugOrId: string,
+    email: string,
+    password: string,
+    name?: string
+  ) => Promise<{ success: boolean; error?: string; message?: string; credentials?: TenantCredential }>;
+  getTenantCredentials: (
+    slugOrId: string
+  ) => Promise<{ success: boolean; error?: string; credentials?: TenantCredential }>;
+  getAllTenantCredentials: () => Promise<{ success: boolean; credentials?: TenantCredential[]; error?: string }>;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -142,14 +155,83 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
   };
 }
 
+function getInitialUrlSlug(): string {
+  if (typeof window === "undefined") return "marcelino";
+  const path = window.location.pathname;
+
+  // 1. /loja/:slug
+  const match = path.match(/^\/loja\/([^/?#]+)/i);
+  if (match && match[1]) return decodeURIComponent(match[1]).toLowerCase();
+
+  // 2. Hash routing fallback #/loja/:slug
+  if (window.location.hash) {
+    const hashMatch = window.location.hash.match(/#\/?loja\/([^/?#]+)/i);
+    if (hashMatch && hashMatch[1]) return decodeURIComponent(hashMatch[1]).toLowerCase();
+  }
+
+  // 3. Query string (?loja=slug ou ?tenant=slug)
+  const params = new URLSearchParams(window.location.search);
+  const qSlug = params.get("loja") || params.get("tenant") || params.get("store");
+  if (qSlug) return decodeURIComponent(qSlug).toLowerCase();
+
+  // 4. Direct single-segment path /:slug (quando não for /admin, /super-admin, etc)
+  if (
+    path &&
+    path !== "/" &&
+    !path.startsWith("/admin") &&
+    !path.startsWith("/superadmin") &&
+    !path.startsWith("/super-admin") &&
+    !path.startsWith("/api") &&
+    !path.startsWith("/health")
+  ) {
+    const direct = path.replace(/^\/+|\/+$/g, "");
+    if (direct && !direct.includes("/")) {
+      return decodeURIComponent(direct).toLowerCase();
+    }
+  }
+
+  // 5. Se o lojista estiver logado ou recarregando (F5) no painel /admin, recupera a loja da sessão
+  try {
+    const savedTenant = localStorage.getItem("delivery_tenant_session");
+    if (savedTenant) {
+      const parsed = JSON.parse(savedTenant);
+      if (parsed?.slug) return parsed.slug;
+    }
+    const savedUser = localStorage.getItem("delivery_user_session");
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      if (user?.tenantId === "tenant-ms-preparacoes" || user?.email?.includes("marcelino")) {
+        return "marcelino";
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return "marcelino";
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const initialSlug = getInitialUrlSlug();
   
-  // Hydrate currentTenant from localStorage session to survive F5 page reloads
+  // Hydrate currentTenant from localStorage session ONLY if it matches the current URL slug
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
     try {
       const saved = localStorage.getItem("delivery_tenant_session");
-      return saved ? JSON.parse(saved) : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (
+          parsed &&
+          (parsed.slug === initialSlug ||
+            parsed.id === initialSlug ||
+            (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
+            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
+        ) {
+          return parsed;
+        }
+      }
+      return null;
     } catch {
       return null;
     }
@@ -161,7 +243,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const savedTenant = localStorage.getItem("delivery_tenant_session");
       if (savedTenant) {
         const parsed = JSON.parse(savedTenant);
-        if (parsed && typeof parsed === "object") {
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          (parsed.slug === initialSlug ||
+            parsed.id === initialSlug ||
+            (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
+            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
+        ) {
           return tenantToStoreConfig(parsed);
         }
       }
@@ -209,64 +298,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  // Extract initial slug from URL pathname (e.g. /loja/:slug), hash, query (?loja=slug), or active session
-  const getInitialSlug = (): string => {
-    if (typeof window === "undefined") return "marcelino";
-    const path = window.location.pathname;
-
-    // 1. /loja/:slug
-    const match = path.match(/^\/loja\/([^/?#]+)/i);
-    if (match && match[1]) return decodeURIComponent(match[1]).toLowerCase();
-
-    // 2. Hash routing fallback #/loja/:slug
-    if (window.location.hash) {
-      const hashMatch = window.location.hash.match(/#\/?loja\/([^/?#]+)/i);
-      if (hashMatch && hashMatch[1]) return decodeURIComponent(hashMatch[1]).toLowerCase();
-    }
-
-    // 3. Query string (?loja=slug ou ?tenant=slug)
-    const params = new URLSearchParams(window.location.search);
-    const qSlug = params.get("loja") || params.get("tenant") || params.get("store");
-    if (qSlug) return decodeURIComponent(qSlug).toLowerCase();
-
-    // 4. Direct single-segment path /:slug (quando não for /admin, /super-admin, etc)
-    if (
-      path &&
-      path !== "/" &&
-      !path.startsWith("/admin") &&
-      !path.startsWith("/superadmin") &&
-      !path.startsWith("/super-admin") &&
-      !path.startsWith("/api") &&
-      !path.startsWith("/health")
-    ) {
-      const direct = path.replace(/^\/+|\/+$/g, "");
-      if (direct && !direct.includes("/")) {
-        return decodeURIComponent(direct).toLowerCase();
-      }
-    }
-
-    // 5. Se o lojista estiver logado ou recarregando (F5) no painel /admin, recupera a loja da sessão
-    try {
-      const savedTenant = localStorage.getItem("delivery_tenant_session");
-      if (savedTenant) {
-        const parsed = JSON.parse(savedTenant);
-        if (parsed?.slug) return parsed.slug;
-      }
-      const savedUser = localStorage.getItem("delivery_user_session");
-      if (savedUser) {
-        const user = JSON.parse(savedUser);
-        if (user?.tenantId === "tenant-ms-preparacoes" || user?.email?.includes("marcelino")) {
-          return "marcelino";
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    return "marcelino";
-  };
-
-  const [currentSlug, setCurrentSlug] = useState<string>(getInitialSlug);
+  const [currentSlug, setCurrentSlug] = useState<string>(initialSlug);
   const [isLoadingStore, setIsLoadingStore] = useState<boolean>(true);
   const [storeNotFound, setStoreNotFound] = useState<boolean>(false);
 
@@ -497,6 +529,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [currentUser?.id]
   );
+
+  const updateTenantCredentials = useCallback(
+    async (slugOrId: string, email: string, password: string, name?: string) => {
+      const res = await updateTenantCredentialsApi(slugOrId, { email, password, name });
+      if (res.success) {
+        await refreshTenants();
+        return { success: true, message: res.message, credentials: res.credentials };
+      }
+      return { success: false, error: res.error || "Erro ao atualizar credenciais" };
+    },
+    [refreshTenants]
+  );
+
+  const getTenantCredentials = useCallback(async (slugOrId: string) => {
+    return await fetchTenantCredentialsApi(slugOrId);
+  }, []);
+
+  const getAllTenantCredentials = useCallback(async () => {
+    return await fetchAllTenantCredentialsApi();
+  }, []);
 
   // ---------------- STORE CONFIG & SETTINGS ----------------
   const updateConfig = useCallback(
@@ -852,6 +904,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         updateSuperAdminCredentials,
+        updateTenantCredentials,
+        getTenantCredentials,
+        getAllTenantCredentials,
         createNewTenant,
         toggleTenantStatus,
         deleteTenant,

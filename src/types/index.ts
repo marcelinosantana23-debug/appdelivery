@@ -1,3 +1,14 @@
+export interface TenantCredential {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  userId: string;
+  email: string;
+  password?: string;
+  name: string;
+  status: string;
+}
+
 export interface ProductOption {
   id: string;
   name: string;

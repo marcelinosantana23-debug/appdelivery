@@ -470,12 +470,19 @@ export class Database {
     }
 
     // 2. Consultar banco de dados D1 (Cloudflare Workers SQL)
+    const altSlug =
+      clean === "ms-preparacoes"
+        ? "marcelino"
+        : clean === "marcelino"
+        ? "ms-preparacoes"
+        : clean;
+
     if (this.env?.DB) {
       try {
         const row = await this.env.DB.prepare(
-          "SELECT * FROM tenants WHERE id = ? OR LOWER(slug) = ? LIMIT 1"
+          "SELECT * FROM tenants WHERE id = ? OR LOWER(slug) = ? OR LOWER(slug) = ? LIMIT 1"
         )
-          .bind(clean, clean)
+          .bind(clean, clean, altSlug)
           .first<any>();
         if (row) {
           const tenant = this.mapTenantRow(row);
@@ -499,8 +506,8 @@ export class Database {
       (t) =>
         t.id === idOrSlug ||
         t.slug.toLowerCase() === clean ||
-        (clean === "ms-preparacoes" && t.slug === "marcelino") ||
-        (clean === "marcelino" && t.slug === "ms-preparacoes")
+        ((clean === "ms-preparacoes" || clean === "marcelino") &&
+          (t.id === "tenant-ms-preparacoes" || t.slug === "marcelino" || t.slug === "ms-preparacoes"))
     );
 
     if (found && kv) {
@@ -826,6 +833,236 @@ export class Database {
       .map(({ password: _, ...rest }) => rest as User);
   }
 
+  async getTenantCredentials(tenantIdOrSlug: string): Promise<{
+    userId: string;
+    email: string;
+    password?: string;
+    name: string;
+    tenantId: string;
+    tenantSlug: string;
+    tenantName: string;
+  } | null> {
+    const tenant = await this.getTenantByIdOrSlug(tenantIdOrSlug);
+    if (!tenant) return null;
+
+    let user: any = null;
+
+    if (this.env?.DB) {
+      try {
+        const row = await this.env.DB.prepare(
+          "SELECT id, email, password, name, tenant_id FROM users WHERE tenant_id = ? AND role = 'tenant_admin' LIMIT 1"
+        )
+          .bind(tenant.id)
+          .first<any>();
+        if (row) {
+          user = {
+            id: row.id,
+            email: row.email,
+            password: row.password,
+            name: row.name,
+            tenantId: row.tenant_id,
+          };
+        }
+      } catch (e) {
+        console.warn("D1 getTenantCredentials error:", e);
+      }
+    }
+
+    if (!user) {
+      user = globalStore.users.find(
+        (u) => u.tenantId === tenant.id && u.role === "tenant_admin"
+      );
+    }
+
+    if (!user && tenant.email) {
+      user = globalStore.users.find(
+        (u) => u.email.toLowerCase() === tenant.email.toLowerCase()
+      );
+    }
+
+    const email = user?.email || tenant.email || `admin@${tenant.slug}.com`;
+    const password = user?.password || "123456";
+    const userId = user?.id || `user-${tenant.id}`;
+    const name = user?.name || `Admin ${tenant.name}`;
+
+    return {
+      userId,
+      email,
+      password,
+      name,
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      tenantName: tenant.name,
+    };
+  }
+
+  async getAllTenantCredentials(): Promise<
+    Array<{
+      tenantId: string;
+      tenantName: string;
+      tenantSlug: string;
+      userId: string;
+      email: string;
+      password?: string;
+      name: string;
+      status: TenantStatus;
+    }>
+  > {
+    const tenants = await this.getTenants();
+    const list = [];
+    for (const t of tenants) {
+      const creds = await this.getTenantCredentials(t.id);
+      if (creds) {
+        list.push({
+          tenantId: t.id,
+          tenantName: t.name,
+          tenantSlug: t.slug,
+          userId: creds.userId,
+          email: creds.email,
+          password: creds.password || "123456",
+          name: creds.name,
+          status: t.status,
+        });
+      }
+    }
+    return list;
+  }
+
+  async updateTenantCredentials(
+    tenantIdOrSlug: string,
+    email: string,
+    password: string,
+    name?: string
+  ): Promise<{
+    success: boolean;
+    user: User;
+    tenant: Tenant;
+    credentials: {
+      userId: string;
+      email: string;
+      password?: string;
+      name: string;
+      tenantId: string;
+      tenantSlug: string;
+      tenantName: string;
+    };
+  }> {
+    const tenant = await this.getTenantByIdOrSlug(tenantIdOrSlug);
+    if (!tenant) {
+      throw new Error("Lanchonete não encontrada.");
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    // 1. Atualização persistente no Cloudflare D1
+    if (this.env?.DB) {
+      try {
+        const existing = await this.env.DB.prepare(
+          "SELECT id FROM users WHERE tenant_id = ? AND role = 'tenant_admin' LIMIT 1"
+        )
+          .bind(tenant.id)
+          .first<any>();
+
+        if (existing) {
+          await this.env.DB.prepare(
+            "UPDATE users SET email = ?, password = ?, name = COALESCE(?, name) WHERE id = ?"
+          )
+            .bind(cleanEmail, cleanPassword, name || null, existing.id)
+            .run();
+        } else {
+          const newUserId = `user-${tenant.id}-${Date.now()}`;
+          await this.env.DB.prepare(
+            `INSERT INTO users (id, email, password, name, role, tenant_id, status, created_at)
+             VALUES (?, ?, ?, ?, 'tenant_admin', ?, 'active', ?)`
+          )
+            .bind(
+              newUserId,
+              cleanEmail,
+              cleanPassword,
+              name || `Admin ${tenant.name}`,
+              tenant.id,
+              Date.now()
+            )
+            .run();
+        }
+
+        // Também atualiza o e-mail cadastrado na tabela de tenants
+        await this.env.DB.prepare(
+          "UPDATE tenants SET email = ?, updated_at = ? WHERE id = ?"
+        )
+          .bind(cleanEmail, Date.now(), tenant.id)
+          .run();
+      } catch (e) {
+        console.warn("D1 updateTenantCredentials error:", e);
+      }
+    }
+
+    // 2. Limpeza de cache no Cloudflare KV
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.delete(`tenant:${tenant.id}`);
+        await kv.delete(`tenant:${tenant.slug.toLowerCase()}`);
+      } catch (e) {
+        console.warn("KV delete cache error:", e);
+      }
+    }
+
+    // 3. Sincronização imediata na memória (MemoryStore)
+    let user = globalStore.users.find(
+      (u) => u.tenantId === tenant.id && u.role === "tenant_admin"
+    );
+
+    if (user) {
+      user.email = cleanEmail;
+      user.password = cleanPassword;
+      if (name) user.name = name;
+    } else {
+      user = {
+        id: `user-${tenant.id}-${Date.now()}`,
+        email: cleanEmail,
+        password: cleanPassword,
+        name: name || `Admin ${tenant.name}`,
+        role: "tenant_admin",
+        tenantId: tenant.id,
+        status: "active",
+        createdAt: Date.now(),
+      };
+      globalStore.users.push(user);
+    }
+
+    const memTenant = globalStore.tenants.find((t) => t.id === tenant.id);
+    if (memTenant) {
+      memTenant.email = cleanEmail;
+      memTenant.updatedAt = Date.now();
+      if (kv) {
+        try {
+          await kv.put(`tenant:${memTenant.id}`, JSON.stringify(memTenant));
+          await kv.put(`tenant:${memTenant.slug.toLowerCase()}`, JSON.stringify(memTenant));
+        } catch (err) {
+          console.warn("KV put updated tenant error:", err);
+        }
+      }
+    }
+
+    const { password: _, ...safeUser } = user;
+    return {
+      success: true,
+      user: safeUser as User,
+      tenant: memTenant || tenant,
+      credentials: {
+        userId: user.id,
+        email: cleanEmail,
+        password: cleanPassword,
+        name: user.name,
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        tenantName: tenant.name,
+      },
+    };
+  }
+
   async updateSuperAdminCredentials(
     userId: string | null | undefined,
     email: string,
@@ -1060,18 +1297,39 @@ export class Database {
   async getOrderById(orderId: string): Promise<Order | null> {
     if (!orderId) return null;
     const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
+    const rawId = orderId.replace(/^#/, "");
 
+    // 1. D1 Database query
+    if (this.env?.DB) {
+      try {
+        const row = await this.env.DB.prepare(
+          "SELECT * FROM orders WHERE id = ? OR id = ? OR id = ? LIMIT 1"
+        )
+          .bind(orderId, cleanId, rawId)
+          .first<any>();
+        if (row) {
+          return this.mapOrderRow(row);
+        }
+      } catch (e) {
+        console.warn("D1 getOrderById error:", e);
+      }
+    }
+
+    // 2. Cloudflare KV cache query
     const kv = this.getKv();
     if (kv) {
       try {
-        const cached = await kv.get(`order:${cleanId}`);
+        const cached = await kv.get(`order:${cleanId}`) || await kv.get(`order:${rawId}`);
         if (cached) return JSON.parse(cached) as Order;
       } catch (e) {
         console.warn("KV get order error:", e);
       }
     }
 
-    const found = globalStore.orders.find((o) => o.id === orderId || o.id === cleanId);
+    // 3. Fallback memory query
+    const found = globalStore.orders.find(
+      (o) => o.id === orderId || o.id === cleanId || o.id === rawId
+    );
     return found || null;
   }
 

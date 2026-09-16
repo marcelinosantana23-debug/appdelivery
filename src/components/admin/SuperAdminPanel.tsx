@@ -53,12 +53,116 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     logout,
     currentUser,
     updateSuperAdminCredentials,
+    updateTenantCredentials,
   } = useStore();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [viewMode, setViewMode] = useState<"cards" | "credentials">("cards");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // State for show/hide passwords on cards or table
+  const [showCardPasswords, setShowCardPasswords] = useState<Record<string, boolean>>({});
+
+  const toggleCardPasswordVisibility = (tenantId: string) => {
+    setShowCardPasswords((prev) => ({
+      ...prev,
+      [tenantId]: !prev[tenantId],
+    }));
+  };
+
+  // State for Tenant Credentials Modal
+  const [isTenantCredentialsModalOpen, setIsTenantCredentialsModalOpen] = useState(false);
+  const [selectedTenantForCredentials, setSelectedTenantForCredentials] = useState<Tenant | null>(null);
+  const [tenantAdminEmail, setTenantAdminEmail] = useState("");
+  const [tenantAdminPassword, setTenantAdminPassword] = useState("");
+  const [showTenantAdminPassword, setShowTenantAdminPassword] = useState(false);
+  const [tenantCredentialsLoading, setTenantCredentialsLoading] = useState(false);
+  const [tenantCredentialsError, setTenantCredentialsError] = useState("");
+  const [tenantCredentialsSuccess, setTenantCredentialsSuccess] = useState("");
+  const [copiedTenantCredentialsMsg, setCopiedTenantCredentialsMsg] = useState(false);
+
+  const openTenantCredentialsModal = (tenant: Tenant) => {
+    setSelectedTenantForCredentials(tenant);
+    setTenantAdminEmail((tenant as any).adminEmail || tenant.email || `admin@${tenant.slug}.com`);
+    setTenantAdminPassword((tenant as any).adminPassword || "123456");
+    setShowTenantAdminPassword(false);
+    setTenantCredentialsError("");
+    setTenantCredentialsSuccess("");
+    setCopiedTenantCredentialsMsg(false);
+    setIsTenantCredentialsModalOpen(true);
+  };
+
+  const generateRandomPassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    let pwd = "";
+    for (let i = 0; i < 8; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setTenantAdminPassword(pwd);
+  };
+
+  const copyMerchantWhatsAppAccess = (tenant: Tenant, email: string, pass: string) => {
+    const storeUrl = `${origin}/admin?tenant=${tenant.slug}`;
+    const publicUrl = `${origin}/loja/${tenant.slug}`;
+    const text = `🍔 *Acesso ao Painel da sua Loja - Top Food*\n\n` +
+      `🏪 *Loja:* ${tenant.name}\n` +
+      `🔗 *Painel Administrativo:* ${storeUrl}\n` +
+      `👤 *Login (E-mail):* ${email}\n` +
+      `🔑 *Senha:* ${pass}\n\n` +
+      `📱 *Link da sua Vitrine (para clientes):* ${publicUrl}\n\n` +
+      `_Guarde estas informações para gerenciar pedidos e produtos da sua loja!_`;
+    copyToClipboard(text, `${tenant.slug}-whatsapp-full`);
+    setCopiedTenantCredentialsMsg(true);
+    setTimeout(() => setCopiedTenantCredentialsMsg(false), 3000);
+  };
+
+  const handleTenantCredentialsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenantForCredentials) return;
+
+    setTenantCredentialsError("");
+    setTenantCredentialsSuccess("");
+
+    if (!tenantAdminEmail.trim() || !tenantAdminPassword.trim()) {
+      setTenantCredentialsError("Login (e-mail) e senha são obrigatórios.");
+      return;
+    }
+
+    if (tenantAdminPassword.trim().length < 4) {
+      setTenantCredentialsError("A senha deve possuir pelo menos 4 caracteres.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(tenantAdminEmail.trim())) {
+      setTenantCredentialsError("Por favor, digite um formato de e-mail válido para o login.");
+      return;
+    }
+
+    setTenantCredentialsLoading(true);
+    try {
+      const res = await updateTenantCredentials(
+        selectedTenantForCredentials.id,
+        tenantAdminEmail.trim(),
+        tenantAdminPassword.trim(),
+        selectedTenantForCredentials.name
+      );
+
+      if (res.success) {
+        setTenantCredentialsSuccess(
+          res.message || "Credenciais salvas com sucesso no banco de dados Cloudflare D1/KV! O lojista já pode acessar com os novos dados."
+        );
+      } else {
+        setTenantCredentialsError(res.error || "Erro ao salvar credenciais no banco de dados.");
+      }
+    } catch (err: any) {
+      setTenantCredentialsError(err.message || "Erro inesperado ao salvar.");
+    } finally {
+      setTenantCredentialsLoading(false);
+    }
+  };
 
   // State for Super Admin Credentials Modal
   const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
@@ -170,6 +274,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     themeMode: "light" as "light" | "dark",
     menuLayout: "list" as "list" | "grid",
     showFeaturedCarousel: true,
+    adminEmail: "",
+    adminPassword: "",
   });
   const [isConfigSaving, setIsConfigSaving] = useState(false);
   const [isProcessingConfigBanner, setIsProcessingConfigBanner] = useState(false);
@@ -244,6 +350,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       themeMode: tenant.themeMode || "light",
       menuLayout: tenant.menuLayout || "list",
       showFeaturedCarousel: tenant.showFeaturedCarousel !== false,
+      adminEmail: (tenant as any).adminEmail || tenant.email || `admin@${tenant.slug}.com`,
+      adminPassword: (tenant as any).adminPassword || "123456",
     });
     setConfigSuccessMessage("");
     setConfigErrorMessage("");
@@ -259,6 +367,21 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     setConfigSuccessMessage("");
 
     try {
+      // 1. Salva credenciais do lojista se informadas
+      if (configForm.adminEmail.trim() || configForm.adminPassword.trim()) {
+        const credEmail = configForm.adminEmail.trim() || editingTenantConfig.email;
+        const credPass = configForm.adminPassword.trim() || "123456";
+        if (credPass.length >= 4) {
+          await updateTenantCredentials(
+            editingTenantConfig.id,
+            credEmail,
+            credPass,
+            configForm.name.trim()
+          );
+        }
+      }
+
+      // 2. Salva configurações da loja
       const res = await updateTenantApi(editingTenantConfig.id, {
         name: configForm.name.trim(),
         logo: configForm.logo,
@@ -280,7 +403,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
       if (res.success) {
         await refreshTenants();
-        setConfigSuccessMessage("Configurações da loja e layout atualizados com sucesso!");
+        setConfigSuccessMessage("Configurações e credenciais da loja atualizadas com sucesso no banco de dados!");
         setTimeout(() => {
           setIsStoreConfigModalOpen(false);
           setEditingTenantConfig(null);
@@ -599,10 +722,36 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 Pausadas ({totalTenants - activeTenants})
               </button>
             </div>
+
+            {/* View Mode Toggle: Cards vs Credenciais */}
+            <div className="flex rounded-xl border border-slate-800 bg-slate-900/80 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition ${
+                  viewMode === "cards" ? "bg-amber-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                }`}
+                title="Visualização em Cards com Vitrine e Gestão"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span>Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("credentials")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition ${
+                  viewMode === "credentials" ? "bg-amber-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                }`}
+                title="Tabela de Gerenciamento de Logins e Senhas dos Lojistas"
+              >
+                <Key className="h-3.5 w-3.5" />
+                <span>Logins & Senhas ({tenants.length})</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Store Cards Grid */}
+        {/* Content Section: Cards Grid OR Credentials Table */}
         {filteredTenants.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-slate-800 p-12 text-center">
             <Store className="mx-auto h-12 w-12 text-slate-600" />
@@ -621,10 +770,227 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               Cadastrar Agora
             </button>
           </div>
+        ) : viewMode === "credentials" ? (
+          /* Tabela Completa de Credenciais dos Lojistas */
+          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/90 shadow-2xl">
+            <div className="border-b border-slate-800 bg-slate-950/80 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Key className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Credenciais de Acesso das Lanchonetes</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Gerenciamento direto de e-mails de login e senhas persistidos no Cloudflare D1/KV
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">
+                {filteredTenants.length} {filteredTenants.length === 1 ? "loja listada" : "lojas listadas"}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/60 uppercase text-[10px] font-bold tracking-wider text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3.5">Lanchonete</th>
+                    <th className="px-4 py-3.5">Vitrine Pública</th>
+                    <th className="px-4 py-3.5">Login (E-mail / Usuário)</th>
+                    <th className="px-4 py-3.5">Senha de Acesso</th>
+                    <th className="px-4 py-3.5">Status</th>
+                    <th className="px-4 py-3.5 text-right">Ações Rápidas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredTenants.map((t) => {
+                    const isActive = t.status === "active";
+                    const email = (t as any).adminEmail || t.email;
+                    const pass = (t as any).adminPassword || "123456";
+                    const isPassVisible = showCardPasswords[t.id];
+
+                    return (
+                      <tr key={t.id} className="hover:bg-slate-800/40 transition">
+                        {/* Lanchonete */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 text-xl shadow-inner"
+                              style={{
+                                backgroundColor: `${t.primaryColor || "#E63946"}20`,
+                                color: t.primaryColor || "#E63946",
+                              }}
+                            >
+                              <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-white text-sm">
+                                {getSafeDisplayName(t.name, "Lanchonete")}
+                              </div>
+                              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                <span>{t.whatsapp}</span>
+                                <span className="text-slate-600">•</span>
+                                <span className="font-mono text-[10px] text-amber-400/80">ID: {t.id}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Vitrine */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                              /loja/{t.slug}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(`${origin}/loja/${t.slug}`, `${t.slug}-tab-pub`)}
+                              className="p-1 text-slate-400 hover:text-white transition"
+                              title="Copiar link da vitrine"
+                            >
+                              {copiedKey === `${t.slug}-tab-pub` ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onViewStoreFront) onViewStoreFront(t);
+                                else window.open(`/loja/${t.slug}`, "_blank");
+                              }}
+                              className="p-1 text-amber-400 hover:text-amber-300 transition"
+                              title="Abrir vitrine da loja"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Login */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-medium text-slate-200 bg-slate-950 px-2 py-1 rounded border border-slate-800 select-all">
+                              {email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(email, `${t.slug}-tab-login`)}
+                              className="p-1 text-slate-400 hover:text-white transition"
+                              title="Copiar login do lojista"
+                            >
+                              {copiedKey === `${t.slug}-tab-login` ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Senha */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-amber-300 bg-slate-950 px-2 py-1 rounded border border-slate-800 select-all min-w-[80px]">
+                              {isPassVisible ? pass : "••••••••"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleCardPasswordVisibility(t.id)}
+                              className="p-1 text-slate-400 hover:text-white transition"
+                              title={isPassVisible ? "Ocultar senha" : "Ver senha"}
+                            >
+                              {isPassVisible ? (
+                                <EyeOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(pass, `${t.slug}-tab-pass`)}
+                              className="p-1 text-slate-400 hover:text-white transition"
+                              title="Copiar senha"
+                            >
+                              {copiedKey === `${t.slug}-tab-pass` ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-4 py-3.5">
+                          <button
+                            onClick={() => handleStatusToggle(t)}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                              isActive
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
+                                : "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20"
+                            }`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-emerald-400" : "bg-red-400"}`} />
+                            {isActive ? "Ativa" : "Pausada"}
+                          </button>
+                        </td>
+
+                        {/* Ações */}
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openTenantCredentialsModal(t)}
+                              className="flex items-center gap-1 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
+                              title="Alterar Login e Senha no Banco de Dados"
+                            >
+                              <Key className="h-3.5 w-3.5" />
+                              <span>Alterar Senha</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => copyMerchantWhatsAppAccess(t, email, pass)}
+                              className="flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 transition"
+                              title="Copiar mensagem pronta para WhatsApp"
+                            >
+                              {copiedKey === `${t.slug}-whatsapp-full` ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                              <span className="hidden sm:inline">WhatsApp</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onManageStore(t)}
+                              className="flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/20 transition"
+                              title="Acessar painel de administração da loja"
+                            >
+                              <Settings className="h-3.5 w-3.5" />
+                              <span>Painel</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : (
+          /* Cards Grid com Box de Credenciais */
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredTenants.map((t) => {
               const isActive = t.status === "active";
+              const adminLogin = (t as any).adminEmail || t.email;
+              const adminPass = (t as any).adminPassword || "123456";
+              const isPassVisible = showCardPasswords[t.id];
+
               return (
                 <div
                   key={t.id}
@@ -681,7 +1047,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     {/* Meta info */}
                     <div className="mt-4 space-y-1.5 border-t border-slate-800/80 pt-3 text-xs text-slate-300">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-500">E-mail do Cliente:</span>
+                        <span className="text-slate-500">E-mail de Contato:</span>
                         <span className="font-medium text-slate-200">{t.email}</span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -813,17 +1179,128 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         </div>
                       </div>
                     </div>
+
+                    {/* c) Credenciais de Acesso do Lojista (Login & Senha) */}
+                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                          <Key className="h-3.5 w-3.5 text-amber-400" />
+                          <span>Acesso do Lojista (Login & Senha)</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openTenantCredentialsModal(t)}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 hover:text-amber-200 underline transition"
+                          title="Alterar e-mail e senha no banco de dados"
+                        >
+                          <span>Alterar</span>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        {/* Login */}
+                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5">
+                          <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Login (E-mail):
+                          </span>
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span className="font-mono text-slate-200 text-xs truncate select-all" title={adminLogin}>
+                              {adminLogin}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(adminLogin, `${t.slug}-login`)}
+                              className="shrink-0 p-1 text-slate-400 hover:text-white transition"
+                              title="Copiar login do lojista"
+                            >
+                              {copiedKey === `${t.slug}-login` ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Senha */}
+                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5">
+                          <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Senha Atual:
+                          </span>
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span className="font-mono font-medium text-amber-300 text-xs select-all">
+                              {isPassVisible ? adminPass : "••••••••"}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleCardPasswordVisibility(t.id)}
+                                className="p-1 text-slate-400 hover:text-slate-200 transition"
+                                title={isPassVisible ? "Ocultar senha" : "Ver senha em texto claro"}
+                              >
+                                {isPassVisible ? (
+                                  <EyeOff className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(adminPass, `${t.slug}-pass`)}
+                                className="p-1 text-slate-400 hover:text-white transition"
+                                title="Copiar senha do lojista"
+                              >
+                                {copiedKey === `${t.slug}-pass` ? (
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botão de Envio de Acesso WhatsApp */}
+                      <button
+                        type="button"
+                        onClick={() => copyMerchantWhatsAppAccess(t, adminLogin, adminPass)}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 py-1.5 px-2 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20 transition"
+                        title="Copiar mensagem formatada com login e senha para enviar ao lojista"
+                      >
+                        {copiedKey === `${t.slug}-whatsapp-full` ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                            <span>Mensagem de Acesso Copiada!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Copiar Acesso Formatado (WhatsApp)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Actions Footer */}
                   <div className="border-t border-slate-800/80 bg-slate-950/40 p-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center flex-wrap gap-2">
                       <button
                         onClick={() => onManageStore(t)}
                         className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 py-2 px-3 text-xs font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
                       >
                         <Settings className="h-3.5 w-3.5" />
-                        <span>Gerenciar Cardápio & Pedidos</span>
+                        <span>Gerenciar Loja</span>
+                      </button>
+
+                      <button
+                        onClick={() => openTenantCredentialsModal(t)}
+                        className="flex items-center gap-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 py-2 px-3 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/30"
+                        title="Alterar Login e Senha do Lojista no Banco de Dados"
+                      >
+                        <Key className="h-3.5 w-3.5 text-amber-400" />
+                        <span>Alterar Login / Senha</span>
                       </button>
 
                       <button
@@ -1276,6 +1753,220 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Tenant Store Credentials Modal (Super Admin managing merchant login and password) */}
+      {isTenantCredentialsModalOpen && selectedTenantForCredentials && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/20 text-amber-400">
+                  <Key className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white sm:text-lg">
+                    Credenciais do Lojista
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Gerenciamento de Login e Senha para o Painel da Loja
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTenantCredentialsModalOpen(false);
+                  setSelectedTenantForCredentials(null);
+                }}
+                className="rounded-xl border border-slate-700 bg-slate-800 p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Store Information Badge */}
+            <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3.5 flex items-center gap-3">
+              <div
+                className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 text-xl shadow-inner"
+                style={{
+                  backgroundColor: `${selectedTenantForCredentials.primaryColor || "#E63946"}20`,
+                  color: selectedTenantForCredentials.primaryColor || "#E63946",
+                }}
+              >
+                <StoreLogo
+                  logo={selectedTenantForCredentials.logo}
+                  name={selectedTenantForCredentials.name}
+                  className="h-full w-full object-cover"
+                  fallbackEmoji="🍔"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-white text-sm truncate">
+                  {getSafeDisplayName(selectedTenantForCredentials.name, "Lanchonete")}
+                </h4>
+                <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                  <span className="font-mono text-amber-400">/loja/{selectedTenantForCredentials.slug}</span>
+                  <span>•</span>
+                  <span>ID: {selectedTenantForCredentials.id}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Cloudflare D1 Info */}
+            <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/40 p-3 flex items-start gap-2.5 text-xs text-slate-300">
+              <Database className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold text-white">Persistência Cloudflare D1 & KV:</span>
+                <p className="text-slate-400 mt-0.5">
+                  Ao salvar, os novos dados são atualizados no banco de dados e o lojista poderá entrar no painel imediatamente via <code className="text-amber-300 font-mono">/admin?tenant={selectedTenantForCredentials.slug}</code>.
+                </p>
+              </div>
+            </div>
+
+            {/* Success Message */}
+            {tenantCredentialsSuccess && (
+              <div className="mb-4 rounded-xl border border-emerald-500/40 bg-emerald-950/50 p-4 text-xs text-emerald-200">
+                <div className="flex items-center gap-2 font-bold text-emerald-400 mb-1">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Sucesso! Credenciais Salvas</span>
+                </div>
+                <p>{tenantCredentialsSuccess}</p>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {tenantCredentialsError && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-950/50 p-3 text-xs text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+                <span>{tenantCredentialsError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleTenantCredentialsSubmit} className="space-y-4">
+              {/* Login Field */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Login da Loja (E-mail / Usuário de Acesso) *
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={tenantAdminEmail}
+                    onChange={(e) => setTenantAdminEmail(e.target.value)}
+                    placeholder="lojista@restaurante.com"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+                <span className="block mt-1 text-[11px] text-slate-500">
+                  Este e-mail é utilizado pelo lojista para acessar o painel administrativo da lanchonete.
+                </span>
+              </div>
+
+              {/* Password Field */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Senha de Acesso da Loja *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateRandomPassword}
+                    className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 hover:underline"
+                  >
+                    Gerar Senha Forte
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type={showTenantAdminPassword ? "text" : "password"}
+                    required
+                    value={tenantAdminPassword}
+                    onChange={(e) => setTenantAdminPassword(e.target.value)}
+                    placeholder="Mínimo 4 caracteres"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowTenantAdminPassword(!showTenantAdminPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showTenantAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <span className="block mt-1 text-[11px] text-slate-500">
+                  Senha segura para login do gerente/lojista.
+                </span>
+              </div>
+
+              {/* Botão para Copiar Acesso Completo p/ WhatsApp */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="block text-xs font-semibold text-slate-200">
+                      Enviar Acesso ao Lojista
+                    </span>
+                    <span className="block text-[11px] text-slate-400">
+                      Copia texto pronto com links, login e senha formatados
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyMerchantWhatsAppAccess(selectedTenantForCredentials, tenantAdminEmail, tenantAdminPassword)}
+                    className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30 transition shrink-0"
+                  >
+                    {copiedTenantCredentialsMsg ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        <span>Copiar WhatsApp</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTenantCredentialsModalOpen(false);
+                    setSelectedTenantForCredentials(null);
+                  }}
+                  className="w-1/3 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="submit"
+                  disabled={tenantCredentialsLoading}
+                  className="w-2/3 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-amber-500/25 transition hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {tenantCredentialsLoading ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Salvando no D1...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Key className="h-3.5 w-3.5" />
+                      <span>Salvar Credenciais no Banco</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1870,6 +2561,56 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* 5. CREDENCIAIS DE LOGIN DO LOJISTA */}
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <Key className="h-4 w-4 text-amber-400" />
+                    <span>5. Credenciais de Login e Senha da Loja</span>
+                  </div>
+                  <span className="text-[10px] text-amber-400/80 font-mono">D1 / KV Persistência</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Login (E-mail do Lojista)</label>
+                    <input
+                      type="email"
+                      value={configForm.adminEmail}
+                      onChange={(e) => setConfigForm((prev) => ({ ...prev, adminEmail: e.target.value }))}
+                      placeholder="admin@sualoja.com"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-slate-300 font-semibold">Senha de Acesso</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+                          let pwd = "";
+                          for (let i = 0; i < 8; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+                          setConfigForm((prev) => ({ ...prev, adminPassword: pwd }));
+                        }}
+                        className="text-[10px] text-amber-400 hover:underline"
+                      >
+                        Gerar aleatória
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={configForm.adminPassword}
+                      onChange={(e) => setConfigForm((prev) => ({ ...prev, adminPassword: e.target.value }))}
+                      placeholder="Senha do lojista"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Ao salvar, essas credenciais serão salvas imediatamente no Cloudflare D1 e o lojista poderá entrar no painel com este novo e-mail e senha.
+                </p>
               </div>
 
               <div className="pt-2 flex items-center gap-3">

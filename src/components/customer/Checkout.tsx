@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, Bike, Store, QrCode, CreditCard, Wallet, MessageCircle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice, generateOrderId, getWhatsAppUrl } from "@/utils/order";
+import { saveActiveOrder } from "@/utils/orderStorage";
 import type { OrderType, PaymentMethod, Order } from "@/types";
 
 interface CheckoutProps {
@@ -83,13 +84,22 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     };
 
     try {
-      await addOrder(order);
-      const url = getWhatsAppUrl(order, config);
+      const placedOrder = await addOrder(order);
+      const finalOrder = placedOrder || order;
+
+      // 1. Salva o ID/código do pedido no localStorage do navegador para rastreamento em tempo real
+      saveActiveOrder(finalOrder.id, config.slug, {
+        storeName: config.name,
+        total: finalOrder.total,
+        status: finalOrder.status,
+      });
+
+      const url = getWhatsAppUrl(finalOrder, config);
       if (url) {
         window.open(url, "_blank");
       }
       clearCart();
-      onOrderPlaced(order);
+      onOrderPlaced(finalOrder);
     } catch {
       // ignore
     } finally {
