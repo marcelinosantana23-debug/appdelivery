@@ -6,8 +6,30 @@ import type { Env, OrderStatus, TenantStatus, OrderItem } from "./types";
 
 export const api = new Hono<{ Bindings: Env }>();
 
-// Habilitar CORS para consumo do frontend Vite e clientes externos
-api.use("*", cors());
+// Habilitar CORS irrestrito para consumo do frontend Vite e clientes externos / 4G
+api.use(
+  "*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "Cache-Control",
+      "Pragma",
+    ],
+    exposeHeaders: ["Content-Length", "Content-Type"],
+    maxAge: 86400,
+  })
+);
+
+// Resposta expressa de pré-vôo OPTIONS para clientes móveis e redes externas
+api.options("*", (c) => {
+  return c.text("", 204);
+});
 
 // Helper para instanciar a camada de banco de dados diretamente com o objeto env da requisição Cloudflare Workers
 function getDb(c: any): Database {
@@ -697,8 +719,8 @@ api.post("/auth/login", async (c) => {
     }
 
     // RBAC: Isolamento estrito de logins
-    // 1. Tela da lanchonete (portal === 'store') RECUSA e BARRA usuários com role SUPER_ADMIN
-    if (portal === "store" && user.role === "super_admin") {
+    // 1. Tela da lanchonete (ou qualquer portal que não seja explicitamente 'superadmin') RECUSA e BARRA usuários com role SUPER_ADMIN
+    if (user.role === "super_admin" && portal !== "superadmin") {
       return c.json(
         {
           success: false,
@@ -1085,6 +1107,32 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
     return c.json({ success: true, order }, 201);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao criar pedido" }, 500);
+  }
+});
+
+// Rota direta de compatibilidade para clientes móveis e redes externas postando em /orders
+api.post("/orders", async (c) => {
+  try {
+    const db = getDb(c);
+    const body = await c.req.json();
+    const tenantIdentifier = body.tenantId || body.tenantSlug || body.loja || "marcelino";
+    const tenant = await db.getTenantByIdOrSlug(tenantIdentifier);
+
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    if (tenant.status === "inactive") {
+      return c.json(
+        { success: false, error: "Esta loja está desativada no momento e não aceita novos pedidos." },
+        400
+      );
+    }
+
+    const order = await db.createOrder(tenant.id, body);
+    return c.json({ success: true, order }, 201);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao registrar pedido" }, 500);
   }
 });
 

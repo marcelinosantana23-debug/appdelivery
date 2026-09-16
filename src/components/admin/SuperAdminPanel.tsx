@@ -35,6 +35,7 @@ import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
 import type { Tenant, TenantStatus } from "@/types";
 import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
 
 interface SuperAdminPanelProps {
   onManageStore: (tenant: Tenant) => void;
@@ -294,11 +295,12 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     }
   };
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  // URL Oficial de Produção no Cloudflare Workers conforme especificação
+  const origin = OFFICIAL_WORKERS_BASE;
 
-  const copyToClipboard = (text: string, key: string) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, key: string) => {
+    const success = await copyTextToClipboard(text);
+    if (success) {
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 2500);
     }

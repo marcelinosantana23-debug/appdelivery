@@ -1,9 +1,34 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import api from "./server/api";
 import type { Env } from "./server/types";
 
 // Main Cloudflare Workers application
 const app = new Hono<{ Bindings: Env }>();
+
+// Habilitar CORS irrestrito globalmente para todas as rotas (incluindo redes externas e 4G)
+app.use(
+  "*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "Cache-Control",
+      "Pragma",
+    ],
+    exposeHeaders: ["Content-Length", "Content-Type"],
+    maxAge: 86400,
+  })
+);
+
+app.options("*", (c) => {
+  return c.text("", 204);
+});
 
 // 1. Mount all /api routes FIRST
 app.route("/api", api);
@@ -36,13 +61,16 @@ app.get("*", async (c, next) => {
       }
       // Fallback SPA: Ao atualizar a página (F5) em rotas como /admin, /super-admin ou /loja/:slug, serve o index.html
       const indexReq = new Request(new URL("/index.html", c.req.url).toString(), c.req.raw);
-      return await assets.fetch(indexReq);
+      const indexRes = await assets.fetch(indexReq);
+      if (indexRes.status !== 404) {
+        return indexRes;
+      }
     } catch (err) {
       console.warn("Assets fetch error, falling back to html:", err);
     }
   }
 
-  // B. Fallback HTML se o binding ASSETS não estiver presente
+  // B. Fallback HTML se o binding ASSETS não estiver presente ou retornar 404
   return c.html(`<!doctype html>
 <html lang="pt-BR">
   <head>

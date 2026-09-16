@@ -9,9 +9,14 @@ import {
   Settings,
   Shield,
   CornerUpLeft,
+  Copy,
+  ExternalLink,
+  CheckCircle2,
+  Share2,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminMenu } from "./AdminMenu";
@@ -47,6 +52,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
 
   const [tab, setTab] = useState<AdminTab>("orders");
   const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(null);
+  const [copiedStoreLink, setCopiedStoreLink] = useState(false);
   const lastOrderCount = useRef(orders.length);
 
   // Enforce that a store admin only manages their own store
@@ -167,9 +173,48 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
                   {isSuperAdmin ? "Super Admin" : "Admin da Loja"}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                /loja/{getSafeSlug(config.slug, "loja")} • {currentUser?.email}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const storeUrl = getOfficialStoreUrl(config.slug);
+                    const success = await copyTextToClipboard(storeUrl);
+                    if (success) {
+                      setCopiedStoreLink(true);
+                      setTimeout(() => setCopiedStoreLink(false), 2500);
+                    }
+                  }}
+                  className="flex items-center gap-1 font-mono text-[11px] text-amber-400 hover:text-amber-300 hover:underline transition"
+                  title="Clique para copiar o link oficial do cardápio para clientes"
+                >
+                  {copiedStoreLink ? (
+                    <>
+                      <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                      <span className="text-emerald-400 font-semibold">Link Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="h-3 w-3" />
+                      <span>/loja/{getSafeSlug(config.slug, "loja")}</span>
+                      <Copy className="h-3 w-3 text-slate-400 ml-0.5" />
+                    </>
+                  )}
+                </button>
+                <span className="text-slate-600">•</span>
+                <span className="text-[11px] text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
+                  {currentUser?.email}
+                </span>
+                <a
+                  href={getOfficialStoreUrl(config.slug)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hidden sm:flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                  title="Abrir cardápio em nova aba"
+                >
+                  <ExternalLink className="h-2.5 w-2.5" />
+                  <span>Ver Cardápio</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>

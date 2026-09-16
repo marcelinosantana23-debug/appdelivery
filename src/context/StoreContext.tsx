@@ -144,8 +144,33 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
-  const [config, setConfig] = useState<StoreConfig>(defaultStoreConfig);
+  
+  // Hydrate currentTenant from localStorage session to survive F5 page reloads
+  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
+    try {
+      const saved = localStorage.getItem("delivery_tenant_session");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Hydrate store configuration safely
+  const [config, setConfig] = useState<StoreConfig>(() => {
+    try {
+      const savedTenant = localStorage.getItem("delivery_tenant_session");
+      if (savedTenant) {
+        const parsed = JSON.parse(savedTenant);
+        if (parsed && typeof parsed === "object") {
+          return tenantToStoreConfig(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return defaultStoreConfig;
+  });
+
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -184,18 +209,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  // Extract initial slug from URL pathname (e.g. /loja/:slug) or query (?loja=slug)
+  // Extract initial slug from URL pathname (e.g. /loja/:slug), hash, query (?loja=slug), or active session
   const getInitialSlug = (): string => {
-    if (typeof window === "undefined") return "burger-town";
+    if (typeof window === "undefined") return "marcelino";
     const path = window.location.pathname;
-    const match = path.match(/^\/loja\/([^/?#]+)/);
-    if (match && match[1]) return match[1];
 
+    // 1. /loja/:slug
+    const match = path.match(/^\/loja\/([^/?#]+)/i);
+    if (match && match[1]) return decodeURIComponent(match[1]).toLowerCase();
+
+    // 2. Hash routing fallback #/loja/:slug
+    if (window.location.hash) {
+      const hashMatch = window.location.hash.match(/#\/?loja\/([^/?#]+)/i);
+      if (hashMatch && hashMatch[1]) return decodeURIComponent(hashMatch[1]).toLowerCase();
+    }
+
+    // 3. Query string (?loja=slug ou ?tenant=slug)
     const params = new URLSearchParams(window.location.search);
-    const qSlug = params.get("loja") || params.get("tenant");
-    if (qSlug) return qSlug;
+    const qSlug = params.get("loja") || params.get("tenant") || params.get("store");
+    if (qSlug) return decodeURIComponent(qSlug).toLowerCase();
 
-    return "burger-town";
+    // 4. Direct single-segment path /:slug (quando não for /admin, /super-admin, etc)
+    if (
+      path &&
+      path !== "/" &&
+      !path.startsWith("/admin") &&
+      !path.startsWith("/superadmin") &&
+      !path.startsWith("/super-admin") &&
+      !path.startsWith("/api") &&
+      !path.startsWith("/health")
+    ) {
+      const direct = path.replace(/^\/+|\/+$/g, "");
+      if (direct && !direct.includes("/")) {
+        return decodeURIComponent(direct).toLowerCase();
+      }
+    }
+
+    // 5. Se o lojista estiver logado ou recarregando (F5) no painel /admin, recupera a loja da sessão
+    try {
+      const savedTenant = localStorage.getItem("delivery_tenant_session");
+      if (savedTenant) {
+        const parsed = JSON.parse(savedTenant);
+        if (parsed?.slug) return parsed.slug;
+      }
+      const savedUser = localStorage.getItem("delivery_user_session");
+      if (savedUser) {
+        const user = JSON.parse(savedUser);
+        if (user?.tenantId === "tenant-ms-preparacoes" || user?.email?.includes("marcelino")) {
+          return "marcelino";
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return "marcelino";
   };
 
   const [currentSlug, setCurrentSlug] = useState<string>(getInitialSlug);
@@ -230,6 +298,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (tenantRes.success && tenantRes.tenant) {
         const t = tenantRes.tenant;
         setCurrentTenant(t);
+        try {
+          localStorage.setItem("delivery_tenant_session", JSON.stringify(t));
+        } catch {
+          // ignore
+        }
         const storeCfg = tenantToStoreConfig(t);
         setConfig(storeCfg);
         applyThemeColors(storeCfg);
@@ -355,6 +428,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setCurrentUser(res.user);
         try {
           localStorage.setItem("delivery_user_session", JSON.stringify(res.user));
+          if (res.tenant) {
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(res.tenant));
+          }
+          if (res.token) {
+            localStorage.setItem("delivery_auth_token", res.token);
+          }
         } catch (e) {
           console.warn("Could not save session to localStorage", e);
         }
@@ -390,6 +469,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCurrentUser(null);
     try {
       localStorage.removeItem("delivery_user_session");
+      localStorage.removeItem("delivery_tenant_session");
+      localStorage.removeItem("delivery_auth_token");
     } catch (e) {
       console.warn("Could not remove session from localStorage", e);
     }
@@ -521,7 +602,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---------------- ORDERS ----------------
   const addOrder = useCallback(
     async (order: Order): Promise<Order | null> => {
-      const tenantId = currentTenant?.id || "tenant-burger-town";
+      const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
       const res = await createTenantOrderApi(tenantId, {
         customerName: order.customerName,
         customerPhone: order.customerPhone,
@@ -548,7 +629,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return order;
       }
     },
-    [currentTenant]
+    [currentTenant, currentSlug]
   );
 
   const updateOrderStatus = useCallback(

@@ -13,8 +13,12 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   Trash2,
+  Copy,
+  ExternalLink,
+  Share2,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
 import type { PixKeyType } from "@/config/store";
 
 const PRESET_COLORS = [
@@ -54,6 +58,7 @@ export function AdminSettings() {
     accentColor: config.accentColor,
   });
   const [saved, setSaved] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [isProcessingBanner, setIsProcessingBanner] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
@@ -191,6 +196,70 @@ export function AdminSettings() {
             label="Faturamento"
             value={`${config.currency} ${stats.revenue.toFixed(2).replace(".", ",")}`}
           />
+        </div>
+      </div>
+
+      {/* Link Oficial do Cardápio para os Clientes */}
+      <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/40 p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <Share2 className="h-5 w-5 text-amber-600" />
+            <h2 className="text-sm font-bold text-gray-800">Link Oficial da Vitrine (Clientes)</h2>
+          </div>
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+            Cloudflare Workers
+          </span>
+        </div>
+        <p className="text-xs text-gray-600 mb-3">
+          Envie este link para seus clientes no WhatsApp e redes sociais para que eles façam pedidos diretamente no seu cardápio:
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="flex-1 truncate rounded-xl border border-gray-300 bg-white px-3.5 py-2.5 font-mono text-xs text-gray-800 shadow-sm select-all">
+            {getOfficialStoreUrl(config.slug)}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const url = getOfficialStoreUrl(config.slug);
+                const ok = await copyTextToClipboard(url);
+                if (ok) {
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2500);
+                }
+              }}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold transition shadow-sm ${
+                copiedLink
+                  ? "bg-emerald-600 text-white"
+                  : "bg-amber-500 hover:bg-amber-600 text-white active:scale-95"
+              }`}
+            >
+              {copiedLink ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copiar Link</span>
+                </>
+              )}
+            </button>
+
+            <a
+              href={getOfficialStoreUrl(config.slug)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50 transition shadow-sm"
+              title="Abrir vitrine em nova aba"
+            >
+              <ExternalLink className="h-4 w-4 text-gray-500" />
+              <span className="hidden sm:inline">Ver Loja</span>
+            </a>
+          </div>
         </div>
       </div>
 
