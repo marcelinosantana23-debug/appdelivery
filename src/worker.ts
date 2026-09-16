@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { serveStatic } from "hono/cloudflare-workers";
 import api from "./server/api";
 import type { Env } from "./server/types";
 
@@ -43,48 +44,44 @@ app.get("/health", (c) => {
   });
 });
 
-// 3. Fallback SPA Middleware: Qualquer rota GET que não seja /api/* serve o index.html principal
+// 3. Servir arquivos estáticos da pasta dist ou assets via serveStatic
+app.use("/assets/*", serveStatic({ root: "./" }));
+app.use("/favicon.ico", serveStatic({ path: "./favicon.ico" }));
+app.use("/vite.svg", serveStatic({ path: "./vite.svg" }));
+
+// 4. Middleware de Fallback SPA: Qualquer requisição GET de rota navegável (que não seja /api/*) entrega index.html
 app.get("*", async (c, next) => {
   const path = c.req.path;
   if (path.startsWith("/api") || path === "/health") {
     return next();
   }
 
-  // A. Cloudflare Workers Static Assets binding (wrangler.toml: [assets])
-  const assets = (c.env as any)?.ASSETS;
+  // A. Cloudflare Workers Static Assets binding (wrangler.toml: [assets] com binding = "ASSETS")
+  const assets = c.env?.ASSETS;
   if (assets && typeof assets.fetch === "function") {
     try {
-      const assetRes = await assets.fetch(c.req.raw);
-      // Se encontrou arquivo estático físico (.js, .css, imagens, etc.), retorna diretamente
-      if (assetRes.status !== 404) {
-        return assetRes;
+      // Se a requisição tem extensão de arquivo (.js, .css, .png, etc.), tenta servir o asset primeiro
+      const hasExtension = /\.[a-zA-Z0-9]+$/.test(path);
+      if (hasExtension) {
+        const assetRes = await assets.fetch(c.req.raw);
+        if (assetRes.status !== 404) {
+          return assetRes;
+        }
       }
-      // Fallback SPA: Ao atualizar a página (F5) em rotas como /admin, /super-admin ou /loja/:slug, serve o index.html
+
+      // Fallback SPA: Ao atualizar a página (F5) em rotas internas (/admin, /super-admin, /loja/:slug, /checkout, etc.),
+      // entrega o index.html com HTTP 200 para que o roteador client-side renderize perfeitamente
       const indexReq = new Request(new URL("/index.html", c.req.url).toString(), c.req.raw);
       const indexRes = await assets.fetch(indexReq);
-      if (indexRes.status !== 404) {
+      if (indexRes.status < 400) {
         return indexRes;
       }
     } catch (err) {
-      console.warn("Assets fetch error, falling back to html:", err);
+      console.warn("Assets fetch error in SPA fallback:", err);
     }
   }
 
-  // B. Fallback HTML se o binding ASSETS não estiver presente ou retornar 404
-  return c.html(`<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Top Food - Plataforma Multi-tenant de Delivery</title>
-    <meta name="description" content="Sistema multi-lojas Top Food com vitrines dinâmicas no Cloudflare D1/KV, painel do lojista com pedidos em tempo real, RBAC isolado e Super Admin." />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>`);
+  return next();
 });
 
 export default app;

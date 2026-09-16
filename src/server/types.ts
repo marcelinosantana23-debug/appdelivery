@@ -133,6 +133,8 @@ export interface Env {
   DB?: CloudflareD1Database;
   KV?: CloudflareKVNamespace;
   STORE_KV?: CloudflareKVNamespace;
+  ASSETS?: { fetch: (req: Request | string) => Promise<Response> };
+  __STATIC_CONTENT?: unknown;
   PLATFORM_NAME?: string;
   ENVIRONMENT?: string;
   JWT_SECRET?: string;

@@ -203,25 +203,48 @@ function AppContent() {
 
   const getInitialView = (): View => {
     if (typeof window === "undefined") return "menu";
-    const path = window.location.pathname;
-    if (path.startsWith("/super-admin") || path.startsWith("/superadmin")) return "superadmin";
-    if (path.startsWith("/admin")) return "admin";
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const searchParams = new URLSearchParams(window.location.search);
+
+    if (
+      path.startsWith("/super-admin") ||
+      path.startsWith("/superadmin") ||
+      hash.includes("super-admin") ||
+      hash.includes("superadmin") ||
+      searchParams.get("view") === "superadmin"
+    ) {
+      return "superadmin";
+    }
+
+    if (
+      path.startsWith("/admin") ||
+      hash.includes("admin") ||
+      searchParams.get("view") === "admin"
+    ) {
+      return "admin";
+    }
+
     return "menu";
   };
 
   const [view, setView] = useState<View>(getInitialView);
 
-  // Sync with browser URL history
+  // Sync with browser URL history using standard HTML5 History API
   const navigateTo = useCallback(
-    (targetView: View) => {
+    (targetView: View, targetSlug?: string) => {
       if (typeof window !== "undefined") {
-        if (targetView === "superadmin") {
-          window.history.pushState({ view: "superadmin" }, "", "/super-admin");
-        } else if (targetView === "admin") {
-          window.history.pushState({ view: "admin" }, "", "/admin");
-        } else {
-          const slug = currentTenant?.slug || config.slug || "burger-town";
-          window.history.pushState({ view: "menu" }, "", `/loja/${slug}`);
+        try {
+          if (targetView === "superadmin") {
+            window.history.pushState({ view: "superadmin" }, "", "/super-admin");
+          } else if (targetView === "admin") {
+            window.history.pushState({ view: "admin" }, "", "/admin");
+          } else {
+            const slug = targetSlug || currentTenant?.slug || config.slug || "marcelino";
+            window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
+          }
+        } catch (err) {
+          console.warn("History pushState error:", err);
         }
       }
       setView(targetView);
@@ -229,22 +252,41 @@ function AppContent() {
     [currentTenant?.slug, config.slug]
   );
 
-  // Listen for back/forward navigation
+  // Listen for browser back/forward navigation (HTML5 popstate event)
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path.startsWith("/super-admin") || path.startsWith("/superadmin")) {
+      if (typeof window === "undefined") return;
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      const searchParams = new URLSearchParams(window.location.search);
+
+      if (
+        path.startsWith("/super-admin") ||
+        path.startsWith("/superadmin") ||
+        hash.includes("super-admin") ||
+        hash.includes("superadmin") ||
+        searchParams.get("view") === "superadmin"
+      ) {
         setView("superadmin");
-      } else if (path.startsWith("/admin")) {
+      } else if (
+        path.startsWith("/admin") ||
+        hash.includes("admin") ||
+        searchParams.get("view") === "admin"
+      ) {
         setView("admin");
       } else {
         setView("menu");
+        // Se a rota for /loja/:slug, sincronizar com o tenant correspondente
+        const match = window.location.pathname.match(/^\/loja\/([^/?#]+)/i);
+        if (match && match[1]) {
+          selectTenant(decodeURIComponent(match[1]).toLowerCase());
+        }
       }
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [selectTenant]);
 
   // 1. SUPER ADMIN VIEW
   if (view === "superadmin") {

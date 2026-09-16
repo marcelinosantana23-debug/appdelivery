@@ -20,3 +20,5 @@ id = "958f3736bcc74c488fe31b6a3855263f"
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
