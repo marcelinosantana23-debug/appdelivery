@@ -1,7 +1,10 @@
-import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, RefreshCw, ShoppingBag } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
+import { fetchOrderDetailsApi } from "@/services/api";
+import { updateActiveOrderStatus } from "@/utils/orderStorage";
 
 interface OrderTrackingProps {
   order: Order;
@@ -9,15 +12,67 @@ interface OrderTrackingProps {
   onHome: () => void;
 }
 
-const statusSteps: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { status: "received", label: "Recebido", icon: Package },
-  { status: "preparing", label: "Em produção", icon: ChefHat },
-  { status: "delivering", label: "Saiu para entrega", icon: Bike },
-  { status: "done", label: "Finalizado", icon: CheckCircle2 },
-];
-
-export function OrderTracking({ order, onBack, onHome }: OrderTrackingProps) {
+export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrackingProps) {
   const { config } = useStore();
+  const [order, setOrder] = useState<Order>(initialOrder);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
+
+  const statusSteps: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { status: "received", label: "Recebido", icon: Package },
+    { status: "preparing", label: "Em produção", icon: ChefHat },
+    {
+      status: "delivering",
+      label: isPickup ? "Pronto p/ retirada" : "Saiu para entrega",
+      icon: isPickup ? ShoppingBag : Bike,
+    },
+    { status: "done", label: isPickup ? "Retirado" : "Finalizado", icon: CheckCircle2 },
+  ];
+
+  // Polling automático e sincronização em tempo real na tela de detalhes
+  useEffect(() => {
+    let isMounted = true;
+
+    const poll = async () => {
+      try {
+        setIsRefreshing(true);
+        const res = await fetchOrderDetailsApi(initialOrder.id, config.slug);
+        if (isMounted && res.success && res.order) {
+          setOrder(res.order);
+          updateActiveOrderStatus(res.order.status);
+        }
+      } catch (err) {
+        console.warn("Polling order details error:", err);
+      } finally {
+        if (isMounted) setIsRefreshing(false);
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 3000);
+
+    const handleActiveOrderUpdate = (e: any) => {
+      const detail = e.detail;
+      if (detail?.orderId && (detail.orderId === initialOrder.id || detail.orderId === initialOrder.id.replace(/^#/, "") || `#${detail.orderId}` === initialOrder.id)) {
+        if (detail.status) {
+          setOrder((prev) => ({ ...prev, status: detail.status }));
+        }
+        if (detail.order) {
+          setOrder(detail.order);
+        }
+      }
+    };
+
+    window.addEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
+    };
+  }, [initialOrder.id, config.slug]);
+
   const currentIndex = statusSteps.findIndex((s) => s.status === order.status);
   const isCancelled = order.status === "cancelled";
 
@@ -30,11 +85,19 @@ export function OrderTracking({ order, onBack, onHome }: OrderTrackingProps) {
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-bold text-gray-800">Pedido {order.id}</h1>
           <p className="text-xs text-gray-400">
             {new Date(order.createdAt).toLocaleString("pt-BR")}
           </p>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+          </span>
+          <span>Ao vivo (10s)</span>
+          {isRefreshing && <RefreshCw className="h-3 w-3 animate-spin text-emerald-600" />}
         </div>
       </div>
 

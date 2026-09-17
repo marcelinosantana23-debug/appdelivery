@@ -5,6 +5,7 @@ import { CategoryNav } from "@/components/customer/CategoryNav";
 import { MenuList } from "@/components/customer/MenuList";
 import { ProductModal } from "@/components/customer/ProductModal";
 import { FloatingCart } from "@/components/customer/FloatingCart";
+import { FloatingOrderTracker } from "@/components/customer/FloatingOrderTracker";
 import { CartDrawer } from "@/components/customer/CartDrawer";
 import { Checkout } from "@/components/customer/Checkout";
 import { OrderTracking } from "@/components/customer/OrderTracking";
@@ -12,8 +13,7 @@ import { AdminPanel } from "@/components/admin/AdminPanel";
 import { SuperAdminPanel } from "@/components/admin/SuperAdminPanel";
 import { SuperAdminLogin } from "@/components/admin/SuperAdminLogin";
 import { StoreAdminLogin } from "@/components/admin/StoreAdminLogin";
-import { SuperAdminInspectorBar } from "@/components/admin/SuperAdminInspectorBar";
-import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { ToastContainer } from "@/components/common/Toast";
 import type { Product, Order } from "@/types";
 
 type View = "menu" | "checkout" | "tracking" | "admin" | "superadmin";
@@ -31,9 +31,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
     config,
     isLoadingStore,
     storeNotFound,
-    tenants,
-    selectTenant,
-    isSuperAdmin,
+    cartCount,
   } = useStore();
   const [activeCategory, setActiveCategory] = useState("lanches");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -90,12 +88,6 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
   if (storeNotFound) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-slate-950 p-6 text-center">
-        {isSuperAdmin && (
-          <SuperAdminInspectorBar
-            onGoToStoreAdmin={onStoreAdminClick}
-            onGoToSuperAdmin={onSuperAdminClick}
-          />
-        )}
         <div className="w-full max-w-md rounded-3xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 shadow-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-2xl">
             🍔
@@ -105,40 +97,11 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
             O endereço acessado não corresponde a nenhuma vitrine ativa ou o link está indisponível.
           </p>
 
-          {/* Super Admin can inspect any available store; normal customers are strictly isolated */}
-          {isSuperAdmin ? (
-            <div className="mt-6 space-y-2 text-left">
-              <span className="block text-[11px] font-bold text-amber-500 uppercase tracking-wider">
-                Vitrines disponíveis (Modo Super Admin):
-              </span>
-              {tenants
-                .filter((t) => t.status === "active")
-                .map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => selectTenant(t.slug)}
-                    className="flex w-full items-center justify-between rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 p-3 text-left hover:border-amber-200 hover:bg-amber-50/50 dark:hover:bg-slate-800 transition"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 text-lg shadow-sm">
-                        <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-gray-800 dark:text-white">{getSafeDisplayName(t.name, "Lanchonete")}</div>
-                        <div className="text-[11px] text-gray-400 font-mono">/loja/{getSafeSlug(t.slug, "loja")}</div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Inspecionar &rarr;</span>
-                  </button>
-                ))}
-            </div>
-          ) : (
-            <div className="mt-6">
-              <p className="text-xs text-gray-400">
-                Por favor, confira o endereço ou link fornecido pelo estabelecimento.
-              </p>
-            </div>
-          )}
+          <div className="mt-6">
+            <p className="text-xs text-gray-400">
+              Por favor, confira o link fornecido pelo estabelecimento para acessar o cardápio.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -168,14 +131,6 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 pb-24 transition-colors">
-      {/* Super Admin Top Inspector Bar - ONLY rendered if authenticated as Super Admin */}
-      {isSuperAdmin && (
-        <SuperAdminInspectorBar
-          onGoToStoreAdmin={onStoreAdminClick}
-          onGoToSuperAdmin={onSuperAdminClick}
-        />
-      )}
-
       <Header
         onStoreAdminClick={onStoreAdminClick}
         onSuperAdminClick={onSuperAdminClick}
@@ -211,6 +166,16 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
 
       <FloatingCart onClick={() => setCartOpen(true)} />
 
+      {/* Card/Banner Flutuante de Rastreio de Pedido em Tempo Real */}
+      <FloatingOrderTracker
+        currentTenantSlug={config.slug}
+        hasFloatingCart={cartCount > 0}
+        onOpenOrder={(order) => {
+          setTrackedOrder(order);
+          setCustomerView("tracking");
+        }}
+      />
+
       <CartDrawer
         open={cartOpen}
         onClose={() => setCartOpen(false)}
@@ -243,29 +208,33 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
 }
 
 function AppContent() {
-  const { isSuperAdmin, isAdminAuthed, selectTenant, currentTenant, config } = useStore();
+  const {
+    isSuperAdmin,
+    isAdminAuthed,
+    selectTenant,
+    currentTenant,
+    config,
+    toasts,
+    dismissToast,
+  } = useStore();
 
   const getInitialView = (): View => {
     if (typeof window === "undefined") return "menu";
     const path = window.location.pathname.toLowerCase();
-    const hash = window.location.hash.toLowerCase();
-    const searchParams = new URLSearchParams(window.location.search);
 
+    // SEPARAÇÃO CRÍTICA DE ROTAS:
+    // Apenas rotas administrativas explícitas podem ativar as telas de login administrativo.
+    // Todas as outras URLs (ex: /loja/:slug, /, /?store=...) abrem estritamente no MODO CLIENTE.
     if (
-      path.startsWith("/super-admin") ||
-      path.startsWith("/superadmin") ||
-      hash.includes("super-admin") ||
-      hash.includes("superadmin") ||
-      searchParams.get("view") === "superadmin"
+      path === "/super-admin" ||
+      path === "/superadmin" ||
+      path.startsWith("/super-admin/") ||
+      path.startsWith("/superadmin/")
     ) {
       return "superadmin";
     }
 
-    if (
-      path.startsWith("/admin") ||
-      hash.includes("admin") ||
-      searchParams.get("view") === "admin"
-    ) {
+    if (path === "/admin" || path.startsWith("/admin/")) {
       return "admin";
     }
 
@@ -301,22 +270,15 @@ function AppContent() {
     const handlePopState = () => {
       if (typeof window === "undefined") return;
       const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      const searchParams = new URLSearchParams(window.location.search);
 
       if (
-        path.startsWith("/super-admin") ||
-        path.startsWith("/superadmin") ||
-        hash.includes("super-admin") ||
-        hash.includes("superadmin") ||
-        searchParams.get("view") === "superadmin"
+        path === "/super-admin" ||
+        path === "/superadmin" ||
+        path.startsWith("/super-admin/") ||
+        path.startsWith("/superadmin/")
       ) {
         setView("superadmin");
-      } else if (
-        path.startsWith("/admin") ||
-        hash.includes("admin") ||
-        searchParams.get("view") === "admin"
-      ) {
+      } else if (path === "/admin" || path.startsWith("/admin/")) {
         setView("admin");
       } else {
         setView("menu");
@@ -332,62 +294,71 @@ function AppContent() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [selectTenant]);
 
-  // 1. SUPER ADMIN VIEW
-  if (view === "superadmin") {
-    // If not authenticated as Super Admin, show the dedicated restricted login screen
-    if (!isSuperAdmin) {
+  const renderMainView = () => {
+    // 1. SUPER ADMIN VIEW
+    if (view === "superadmin") {
+      // If not authenticated as Super Admin, show the dedicated restricted login screen
+      if (!isSuperAdmin) {
+        return (
+          <SuperAdminLogin
+            onBack={() => navigateTo("menu")}
+            onSuccess={() => setView("superadmin")}
+          />
+        );
+      }
+
+      // Authenticated Super Admin Dashboard
       return (
-        <SuperAdminLogin
-          onBack={() => navigateTo("menu")}
-          onSuccess={() => setView("superadmin")}
+        <SuperAdminPanel
+          onManageStore={(tenant) => {
+            selectTenant(tenant.slug);
+            navigateTo("admin");
+          }}
+          onViewStoreFront={(tenant) => {
+            selectTenant(tenant.slug);
+            navigateTo("menu");
+          }}
+          onExit={() => navigateTo("menu")}
         />
       );
     }
 
-    // Authenticated Super Admin Dashboard
-    return (
-      <SuperAdminPanel
-        onManageStore={(tenant) => {
-          selectTenant(tenant.slug);
-          navigateTo("admin");
-        }}
-        onViewStoreFront={(tenant) => {
-          selectTenant(tenant.slug);
-          navigateTo("menu");
-        }}
-        onExit={() => navigateTo("menu")}
-      />
-    );
-  }
+    // 2. STORE ADMIN VIEW
+    if (view === "admin") {
+      // If not authenticated, show the store admin login screen
+      if (!isAdminAuthed) {
+        return (
+          <StoreAdminLogin
+            onBack={() => navigateTo("menu")}
+            onSuccess={() => setView("admin")}
+            onGoToSuperAdmin={() => navigateTo("superadmin")}
+          />
+        );
+      }
 
-  // 2. STORE ADMIN VIEW
-  if (view === "admin") {
-    // If not authenticated, show the store admin login screen
-    if (!isAdminAuthed) {
+      // Authenticated Store Admin Panel (locked to their tenant if role === tenant_admin)
       return (
-        <StoreAdminLogin
-          onBack={() => navigateTo("menu")}
-          onSuccess={() => setView("admin")}
-          onGoToSuperAdmin={() => navigateTo("superadmin")}
+        <AdminPanel
+          onExit={() => navigateTo("menu")}
+          onGoToSuperAdmin={isSuperAdmin ? () => navigateTo("superadmin") : undefined}
         />
       );
     }
 
-    // Authenticated Store Admin Panel (locked to their tenant if role === tenant_admin)
+    // 3. DEFAULT CUSTOMER STORE VIEW
     return (
-      <AdminPanel
-        onExit={() => navigateTo("menu")}
-        onGoToSuperAdmin={isSuperAdmin ? () => navigateTo("superadmin") : undefined}
+      <CustomerApp
+        onStoreAdminClick={() => navigateTo("admin")}
+        onSuperAdminClick={() => navigateTo("superadmin")}
       />
     );
-  }
+  };
 
-  // 3. DEFAULT CUSTOMER STORE VIEW
   return (
-    <CustomerApp
-      onStoreAdminClick={() => navigateTo("admin")}
-      onSuperAdminClick={() => navigateTo("superadmin")}
-    />
+    <>
+      {renderMainView()}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 }
 

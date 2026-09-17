@@ -35,6 +35,30 @@ export async function loginApi(
   }
 }
 
+export async function verifyAuthSessionApi(
+  token: string,
+  userId: string
+): Promise<{
+  success: boolean;
+  user?: User;
+  tenant?: Tenant | null;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/auth/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ token, userId }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro de conexão" };
+  }
+}
+
 export async function fetchTenantsApi(): Promise<{ success: boolean; tenants: (Tenant & { productCount: number; orderCount: number; revenue: number })[]; error?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants`);
@@ -177,12 +201,37 @@ export async function deleteTenantProductApi(
   }
 }
 
+export async function fetchOrdersApi(tenantId?: string): Promise<{ success: boolean; orders: Order[]; error?: string }> {
+  try {
+    const url = tenantId ? `${BASE_URL}/orders?tenantId=${encodeURIComponent(tenantId)}` : `${BASE_URL}/orders`;
+    const res = await fetch(url);
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, orders: [], error: err.message };
+  }
+}
+
 export async function fetchTenantOrdersApi(slugOrId: string): Promise<{ success: boolean; orders: Order[]; error?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`);
     return await res.json();
   } catch (err: any) {
     return { success: false, orders: [], error: err.message };
+  }
+}
+
+export async function createOrderApi(
+  orderData: any
+): Promise<{ success: boolean; order?: Order; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(orderData),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }
 
@@ -202,13 +251,16 @@ export async function createTenantOrderApi(
   }
 }
 
-export async function updateTenantOrderStatusApi(
-  slugOrId: string,
+export async function updateOrderStatusApi(
   orderId: string,
-  status: OrderStatus
+  status: OrderStatus,
+  slugOrId?: string
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
   try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${orderId}/status`, {
+    const url = slugOrId
+      ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${encodeURIComponent(orderId)}/status`
+      : `${BASE_URL}/orders/${encodeURIComponent(orderId)}/status`;
+    const res = await fetch(url, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -217,6 +269,14 @@ export async function updateTenantOrderStatusApi(
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+}
+
+export async function updateTenantOrderStatusApi(
+  slugOrId: string,
+  orderId: string,
+  status: OrderStatus
+): Promise<{ success: boolean; order?: Order; error?: string }> {
+  return updateOrderStatusApi(orderId, status, slugOrId);
 }
 
 export async function fetchPlatformStatsApi() {

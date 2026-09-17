@@ -430,6 +430,73 @@ export class Database {
     this.env = env;
   }
 
+  private static tablesInitialized = false;
+
+  private async ensureTables(): Promise<void> {
+    if (Database.tablesInitialized || !this.env?.DB) return;
+    try {
+      await this.env.DB.batch([
+        this.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS tenants (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            logo TEXT,
+            banner TEXT,
+            primary_color TEXT,
+            secondary_color TEXT,
+            delivery_fee REAL,
+            min_order REAL,
+            estimated_time TEXT,
+            whatsapp TEXT,
+            phone TEXT,
+            instagram TEXT,
+            address TEXT,
+            status TEXT DEFAULT 'active',
+            is_open INTEGER DEFAULT 1,
+            created_at INTEGER
+          )
+        `),
+        this.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS products (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            price REAL NOT NULL,
+            category TEXT NOT NULL,
+            image TEXT,
+            available INTEGER DEFAULT 1,
+            options_json TEXT,
+            created_at INTEGER
+          )
+        `),
+        this.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            customer_name TEXT NOT NULL,
+            customer_phone TEXT NOT NULL,
+            order_type TEXT NOT NULL,
+            payment_method TEXT NOT NULL,
+            address_json TEXT,
+            change_for TEXT,
+            subtotal REAL NOT NULL,
+            delivery_fee REAL NOT NULL,
+            total REAL NOT NULL,
+            status TEXT NOT NULL,
+            items_json TEXT NOT NULL,
+            status_history_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          )
+        `),
+      ]);
+      Database.tablesInitialized = true;
+    } catch (e) {
+      console.warn("D1 ensureTables warning:", e);
+    }
+  }
+
   private getKv() {
     return this.env?.KV || this.env?.STORE_KV;
   }
@@ -777,6 +844,28 @@ export class Database {
 
     if (!user) return null;
     // Omit password from return object
+    const { password: _, ...safeUser } = user;
+    return safeUser as User;
+  }
+
+  async getUserById(userId: string): Promise<User | null> {
+    if (this.env?.DB) {
+      try {
+        const row = await this.env.DB.prepare(
+          "SELECT * FROM users WHERE id = ? AND status = 'active' LIMIT 1"
+        )
+          .bind(userId)
+          .first<any>();
+        if (row) return this.mapUserRow(row);
+      } catch (e) {
+        console.warn("D1 getUserById error:", e);
+      }
+    }
+
+    const user = globalStore.users.find(
+      (u) => u.id === userId && u.status === "active"
+    );
+    if (!user) return null;
     const { password: _, ...safeUser } = user;
     return safeUser as User;
   }
@@ -1207,14 +1296,36 @@ export class Database {
   }
 
   async updateProduct(productId: string, partial: Partial<Product>): Promise<Product | null> {
-    const idx = globalStore.products.findIndex((p) => p.id === productId);
-    if (idx < 0) return null;
+    let existing = globalStore.products.find((p) => p.id === productId);
 
-    const updated = { ...globalStore.products[idx], ...partial };
-    globalStore.products[idx] = updated;
+    if (!existing && this.env?.DB) {
+      try {
+        await this.ensureTables();
+        const row = await this.env.DB.prepare("SELECT * FROM products WHERE id = ? LIMIT 1")
+          .bind(productId)
+          .first<any>();
+        if (row) {
+          existing = this.mapProductRow(row);
+          globalStore.products.push(existing);
+        }
+      } catch (e) {
+        console.warn("D1 get product for update error:", e);
+      }
+    }
+
+    if (!existing) return null;
+
+    const updated = { ...existing, ...partial };
+    const idx = globalStore.products.findIndex((p) => p.id === productId);
+    if (idx >= 0) {
+      globalStore.products[idx] = updated;
+    } else {
+      globalStore.products.push(updated);
+    }
 
     if (this.env?.DB) {
       try {
+        await this.ensureTables();
         await this.env.DB.prepare(
           `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ? WHERE id = ?`
         )
@@ -1278,6 +1389,7 @@ export class Database {
   async getOrdersByTenant(tenantId: string): Promise<Order[]> {
     if (this.env?.DB) {
       try {
+        await this.ensureTables();
         const res = await this.env.DB.prepare(
           "SELECT * FROM orders WHERE tenant_id = ? ORDER BY created_at DESC"
         )
@@ -1294,6 +1406,24 @@ export class Database {
     return globalStore.orders.filter((o) => o.tenantId === tenantId);
   }
 
+  async getAllOrders(): Promise<Order[]> {
+    if (this.env?.DB) {
+      try {
+        await this.ensureTables();
+        const res = await this.env.DB.prepare(
+          "SELECT * FROM orders ORDER BY created_at DESC"
+        ).all<any>();
+        if (res.results && res.results.length > 0) {
+          return res.results.map((r: any) => this.mapOrderRow(r));
+        }
+      } catch (e) {
+        console.warn("D1 getAllOrders error:", e);
+      }
+    }
+
+    return [...globalStore.orders];
+  }
+
   async getOrderById(orderId: string): Promise<Order | null> {
     if (!orderId) return null;
     const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
@@ -1302,6 +1432,7 @@ export class Database {
     // 1. D1 Database query
     if (this.env?.DB) {
       try {
+        await this.ensureTables();
         const row = await this.env.DB.prepare(
           "SELECT * FROM orders WHERE id = ? OR id = ? OR id = ? LIMIT 1"
         )
@@ -1344,6 +1475,7 @@ export class Database {
 
     if (this.env?.DB) {
       try {
+        await this.ensureTables();
         await this.env.DB.prepare(
           `INSERT INTO orders (
             id, tenant_id, customer_name, customer_phone, order_type, payment_method,
@@ -1389,29 +1521,50 @@ export class Database {
   }
 
   async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order | null> {
+    if (!orderId) return null;
     const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
-    const order = globalStore.orders.find((o) => o.id === orderId || o.id === cleanId);
+    const rawId = orderId.replace(/^#/, "");
+
+    // 1. Obtém o pedido atual do D1, KV ou memória
+    const order = await this.getOrderById(orderId);
     if (!order) return null;
 
     order.status = status;
+    if (!order.statusHistory) {
+      order.statusHistory = [];
+    }
     order.statusHistory.push({ status, timestamp: Date.now() });
 
+    // 2. Persiste imediatamente no Cloudflare D1
     if (this.env?.DB) {
       try {
+        await this.ensureTables();
         await this.env.DB.prepare(
-          "UPDATE orders SET status = ?, status_history_json = ? WHERE id = ?"
+          "UPDATE orders SET status = ?, status_history_json = ? WHERE id = ? OR id = ? OR id = ?"
         )
-          .bind(status, JSON.stringify(order.statusHistory), order.id)
+          .bind(status, JSON.stringify(order.statusHistory), order.id, cleanId, rawId)
           .run();
       } catch (e) {
         console.warn("D1 updateOrderStatus error:", e);
       }
     }
 
+    // 3. Atualiza memória global
+    const memIndex = globalStore.orders.findIndex(
+      (o) => o.id === order.id || o.id === cleanId || o.id === rawId
+    );
+    if (memIndex >= 0) {
+      globalStore.orders[memIndex] = order;
+    } else {
+      globalStore.orders.unshift(order);
+    }
+
+    // 4. Atualiza Cloudflare KV
     const kv = this.getKv();
     if (kv) {
       try {
         await kv.put(`order:${order.id}`, JSON.stringify(order));
+        await kv.put(`order:${cleanId}`, JSON.stringify(order));
       } catch (e) {
         console.warn("KV update order error:", e);
       }
@@ -1488,6 +1641,19 @@ export class Database {
     };
   }
 
+  private safeJsonParse<T>(val: any, fallback: T): T {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === "object") return val as T;
+    if (typeof val === "string") {
+      try {
+        return JSON.parse(val) as T;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  }
+
   private mapProductRow(row: any): Product {
     return {
       id: row.id,
@@ -1498,7 +1664,7 @@ export class Database {
       category: row.category,
       image: row.image,
       available: Boolean(row.available),
-      options: typeof row.options_json === "string" ? JSON.parse(row.options_json) : [],
+      options: this.safeJsonParse(row.options_json, []),
       createdAt: Number(row.created_at),
     };
   }
@@ -1511,17 +1677,14 @@ export class Database {
       customerPhone: row.customer_phone,
       orderType: row.order_type,
       paymentMethod: row.payment_method,
-      address: typeof row.address_json === "string" ? JSON.parse(row.address_json) : undefined,
+      address: this.safeJsonParse(row.address_json, undefined),
       changeFor: row.change_for,
       subtotal: Number(row.subtotal),
       deliveryFee: Number(row.delivery_fee),
       total: Number(row.total),
       status: row.status,
-      items: typeof row.items_json === "string" ? JSON.parse(row.items_json) : [],
-      statusHistory:
-        typeof row.status_history_json === "string"
-          ? JSON.parse(row.status_history_json)
-          : [],
+      items: this.safeJsonParse(row.items_json, []),
+      statusHistory: this.safeJsonParse(row.status_history_json, []),
       createdAt: Number(row.created_at),
     };
   }

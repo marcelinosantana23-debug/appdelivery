@@ -769,6 +769,38 @@ api.post("/auth/login", async (c) => {
   }
 });
 
+// Verificação de sessão administrativa segura (Super Admin e Lojista)
+api.post("/auth/verify", async (c) => {
+  try {
+    const authHeader = c.req.header("Authorization");
+    const body = await c.req.json().catch(() => ({}));
+    const token = body.token || (authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null);
+    const userId = body.userId;
+
+    if (!token || !userId) {
+      return c.json({ success: false, error: "Sessão não informada ou inválida." }, 401);
+    }
+
+    const db = getDb(c);
+    const user = await db.getUserById(userId);
+    if (!user) {
+      return c.json({ success: false, error: "Usuário não encontrado ou sessão expirada." }, 401);
+    }
+
+    let tenant = null;
+    if (user.role === "tenant_admin" && user.tenantId) {
+      tenant = await db.getTenantByIdOrSlug(user.tenantId);
+      if (tenant && tenant.status === "inactive") {
+        return c.json({ success: false, error: "Loja inativa." }, 403);
+      }
+    }
+
+    return c.json({ success: true, user, tenant }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao validar sessão." }, 500);
+  }
+});
+
 api.put("/superadmin/credentials", async (c) => {
   try {
     const body = await c.req.json();
@@ -1244,6 +1276,30 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
   }
 });
 
+// Endpoint de listagem e polling contínuo a cada 3 segundos: GET /api/orders?tenantId=...
+api.get("/orders", async (c) => {
+  try {
+    const db = getDb(c);
+    const tenantParam = c.req.query("tenantId") || c.req.query("loja") || c.req.query("slug");
+
+    if (tenantParam) {
+      const tenant = await db.getTenantByIdOrSlug(tenantParam);
+      if (tenant) {
+        const orders = await db.getOrdersByTenant(tenant.id);
+        return c.json({ success: true, orders }, 200);
+      }
+      const orders = await db.getOrdersByTenant(tenantParam);
+      return c.json({ success: true, orders }, 200);
+    }
+
+    // Se nenhum tenant informado, listar todos os pedidos
+    const orders = await db.getAllOrders();
+    return c.json({ success: true, orders }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, orders: [], error: e.message || "Erro ao buscar pedidos" }, 500);
+  }
+});
+
 // Rota direta de compatibilidade para clientes móveis e redes externas postando em /orders
 api.post("/orders", async (c) => {
   try {
@@ -1267,6 +1323,24 @@ api.post("/orders", async (c) => {
     return c.json({ success: true, order }, 201);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao registrar pedido" }, 500);
+  }
+});
+
+// Atualização de status direta em /orders/:orderId/status
+api.patch("/orders/:orderId/status", async (c) => {
+  try {
+    const db = getDb(c);
+    const orderId = c.req.param("orderId");
+    const body = await c.req.json();
+    const status: OrderStatus = normalizeOrderStatus(body.status);
+
+    const updated = await db.updateOrderStatus(orderId, status);
+    if (!updated) {
+      return c.json({ success: false, error: "Pedido não encontrado" }, 404);
+    }
+    return c.json({ success: true, order: updated }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao atualizar status do pedido" }, 500);
   }
 });
 

@@ -1457,19 +1457,19 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   </div>
                 </div>
 
-                {/* Credenciais de Acesso */}
+                {/* Credenciais de Acesso do Lojista */}
                 <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 space-y-2 text-xs">
                   <div className="flex items-center justify-between font-bold text-slate-300 pb-2 border-b border-slate-800">
                     <span>Credenciais da Conta do Lojista</span>
                     <button
                       type="button"
                       onClick={() => {
-                        const message = `🍔 Olá! Seu cardápio digital foi ativado na plataforma:\n\n🏪 Vitrine para seus clientes:\n${origin}/loja/${createdSuccess.tenant.slug}\n\n⚙️ Seu Painel Administrativo:\n${origin}/admin?tenant=${createdSuccess.tenant.slug}\n\n🔑 E-mail de login: ${createdSuccess.email}\n🔒 Senha: ${createdSuccess.pass}`;
+                        const message = `⚙️ Dados de Acesso ao Painel do Lojista - Top Food\n🏪 Loja: ${createdSuccess.tenant.name}\n\n⚙️ Painel de Gestão da Loja:\n${origin}/admin?tenant=${createdSuccess.tenant.slug}\n\n🔑 E-mail de login: ${createdSuccess.email}\n🔒 Senha: ${createdSuccess.pass}`;
                         copyToClipboard(message, "modal-creds");
                       }}
                       className="flex items-center gap-1 text-[11px] text-amber-400 hover:underline"
                     >
-                      {copiedKey === "modal-creds" ? "Mensagem Copiada!" : "Copiar Dados de Acesso (WhatsApp)"}
+                      {copiedKey === "modal-creds" ? "Dados Copiados!" : "Copiar Acesso p/ Lojista (WhatsApp)"}
                     </button>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/80">
@@ -1480,6 +1480,34 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     <span className="text-slate-400">Senha Provisória:</span>
                     <strong className="text-amber-300 font-mono">{createdSuccess.pass}</strong>
                   </div>
+                </div>
+
+                {/* Mensagem Pronta Exclusiva para Enviar aos Clientes */}
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-950/20 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <div className="text-xs">
+                    <span className="font-bold text-amber-300 block">Mensagem Pronta para Divulgar aos Clientes</span>
+                    <span className="text-[11px] text-slate-400">Link 100% público da vitrine (sem senhas ou tokens)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const message = `🍔 Olá! Nosso cardápio digital oficial já está aberto! Acesse e faça seu pedido direto por aqui:\n\n${origin}/loja/${createdSuccess.tenant.slug}`;
+                      copyToClipboard(message, "modal-client-msg");
+                    }}
+                    className="flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-bold text-white transition shadow-sm"
+                  >
+                    {copiedKey === "modal-client-msg" ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        <span>Mensagem Copiada!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        <span>Copiar Mensagem p/ Clientes</span>
+                      </>
+                    )}
+                  </button>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">

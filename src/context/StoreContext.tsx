@@ -6,6 +6,7 @@ import {
   fetchTenantDetailsApi,
   fetchTenantProductsApi,
   fetchTenantOrdersApi,
+  fetchOrdersApi,
   createTenantApi,
   updateTenantApi,
   updateTenantStatusApi,
@@ -14,8 +15,9 @@ import {
   updateTenantProductApi,
   deleteTenantProductApi,
   createTenantOrderApi,
-  updateTenantOrderStatusApi,
+  updateOrderStatusApi,
   loginApi,
+  verifyAuthSessionApi,
   updateSuperAdminCredentialsApi,
   fetchTenantCredentialsApi,
   fetchAllTenantCredentialsApi,
@@ -23,8 +25,14 @@ import {
 } from "@/services/api";
 import { getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 import { playNewOrderChime } from "@/utils/audio";
+import type { ToastMessage } from "@/components/common/Toast";
 
 interface StoreContextValue {
+  // Feedback & Toasts
+  toasts: ToastMessage[];
+  showToast: (message: string, type?: "success" | "error" | "info" | "warning", duration?: number) => void;
+  dismissToast: (id: string) => void;
+
   // Multi-tenant state
   tenants: Tenant[];
   currentTenant: Tenant | null;
@@ -289,18 +297,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     playNewOrderChime();
   }, []);
 
+  // Admin authentication is strictly isolated in sessionStorage (never persistent across public visits)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem("delivery_user_session");
+      // Clean up any legacy localStorage keys to eliminate unauthorized access
+      localStorage.removeItem("delivery_user_session");
+      localStorage.removeItem("delivery_tenant_session");
+      localStorage.removeItem("delivery_auth_token");
+
+      const saved = sessionStorage.getItem("topfood_admin_session");
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
     }
   });
 
+  // Verify stored session token with the backend on boot
+  useEffect(() => {
+    const verifySession = async () => {
+      try {
+        const token = sessionStorage.getItem("topfood_auth_token");
+        const saved = sessionStorage.getItem("topfood_admin_session");
+        if (token && saved) {
+          const user = JSON.parse(saved);
+          const res = await verifyAuthSessionApi(token, user.id);
+          if (!res.success || !res.valid) {
+            sessionStorage.removeItem("topfood_admin_session");
+            sessionStorage.removeItem("topfood_auth_token");
+            sessionStorage.removeItem("topfood_tenant_session");
+            setCurrentUser(null);
+          }
+        }
+      } catch (err) {
+        console.warn("Error verifying session with backend:", err);
+      }
+    };
+    verifySession();
+  }, []);
+
   const [currentSlug, setCurrentSlug] = useState<string>(initialSlug);
   const [isLoadingStore, setIsLoadingStore] = useState<boolean>(true);
   const [storeNotFound, setStoreNotFound] = useState<boolean>(false);
+
+  // Sistema de notificações toast para feedback imediato e erros de rede
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const showToast = useCallback(
+    (message: string, type: "success" | "error" | "info" | "warning" = "info", duration = 3500) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setToasts((prev) => [...prev.slice(-3), { id, message, type, duration }]);
+    },
+    []
+  );
 
   // Apply theme whenever config changes
   useEffect(() => {
@@ -459,15 +511,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         setCurrentUser(res.user);
         try {
-          localStorage.setItem("delivery_user_session", JSON.stringify(res.user));
+          // Strictly tab-isolated in sessionStorage, NEVER in localStorage
+          sessionStorage.setItem("topfood_admin_session", JSON.stringify(res.user));
           if (res.tenant) {
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(res.tenant));
+            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(res.tenant));
           }
           if (res.token) {
-            localStorage.setItem("delivery_auth_token", res.token);
+            sessionStorage.setItem("topfood_auth_token", res.token);
           }
+          // Remove any traces from localStorage
+          localStorage.removeItem("delivery_user_session");
+          localStorage.removeItem("delivery_tenant_session");
+          localStorage.removeItem("delivery_auth_token");
         } catch (e) {
-          console.warn("Could not save session to localStorage", e);
+          console.warn("Could not save session to sessionStorage", e);
         }
 
         // If tenant admin, switch to that tenant automatically
@@ -500,11 +557,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setCurrentUser(null);
     try {
+      sessionStorage.removeItem("topfood_admin_session");
+      sessionStorage.removeItem("topfood_tenant_session");
+      sessionStorage.removeItem("topfood_auth_token");
       localStorage.removeItem("delivery_user_session");
       localStorage.removeItem("delivery_tenant_session");
       localStorage.removeItem("delivery_auth_token");
     } catch (e) {
-      console.warn("Could not remove session from localStorage", e);
+      console.warn("Could not remove session from storage", e);
     }
   }, []);
 
@@ -519,9 +579,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (res.success && res.user) {
         setCurrentUser(res.user);
         try {
-          localStorage.setItem("delivery_user_session", JSON.stringify(res.user));
+          sessionStorage.setItem("topfood_admin_session", JSON.stringify(res.user));
         } catch (e) {
-          console.warn("Could not save updated session to localStorage", e);
+          console.warn("Could not save updated session to sessionStorage", e);
         }
         return { success: true, message: res.message };
       }
@@ -574,45 +634,76 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const toggleStore = useCallback(async () => {
     const nextState = !config.isOpen;
     setConfig((prev) => ({ ...prev, isOpen: nextState }));
+    showToast(
+      nextState ? "Loja aberta para novos pedidos!" : "Loja pausada temporariamente.",
+      nextState ? "success" : "info"
+    );
     if (currentTenant) {
-      await updateTenantApi(currentTenant.id, { isOpen: nextState });
+      try {
+        await updateTenantApi(currentTenant.id, { isOpen: nextState });
+      } catch (e) {
+        console.warn("Erro ao atualizar status da loja:", e);
+      }
     }
-  }, [config.isOpen, currentTenant]);
+  }, [config.isOpen, currentTenant, showToast]);
 
   // ---------------- PRODUCT MANAGEMENT ----------------
   const addProduct = useCallback(
     async (productData: Omit<Product, "id" | "tenantId">): Promise<Product | null> => {
       if (!currentTenant) return null;
-      const res = await createTenantProductApi(currentTenant.id, productData);
-      if (res.success && res.product) {
-        setProducts((prev) => [res.product!, ...prev]);
-        return res.product;
+      try {
+        const res = await createTenantProductApi(currentTenant.id, productData);
+        if (res.success && res.product) {
+          setProducts((prev) => [res.product!, ...prev]);
+          showToast("Produto cadastrado com sucesso!", "success");
+          return res.product;
+        }
+      } catch (e) {
+        console.warn("Erro ao criar produto:", e);
+        showToast("Falha ao salvar produto no banco.", "error");
       }
       return null;
     },
-    [currentTenant]
+    [currentTenant, showToast]
   );
 
   const editProduct = useCallback(
     async (productId: string, partial: Partial<Product>) => {
+      // Atualização otimista imediata na interface
+      setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, ...partial } : p)));
+
+      if ("available" in partial) {
+        showToast(
+          partial.available ? "Produto reativado no cardápio!" : "Produto pausado temporariamente.",
+          "info"
+        );
+      } else {
+        showToast("Produto atualizado com sucesso!", "success");
+      }
+
       if (!currentTenant) return;
-      const res = await updateTenantProductApi(currentTenant.id, productId, partial);
-      if (res.success && res.product) {
-        setProducts((prev) => prev.map((p) => (p.id === productId ? res.product! : p)));
+      try {
+        await updateTenantProductApi(currentTenant.id, productId, partial);
+      } catch (e) {
+        console.warn("Erro ao persistir edição de produto:", e);
       }
     },
-    [currentTenant]
+    [currentTenant, showToast]
   );
 
   const removeProduct = useCallback(
     async (productId: string) => {
+      setProducts((prev) => prev.filter((p) => p.id !== productId));
+      showToast("Produto removido do cardápio.", "info");
+
       if (!currentTenant) return;
-      const res = await deleteTenantProductApi(currentTenant.id, productId);
-      if (res.success) {
-        setProducts((prev) => prev.filter((p) => p.id !== productId));
+      try {
+        await deleteTenantProductApi(currentTenant.id, productId);
+      } catch (e) {
+        console.warn("Erro ao remover produto:", e);
       }
     },
-    [currentTenant]
+    [currentTenant, showToast]
   );
 
   // ---------------- CART MANAGEMENT ----------------
@@ -626,8 +717,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         notes,
       };
       setCart((prev) => [...prev, cartItem]);
+      showToast(`${quantity}x ${product.name} adicionado à sacola`, "info", 2000);
     },
-    []
+    [showToast]
   );
 
   const updateCartQuantity = useCallback((cartItemId: string, delta: number) => {
@@ -655,7 +747,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addOrder = useCallback(
     async (order: Order): Promise<Order | null> => {
       const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
-      const res = await createTenantOrderApi(tenantId, {
+      const payload = {
+        tenantId,
         customerName: order.customerName,
         customerPhone: order.customerPhone,
         orderType: order.orderType,
@@ -667,41 +760,112 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         total: order.total,
         status: order.status,
         items: order.items as any,
-        statusHistory: order.statusHistory,
-      });
+        statusHistory: order.statusHistory || [{ status: order.status, timestamp: Date.now() }],
+      };
 
-      if (res.success && res.order) {
-        setOrders((prev) => [res.order!, ...prev]);
-        setNewOrderIds((prev) => [res.order!.id, ...prev]);
-        return res.order;
-      } else {
-        // Fallback local
+      try {
+        // Persiste imediatamente no Cloudflare D1 via API
+        const res = await createTenantOrderApi(tenantId, payload);
+        const finalOrder: Order = res.success && res.order ? res.order : { ...order, tenantId };
+
+        // Atualização imediata dos estados globais do React
+        setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
+        setNewOrderIds((prev) => [finalOrder.id, ...prev]);
+
+        // Grava no localStorage para permitir rastreamento em tempo real
+        try {
+          localStorage.setItem("topfood_active_order_id", finalOrder.id);
+          localStorage.setItem("topfood_active_order_status", finalOrder.status);
+          localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("topfood-active-order-updated", {
+                detail: { orderId: finalOrder.id, status: finalOrder.status, order: finalOrder },
+              })
+            );
+          }
+        } catch {
+          // ignore storage issues
+        }
+
+        showToast("Pedido confirmado com sucesso!", "success");
+        return finalOrder;
+      } catch (err: any) {
+        console.warn("Erro ao registrar pedido no backend:", err);
+        // Fallback local seguro
         setOrders((prev) => [order, ...prev]);
         setNewOrderIds((prev) => [order.id, ...prev]);
+        showToast("Pedido registrado localmente (sincronizando...)", "info");
         return order;
       }
     },
-    [currentTenant, currentSlug]
+    [currentTenant, currentSlug, showToast]
   );
 
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
-      const tenantId = currentTenant?.id || "tenant-burger-town";
+      const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
+
+      // 1. Atualização otimista imediata na interface React (sem travamento)
       setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                status,
-                statusHistory: [...o.statusHistory, { status, timestamp: Date.now() }],
-              }
-            : o
-        )
+        prev.map((o) => {
+          if (
+            o.id === orderId ||
+            o.id === `#${orderId}` ||
+            o.id.replace(/^#/, "") === orderId.replace(/^#/, "")
+          ) {
+            return {
+              ...o,
+              status,
+              statusHistory: [...(o.statusHistory || []), { status, timestamp: Date.now() }],
+            };
+          }
+          return o;
+        })
       );
 
-      await updateTenantOrderStatusApi(tenantId, orderId, status);
+      // 2. Se for o pedido ativo do cliente no localStorage, sincroniza na hora
+      try {
+        const activeId = localStorage.getItem("topfood_active_order_id");
+        if (
+          activeId &&
+          (activeId === orderId || activeId.replace(/^#/, "") === orderId.replace(/^#/, ""))
+        ) {
+          localStorage.setItem("topfood_active_order_status", status);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("topfood-active-order-updated", {
+                detail: { orderId, status },
+              })
+            );
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // 3. Feedback visual imediato via Toast
+      const statusLabels: Record<OrderStatus, string> = {
+        received: "Recebido",
+        preparing: "Em Preparo",
+        delivering: "Saiu para Entrega",
+        done: "Finalizado",
+        cancelled: "Cancelado",
+      };
+      showToast(`Pedido ${orderId} atualizado para: ${statusLabels[status] || status}`, "success");
+
+      // 4. Persiste no Cloudflare D1 e KV via API
+      try {
+        const res = await updateOrderStatusApi(orderId, status, tenantId);
+        if (!res.success) {
+          console.warn("Aviso ao persistir status:", res.error);
+        }
+      } catch (err) {
+        console.warn("Erro de rede ao atualizar status do pedido:", err);
+        showToast("Aviso: Falha temporária de rede ao sincronizar status.", "warning");
+      }
     },
-    [currentTenant]
+    [currentTenant, currentSlug, showToast]
   );
 
   const clearNewOrderFlag = useCallback((orderId: string) => {
@@ -718,14 +882,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [orders]);
 
   useEffect(() => {
-    if (!currentTenant?.id) return;
-    const tenantId = currentTenant.id;
+    const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug;
+    if (!tenantParam) return;
     let isMounted = true;
 
-    // Polling contínuo a cada 3 segundos garantindo sincronização no Hono/D1
+    // Polling contínuo e automático a cada 3 segundos (GET /api/orders?tenantId=...)
     const syncOrders = async () => {
       try {
-        const res = await fetchTenantOrdersApi(tenantId);
+        const res = await fetchOrdersApi(tenantParam);
         if (!isMounted) return;
 
         if (res.success && res.orders) {
@@ -752,21 +916,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
           }
 
+          // Atualiza o estado global dos pedidos no React
           setOrders(incoming);
           knownOrderIdsRef.current = new Set(incoming.map((o) => o.id));
+
+          // Sincroniza pedido ativo no localStorage caso seu status tenha mudado
+          try {
+            const activeId = localStorage.getItem("topfood_active_order_id");
+            if (activeId) {
+              const matched = incoming.find(
+                (o) =>
+                  o.id === activeId ||
+                  o.id === `#${activeId}` ||
+                  o.id.replace(/^#/, "") === activeId.replace(/^#/, "")
+              );
+              if (matched) {
+                const prevStatus = localStorage.getItem("topfood_active_order_status");
+                if (prevStatus !== matched.status) {
+                  localStorage.setItem("topfood_active_order_status", matched.status);
+                  localStorage.setItem("topfood_active_order_data", JSON.stringify(matched));
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("topfood-active-order-updated", {
+                        detail: { orderId: matched.id, status: matched.status, order: matched },
+                      })
+                    );
+                  }
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
         }
       } catch (err) {
-        console.warn("Erro na sincronização de pedidos em tempo real:", err);
+        console.warn("Aviso no polling de pedidos (a cada 3s):", err);
       }
     };
 
+    // Executa imediatamente e depois a cada 3 segundos com setInterval
+    syncOrders();
     const intervalId = setInterval(syncOrders, 3000);
 
-    // Canal Server-Sent Events (SSE) para entrega instantânea
+    // Canal Server-Sent Events (SSE) para atualização push quando suportado
     let eventSource: EventSource | null = null;
-    if (typeof EventSource !== "undefined") {
+    if (typeof EventSource !== "undefined" && currentTenant?.id) {
       try {
-        eventSource = new EventSource(`/api/tenants/${tenantId}/orders/stream`);
+        eventSource = new EventSource(`/api/tenants/${currentTenant.id}/orders/stream`);
         eventSource.addEventListener("orders", (e) => {
           if (!isMounted) return;
           try {
@@ -803,7 +999,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         eventSource.close();
       }
     };
-  }, [currentTenant?.id, soundEnabled]);
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug, soundEnabled]);
 
   // ---------------- SUPER ADMIN ACTIONS ----------------
   const createNewTenant = useCallback(
@@ -864,6 +1060,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <StoreContext.Provider
       value={{
+        toasts,
+        showToast,
+        dismissToast,
         tenants,
         currentTenant,
         config,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, X, Bike, ChefHat, Package, CheckCircle2, Clock, Phone, MapPin } from "lucide-react";
+import { Check, X, Bike, ChefHat, Package, CheckCircle2, Clock, Phone, MapPin, ShoppingBag } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice } from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
@@ -71,13 +71,38 @@ function OrderCard({
   onAdvance: (id: string) => void;
   onCancel: (id: string) => void;
 }) {
-  const statusInfo = statusFlow.find((s) => s.status === order.status);
+  const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
+  const defaultStatusInfo = statusFlow.find((s) => s.status === order.status);
+  
+  // Ajuste dinâmico de badge para retirada no balcão
+  const statusInfo = order.status === "delivering" && isPickup
+    ? {
+        status: "delivering" as OrderStatus,
+        label: "Pronto no Balcão",
+        icon: ShoppingBag,
+        color: "bg-emerald-600",
+      }
+    : defaultStatusInfo;
+
   const isCancelled = order.status === "cancelled";
   const isDone = order.status === "done";
   const canAdvance = nextStatusMap[order.status] !== undefined;
   const { config } = useStore();
 
   const timeAgo = Math.floor((Date.now() - order.createdAt) / 60000);
+
+  const getAdvanceButtonLabel = () => {
+    if (order.status === "received") {
+      return "Aceitar e Produzir";
+    }
+    if (order.status === "preparing") {
+      return isPickup ? "Marcar como 'Pronto no Balcão'" : "Marcar como 'Saiu para Entrega'";
+    }
+    if (order.status === "delivering") {
+      return isPickup ? "Marcar como 'Retirado'" : "Marcar como 'Entregue'";
+    }
+    return "Avançar Status";
+  };
 
   return (
     <div
@@ -176,24 +201,24 @@ function OrderCard({
         <div className="flex gap-2 border-t border-gray-100 px-4 py-3">
           {canAdvance && (
             <button
+              id={`advance-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onAdvance(order.id);
               }}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-500 py-2.5 text-sm font-bold text-white transition hover:bg-green-600"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-500 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-green-600 active:scale-95 cursor-pointer"
             >
               <Check className="h-4 w-4" />
-              {order.status === "received" ? "Aceitar e Produzir" :
-                order.status === "preparing" ? "Saiu para Entrega" :
-                "Finalizar Pedido"}
+              {getAdvanceButtonLabel()}
             </button>
           )}
           <button
+            id={`cancel-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
             onClick={(e) => {
               e.stopPropagation();
               onCancel(order.id);
             }}
-            className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-red-200 px-4 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-50"
+            className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-red-200 px-4 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-50 active:scale-95 cursor-pointer"
           >
             <X className="h-4 w-4" />
             Cancelar
