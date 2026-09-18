@@ -6,6 +6,7 @@ import type {
   Order,
   OrderStatus,
   TenantStatus,
+  Customer,
 } from "./types";
 import { mockProducts } from "../data/mockData";
 
@@ -395,12 +396,46 @@ const initialOrders: Order[] = [
   },
 ];
 
+const initialCustomers: Customer[] = [
+  {
+    id: "cust-1",
+    tenantId: "tenant-burger-town",
+    name: "Mariana Silva",
+    phone: "(11) 98765-4321",
+    normalizedPhone: "11987654321",
+    street: "Rua Augusta",
+    number: "1200",
+    district: "Consolação",
+    complement: "Apto 42",
+    reference: "Próximo ao metrô",
+    ordersCount: 2,
+    lastOrderAt: Date.now() - 15 * 60000,
+    createdAt: Date.now() - 30 * 86400000,
+  },
+  {
+    id: "cust-2",
+    tenantId: "tenant-burger-town",
+    name: "Rodrigo Costa",
+    phone: "(11) 97123-8899",
+    normalizedPhone: "11971238899",
+    street: "Av. Paulista",
+    number: "900",
+    district: "Bela Vista",
+    complement: "",
+    reference: "Em frente ao shopping",
+    ordersCount: 1,
+    lastOrderAt: Date.now() - 25 * 60000,
+    createdAt: Date.now() - 10 * 86400000,
+  },
+];
+
 // In-memory data store for Node.js / preview runtime (with persistence)
 class MemoryStore {
   tenants: Tenant[] = [...initialTenants];
   users: User[] = [...initialUsers];
   products: Product[] = [...initialProducts];
   orders: Order[] = [...initialOrders];
+  customers: Customer[] = [...initialCustomers];
 
   // Helper to slugify
   slugify(text: string): string {
@@ -488,6 +523,23 @@ export class Database {
             items_json TEXT NOT NULL,
             status_history_json TEXT NOT NULL,
             created_at INTEGER NOT NULL
+          )
+        `),
+        this.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS customers (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            normalized_phone TEXT NOT NULL,
+            street TEXT,
+            number TEXT,
+            district TEXT,
+            complement TEXT,
+            reference TEXT,
+            orders_count INTEGER DEFAULT 1,
+            last_order_at INTEGER,
+            created_at INTEGER
           )
         `),
       ]);
@@ -1507,6 +1559,19 @@ export class Database {
     }
 
     globalStore.orders.unshift(newOrder);
+
+    // Salva ou atualiza automaticamente o cliente vinculado à loja no D1 e memória
+    if (newOrder.customerPhone && newOrder.customerName) {
+      try {
+        await this.upsertCustomer(tenantId, {
+          name: newOrder.customerName,
+          phone: newOrder.customerPhone,
+          address: newOrder.address,
+        });
+      } catch (custErr) {
+        console.warn("Could not upsert customer during order creation:", custErr);
+      }
+    }
 
     const kv = this.getKv();
     if (kv) {

@@ -51,6 +51,22 @@ export interface User {
   createdAt: number;
 }
 
+export interface Customer {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string;
+  normalizedPhone: string;
+  street?: string;
+  number?: string;
+  district?: string;
+  complement?: string;
+  reference?: string;
+  ordersCount: number;
+  lastOrderAt: number;
+  createdAt: number;
+}
+
 export interface ProductOption {
   id: string;
   name: string;
