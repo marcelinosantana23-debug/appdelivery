@@ -175,6 +175,20 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
               </div>
             )}
 
+            <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-950/60 px-3 py-2 rounded-xl border border-slate-800">
+              <span>Acesso Demo: <strong className="text-slate-200">admin@marcelino.com</strong></span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("admin@marcelino.com");
+                  setPassword("123456");
+                }}
+                className="text-amber-400 hover:text-amber-300 font-bold underline ml-2"
+              >
+                Preencher
+              </button>
+            </div>
+
             <button
               type="submit"
               disabled={loading}

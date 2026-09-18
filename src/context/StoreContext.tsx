@@ -321,7 +321,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (token && saved) {
           const user = JSON.parse(saved);
           const res = await verifyAuthSessionApi(token, user.id);
-          if (!res.success || !res.valid) {
+          if (!res.success) {
             sessionStorage.removeItem("topfood_admin_session");
             sessionStorage.removeItem("topfood_auth_token");
             sessionStorage.removeItem("topfood_tenant_session");
@@ -428,7 +428,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Handle browser back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
-      const slug = getInitialSlug();
+      const slug = getInitialUrlSlug();
       setCurrentSlug(slug);
       loadStoreBySlug(slug);
     };
@@ -954,9 +954,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // Executa imediatamente e depois a cada 3 segundos com setInterval
+    // Executa uma sincronização inicial de pedidos na montagem
     syncOrders();
-    const intervalId = setInterval(syncOrders, 3000);
+    // Removido o polling contínuo de 3s para evitar requisições de rede em segundo plano;
+    // a atualização em tempo real é mantida via Server-Sent Events (SSE) abaixo.
 
     // Canal Server-Sent Events (SSE) para atualização push quando suportado
     let eventSource: EventSource | null = null;
@@ -994,7 +995,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
-      clearInterval(intervalId);
       if (eventSource) {
         eventSource.close();
       }

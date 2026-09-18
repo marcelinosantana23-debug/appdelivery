@@ -14,6 +14,8 @@ import { SuperAdminPanel } from "@/components/admin/SuperAdminPanel";
 import { SuperAdminLogin } from "@/components/admin/SuperAdminLogin";
 import { StoreAdminLogin } from "@/components/admin/StoreAdminLogin";
 import { ToastContainer } from "@/components/common/Toast";
+import { OfflineIndicator } from "@/components/common/OfflineIndicator";
+import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import type { Product, Order } from "@/types";
 
 type View = "menu" | "checkout" | "tracking" | "admin" | "superadmin";
@@ -113,7 +115,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
         onClose={() => setCustomerView("menu")}
         onOrderPlaced={(order) => {
           setTrackedOrder(order);
-          setCustomerView("tracking");
+          setCustomerView("menu");
         }}
       />
     );
@@ -130,7 +132,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 pb-24 transition-colors">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 pb-32 sm:pb-36 transition-colors">
       <Header
         onStoreAdminClick={onStoreAdminClick}
         onSuperAdminClick={onSuperAdminClick}
@@ -166,14 +168,10 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
 
       <FloatingCart onClick={() => setCartOpen(true)} />
 
-      {/* Card/Banner Flutuante de Rastreio de Pedido em Tempo Real */}
+      {/* Card Flutuante de Acompanhamento de Pedido em Tempo Real */}
       <FloatingOrderTracker
         currentTenantSlug={config.slug}
         hasFloatingCart={cartCount > 0}
-        onOpenOrder={(order) => {
-          setTrackedOrder(order);
-          setCustomerView("tracking");
-        }}
       />
 
       <CartDrawer
@@ -185,8 +183,13 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
         }}
       />
 
+      {/* Banner de instalação PWA discreto (oculta automaticamente se já instalado) */}
+      <div className="mx-auto max-w-2xl px-4 mt-8">
+        <PWAInstallButton variant="banner" />
+      </div>
+
       {/* Rodapé institucional com identidade isolada da vitrine */}
-      <footer className="mt-16 border-t border-gray-200/60 dark:border-slate-800/60 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+      <footer className="mt-12 border-t border-gray-200/60 dark:border-slate-800/60 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
         <div className="mx-auto max-w-2xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-gray-700 dark:text-gray-300">{config.name}</span>
@@ -357,6 +360,7 @@ function AppContent() {
   return (
     <>
       {renderMainView()}
+      <OfflineIndicator />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );

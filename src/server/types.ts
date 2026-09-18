@@ -28,12 +28,17 @@ export interface Tenant {
   address: string;
   hours: string;
   tagline: string;
+  announcement?: string;
   logo: string;
   bannerImage?: string;
   primaryColor: string;
+  secondaryColor?: string;
   primaryDark: string;
   primaryLight: string;
   accentColor: string;
+  themeMode?: "light" | "dark";
+  menuLayout?: "list" | "grid";
+  showFeaturedCarousel?: boolean;
   status: TenantStatus;
   isOpen: boolean;
   createdAt: number;
@@ -48,22 +53,6 @@ export interface User {
   role: UserRole;
   tenantId?: string | null;
   status: "active" | "inactive";
-  createdAt: number;
-}
-
-export interface Customer {
-  id: string;
-  tenantId: string;
-  name: string;
-  phone: string;
-  normalizedPhone: string;
-  street?: string;
-  number?: string;
-  district?: string;
-  complement?: string;
-  reference?: string;
-  ordersCount: number;
-  lastOrderAt: number;
   createdAt: number;
 }
 
@@ -131,6 +120,23 @@ export interface Order {
   createdAt: number;
 }
 
+export interface Customer {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string;
+  street?: string;
+  number?: string;
+  district?: string;
+  complement?: string;
+  reference?: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderAt: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // Cloudflare Workers Bindings via env object
 export interface CloudflareD1Result<T = unknown> {
   results?: T[];
@@ -147,6 +153,7 @@ export interface CloudflareD1PreparedStatement {
 
 export interface CloudflareD1Database {
   prepare(query: string): CloudflareD1PreparedStatement;
+  batch?(statements: CloudflareD1PreparedStatement[]): Promise<unknown[]>;
   exec(query: string): Promise<unknown>;
 }
 
@@ -165,4 +172,45 @@ export interface Env {
   PLATFORM_NAME?: string;
   ENVIRONMENT?: string;
   JWT_SECRET?: string;
+}
+
+export interface FinancialMetrics {
+  todayRevenue: number;
+  monthRevenue: number;
+  monthCompletedOrders: number;
+  averageTicket: number;
+  todayCompletedOrders: number;
+  deliveredCount: number;
+  pickupCount: number;
+  deliveryFeeTotal: number;
+}
+
+export interface DailyRevenueItem {
+  day: number;
+  date: string;
+  dayOfWeek: string;
+  revenue: number;
+  ordersCount: number;
+}
+
+export interface PaymentBreakdownItem {
+  method: PaymentMethod | string;
+  label: string;
+  total: number;
+  count: number;
+  percent: number;
+}
+
+export interface FinancialReportData {
+  period: {
+    month: number;
+    year: number;
+    monthName: string;
+    startDate: string;
+    endDate: string;
+  };
+  metrics: FinancialMetrics;
+  dailyRevenue: DailyRevenueItem[];
+  paymentBreakdown: PaymentBreakdownItem[];
+  orders: Order[];
 }

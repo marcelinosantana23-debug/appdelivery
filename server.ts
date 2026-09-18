@@ -87,6 +87,30 @@ async function startServer() {
     }
   });
 
+  // Dedicated PWA routes with strict headers for Android Chrome
+  app.get("/sw.js", (req, res) => {
+    const swPath = path.join(
+      process.cwd(),
+      process.env.NODE_ENV === "production" ? "dist" : "public",
+      "sw.js"
+    );
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Service-Worker-Allowed", "/");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(swPath);
+  });
+
+  app.get("/manifest.json", (req, res) => {
+    const manifestPath = path.join(
+      process.cwd(),
+      process.env.NODE_ENV === "production" ? "dist" : "public",
+      "manifest.json"
+    );
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(manifestPath);
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -97,7 +121,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("{*all}", (req, res, next) => {
+    app.get("*all", (req, res, next) => {
       if (req.path.startsWith("/api") || req.path === "/health") {
         return next();
       }

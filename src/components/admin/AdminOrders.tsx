@@ -1,5 +1,21 @@
 import { useState } from "react";
-import { Check, X, Bike, ChefHat, Package, CheckCircle2, Clock, Phone, MapPin, ShoppingBag } from "lucide-react";
+import {
+  Check,
+  X,
+  Bike,
+  ChefHat,
+  Package,
+  CheckCircle2,
+  Clock,
+  Phone,
+  MapPin,
+  ShoppingBag,
+  User,
+  MessageCircle,
+  ExternalLink,
+  Compass,
+  DollarSign,
+} from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice } from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
@@ -141,38 +157,130 @@ function OrderCard({
         </div>
       </div>
 
-      <div className="px-4 py-3">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <span className="font-bold">{order.customerName}</span>
-          <span className="text-gray-300">|</span>
-          <span className="flex items-center gap-1 text-xs text-gray-400">
-            <Phone className="h-3 w-3" />
-            {order.customerPhone}
-          </span>
-        </div>
+      <div className="px-4 py-3 space-y-3">
+        {/* Painel de Identificação Completa do Cliente */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800 text-white shadow-sm">
+                <User className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-900">{order.customerName}</span>
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800">
+                    Cliente Registrado
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                  <Phone className="h-3 w-3 text-slate-400" />
+                  <span className="font-medium">{order.customerPhone}</span>
+                </div>
+              </div>
+            </div>
 
-        <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-          <span className={`rounded px-2 py-0.5 font-medium ${
-            order.orderType === "delivery" ? "bg-orange-50 text-orange-600" : "bg-blue-50 text-blue-600"
-          }`}>
-            {order.orderType === "delivery" ? "🛵 Entrega" : "🏪 Retirada"}
-          </span>
-          <span className="rounded bg-gray-100 px-2 py-0.5 font-medium text-gray-600">
-            {order.paymentMethod === "pix" && "PIX"}
-            {order.paymentMethod === "card" && "Cartão"}
-            {order.paymentMethod === "cash" && "Dinheiro"}
-          </span>
-        </div>
-
-        {order.orderType === "delivery" && order.address && (
-          <div className="mt-2 flex items-start gap-1.5 text-xs text-gray-400">
-            <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>
-              {order.address.street}, {order.address.number} — {order.address.district}
-              {order.address.reference && ` (${order.address.reference})`}
-            </span>
+            {/* Ações Rápidas de Contato */}
+            {order.customerPhone && (
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={`https://wa.me/55${order.customerPhone.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm hover:bg-green-700 transition"
+                  title="Chamar no WhatsApp"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>WhatsApp</span>
+                </a>
+                <a
+                  href={`tel:${order.customerPhone.replace(/\D/g, "")}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                  title="Ligar para o cliente"
+                >
+                  <Phone className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Ligar</span>
+                </a>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Endereço Completo e Ponto de Referência (Entrega) */}
+          {order.orderType === "delivery" && order.address ? (
+            <div className="mt-2.5 space-y-1.5 text-xs text-slate-700">
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-slate-900">
+                    {order.address.street}, Nº {order.address.number} — {order.address.district}
+                  </p>
+                  {order.address.complement && (
+                    <p className="text-slate-600 mt-0.5">
+                      <span className="font-semibold text-slate-700">Complemento:</span> {order.address.complement}
+                    </p>
+                  )}
+                  {/* Ponto de Referência em destaque */}
+                  {order.address.reference ? (
+                    <div className="mt-1 flex items-center gap-1 rounded-md bg-amber-100/80 border border-amber-300 px-2 py-1 text-amber-900 font-medium">
+                      <Compass className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                      <span>
+                        <strong className="font-bold">Ponto de Referência:</strong> {order.address.reference}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic mt-0.5">Ponto de referência não informado</p>
+                  )}
+                </div>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    `${order.address.street}, ${order.address.number}, ${order.address.district}`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline shrink-0"
+                  title="Abrir rota no Google Maps"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span>Maps</span>
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50/80 border border-blue-200 rounded-lg px-2.5 py-1.5">
+              <ShoppingBag className="h-4 w-4 text-blue-600" />
+              <span>Retirada no Balcão — O cliente retirará o pedido diretamente no balcão da loja.</span>
+            </div>
+          )}
+        </div>
+
+        {/* Modalidade e Pagamento */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span
+            className={`rounded-lg px-2.5 py-1 font-bold ${
+              order.orderType === "delivery"
+                ? "bg-orange-100 text-orange-800 border border-orange-200"
+                : "bg-blue-100 text-blue-800 border border-blue-200"
+            }`}
+          >
+            {order.orderType === "delivery" ? "🛵 Entrega a Domicílio" : "🏪 Retirada no Balcão"}
+          </span>
+          <span className="rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1 font-semibold text-slate-800 flex items-center gap-1">
+            <DollarSign className="h-3 w-3 text-slate-500" />
+            Pagamento:{" "}
+            <strong className="font-bold uppercase">
+              {order.paymentMethod === "pix" && "PIX"}
+              {order.paymentMethod === "card" && "Cartão na Entrega"}
+              {order.paymentMethod === "cash" && "Dinheiro"}
+            </strong>
+          </span>
+          {order.paymentMethod === "cash" && order.changeFor && (
+            <span className="rounded-lg bg-emerald-100 border border-emerald-300 px-2.5 py-1 font-bold text-emerald-800">
+              💵 Troco para R$ {order.changeFor}
+            </span>
+          )}
+        </div>
 
         {/* Items */}
         <div className="mt-3 space-y-1.5 rounded-xl bg-gray-50 p-3">

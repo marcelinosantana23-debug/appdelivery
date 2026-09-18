@@ -1,6 +1,7 @@
 import { Clock, MapPin, Store, AlertTriangle, Bike, Sparkles } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo, getSafeDisplayName } from "@/components/common/StoreLogo";
+import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 
 interface HeaderProps {
   onAdminClick?: () => void;
@@ -52,8 +53,9 @@ export function Header(_props: HeaderProps = {}) {
               <span className="max-w-[200px] truncate sm:max-w-[280px]">{config.name}</span>
             </div>
 
-            {/* Status chip */}
-            <div className="flex items-center gap-1.5">
+            {/* Status chip & Install button */}
+            <div className="flex items-center gap-2">
+              <PWAInstallButton variant="header" />
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold backdrop-blur-md ${
                   isStoreOpen

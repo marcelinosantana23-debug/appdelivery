@@ -127,3 +127,72 @@ export interface Order {
   statusHistory: { status: OrderStatus; timestamp: number }[];
 }
 
+export interface Customer {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string;
+  street?: string;
+  number?: string;
+  district?: string;
+  complement?: string;
+  reference?: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderAt: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface StoredCustomerProfile {
+  name: string;
+  phone: string;
+  street: string;
+  number: string;
+  district: string;
+  complement?: string;
+  reference?: string;
+  lastUpdated?: number;
+}
+
+export interface FinancialMetrics {
+  todayRevenue: number;
+  monthRevenue: number;
+  monthCompletedOrders: number;
+  averageTicket: number;
+  todayCompletedOrders: number;
+  deliveredCount: number;
+  pickupCount: number;
+  deliveryFeeTotal: number;
+}
+
+export interface DailyRevenueItem {
+  day: number;
+  date: string;
+  dayOfWeek: string;
+  revenue: number;
+  ordersCount: number;
+}
+
+export interface PaymentBreakdownItem {
+  method: PaymentMethod | string;
+  label: string;
+  total: number;
+  count: number;
+  percent: number;
+}
+
+export interface FinancialReportData {
+  period: {
+    month: number;
+    year: number;
+    monthName: string;
+    startDate: string;
+    endDate: string;
+  };
+  metrics: FinancialMetrics;
+  dailyRevenue: DailyRevenueItem[];
+  paymentBreakdown: PaymentBreakdownItem[];
+  orders: Order[];
+}
+

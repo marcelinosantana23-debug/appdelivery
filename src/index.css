@@ -13,11 +13,25 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
-  body {
+  html, body {
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    user-select: none;
+    -webkit-user-select: none;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-color: #f8f9fa;
   }
+
+  /* Evita o zoom automático do iOS ao focar campos e permite seleção de texto para edição */
+  input, select, textarea {
+    font-size: 16px !important;
+    user-select: text;
+    -webkit-user-select: text;
+  }
 }
+
 
 @layer utilities {
   .bg-primary { background-color: var(--color-primary); }

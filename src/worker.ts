@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import api from "./server/api";
 import type { Env } from "./server/types";
+import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT } from "./server/pwaAssets";
 
 // Main Cloudflare Workers application
 const app = new Hono<{ Bindings: Env }>();
@@ -27,7 +28,7 @@ app.use(
 );
 
 app.options("*", (c) => {
-  return c.text("", 204);
+  return c.body(null, 204);
 });
 
 // 1. Mount all /api routes FIRST
@@ -43,7 +44,61 @@ app.get("/health", (c) => {
   });
 });
 
-// 3. Static assets & SPA fallback using Cloudflare Workers Static Assets binding (wrangler.toml: [assets])
+// 3. PWA Service Worker route with explicit headers required by Android Chrome
+app.get("/sw.js", async (c) => {
+  const assets = c.env?.ASSETS;
+  if (assets && typeof assets.fetch === "function") {
+    try {
+      const res = await assets.fetch(c.req.raw);
+      if (res.status === 200) {
+        const headers = new Headers(res.headers);
+        headers.set("Content-Type", "application/javascript; charset=utf-8");
+        headers.set("Service-Worker-Allowed", "/");
+        headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+        return new Response(res.body, { status: 200, headers });
+      }
+    } catch (err) {
+      console.warn("Worker ASSETS error fetching /sw.js:", err);
+    }
+  }
+
+  return new Response(SW_SCRIPT_CONTENT, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Service-Worker-Allowed": "/",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+    },
+  });
+});
+
+// 4. PWA Web App Manifest route with strict manifest Content-Type
+app.get("/manifest.json", async (c) => {
+  const assets = c.env?.ASSETS;
+  if (assets && typeof assets.fetch === "function") {
+    try {
+      const res = await assets.fetch(c.req.raw);
+      if (res.status === 200) {
+        const headers = new Headers(res.headers);
+        headers.set("Content-Type", "application/manifest+json; charset=utf-8");
+        headers.set("Cache-Control", "public, max-age=3600");
+        return new Response(res.body, { status: 200, headers });
+      }
+    } catch (err) {
+      console.warn("Worker ASSETS error fetching /manifest.json:", err);
+    }
+  }
+
+  return new Response(MANIFEST_JSON_CONTENT, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/manifest+json; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+});
+
+// 5. Static assets & SPA fallback using Cloudflare Workers Static Assets binding (wrangler.toml: [assets])
 app.get("*", async (c, next) => {
   const path = c.req.path;
   if (path.startsWith("/api") || path === "/health") {

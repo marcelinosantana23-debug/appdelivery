@@ -7,6 +7,9 @@ import type {
   OrderStatus,
   TenantStatus,
   Customer,
+  FinancialReportData,
+  DailyRevenueItem,
+  PaymentBreakdownItem,
 } from "./types";
 import { mockProducts } from "../data/mockData";
 
@@ -394,38 +397,293 @@ const initialOrders: Order[] = [
     statusHistory: [{ status: "received", timestamp: Date.now() - 8 * 60000 }],
     createdAt: Date.now() - 8 * 60000,
   },
+  // Pedidos Concluídos de Exemplo (MS Preparações & Burger Town) para Faturamento
+  {
+    id: "#4815",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Lucas Mendes",
+    customerPhone: "(11) 98112-9900",
+    orderType: "delivery",
+    paymentMethod: "pix",
+    address: {
+      street: "Av. Paulista",
+      number: "1578",
+      district: "Bela Vista",
+      complement: "Apto 84",
+      reference: "Em frente ao MASP",
+    },
+    subtotal: 68.0,
+    deliveryFee: 5.0,
+    total: 73.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p1",
+        product: { id: "p1", name: "X-Burger Artesanal Duplo", price: 34.0 },
+        quantity: 2,
+        selectedOptions: [],
+        notes: "Maionese à parte",
+      },
+    ],
+    statusHistory: [
+      { status: "received", timestamp: Date.now() - 3 * 3600000 },
+      { status: "preparing", timestamp: Date.now() - 2.5 * 3600000 },
+      { status: "delivering", timestamp: Date.now() - 2.2 * 3600000 },
+      { status: "done", timestamp: Date.now() - 2 * 3600000 },
+    ],
+    createdAt: Date.now() - 3 * 3600000,
+  },
+  {
+    id: "#4816",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Camila Rocha",
+    customerPhone: "(11) 97334-1122",
+    orderType: "pickup",
+    paymentMethod: "card",
+    subtotal: 52.0,
+    deliveryFee: 0,
+    total: 52.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p2",
+        product: { id: "p2", name: "Smash Burger Especial", price: 26.0 },
+        quantity: 2,
+        selectedOptions: [],
+        notes: "Sem cebola",
+      },
+    ],
+    statusHistory: [
+      { status: "received", timestamp: Date.now() - 5 * 3600000 },
+      { status: "preparing", timestamp: Date.now() - 4.5 * 3600000 },
+      { status: "done", timestamp: Date.now() - 4 * 3600000 },
+    ],
+    createdAt: Date.now() - 5 * 3600000,
+  },
+  {
+    id: "#4810",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Thiago Santos",
+    customerPhone: "(11) 96554-3322",
+    orderType: "delivery",
+    paymentMethod: "pix",
+    address: {
+      street: "Rua Bela Cintra",
+      number: "450",
+      district: "Consolação",
+      complement: "Casa 2",
+      reference: "Portão cinza",
+    },
+    subtotal: 86.0,
+    deliveryFee: 5.0,
+    total: 91.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p3",
+        product: { id: "p1", name: "Combo Família Lanches", price: 86.0 },
+        quantity: 1,
+        selectedOptions: [],
+        notes: "",
+      },
+    ],
+    statusHistory: [
+      { status: "received", timestamp: Date.now() - 26 * 3600000 },
+      { status: "done", timestamp: Date.now() - 25 * 3600000 },
+    ],
+    createdAt: Date.now() - 26 * 3600000,
+  },
+  {
+    id: "#4805",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Juliana Alves",
+    customerPhone: "(11) 99871-2244",
+    orderType: "delivery",
+    paymentMethod: "card",
+    address: {
+      street: "Rua Haddock Lobo",
+      number: "700",
+      district: "Cerqueira César",
+      complement: "Conjunto 12",
+      reference: "",
+    },
+    subtotal: 62.0,
+    deliveryFee: 5.0,
+    total: 67.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p4",
+        product: { id: "p2", name: "Double Cheddar Bacon", price: 31.0 },
+        quantity: 2,
+        selectedOptions: [],
+        notes: "Cheddar bem cremoso",
+      },
+    ],
+    statusHistory: [{ status: "done", timestamp: Date.now() - 2 * 86400000 }],
+    createdAt: Date.now() - 2 * 86400000,
+  },
+  {
+    id: "#4799",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Beatriz Lima",
+    customerPhone: "(11) 97722-6611",
+    orderType: "delivery",
+    paymentMethod: "pix",
+    subtotal: 95.0,
+    deliveryFee: 5.0,
+    total: 100.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p5",
+        product: { id: "p3", name: "Trio Especial da Casa", price: 95.0 },
+        quantity: 1,
+        selectedOptions: [],
+        notes: "",
+      },
+    ],
+    statusHistory: [{ status: "done", timestamp: Date.now() - 3 * 86400000 }],
+    createdAt: Date.now() - 3 * 86400000,
+  },
+  {
+    id: "#4790",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Rafael Nogueira",
+    customerPhone: "(11) 98443-1234",
+    orderType: "pickup",
+    paymentMethod: "cash",
+    changeFor: "50",
+    subtotal: 44.0,
+    deliveryFee: 0,
+    total: 44.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p6",
+        product: { id: "p1", name: "Burguer Clássico", price: 22.0 },
+        quantity: 2,
+        selectedOptions: [],
+        notes: "",
+      },
+    ],
+    statusHistory: [{ status: "done", timestamp: Date.now() - 5 * 86400000 }],
+    createdAt: Date.now() - 5 * 86400000,
+  },
+  {
+    id: "#4782",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Patricia Gomes",
+    customerPhone: "(11) 95532-9090",
+    orderType: "delivery",
+    paymentMethod: "pix",
+    subtotal: 78.0,
+    deliveryFee: 5.0,
+    total: 83.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p7",
+        product: { id: "p1", name: "Combo MS Especial", price: 78.0 },
+        quantity: 1,
+        selectedOptions: [],
+        notes: "",
+      },
+    ],
+    statusHistory: [{ status: "done", timestamp: Date.now() - 7 * 86400000 }],
+    createdAt: Date.now() - 7 * 86400000,
+  },
+  {
+    id: "#4770",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Marcelo Vieira",
+    customerPhone: "(11) 94411-8833",
+    orderType: "delivery",
+    paymentMethod: "card",
+    subtotal: 110.0,
+    deliveryFee: 5.0,
+    total: 115.0,
+    status: "done",
+    items: [
+      {
+        id: "item-p8",
+        product: { id: "p1", name: "Combo Galera 4 Lanches", price: 110.0 },
+        quantity: 1,
+        selectedOptions: [],
+        notes: "",
+      },
+    ],
+    statusHistory: [{ status: "done", timestamp: Date.now() - 10 * 86400000 }],
+    createdAt: Date.now() - 10 * 86400000,
+  },
+  {
+    id: "#4761",
+    tenantId: "tenant-ms-preparacoes",
+    customerName: "Marcos Paulo",
+    customerPhone: "(11) 91122-3344",
+    orderType: "delivery",
+    paymentMethod: "pix",
+    subtotal: 58.0,
+    deliveryFee: 5.0,
+    total: 63.0,
+    status: "cancelled", // Este pedido cancelado NÃO deve entrar no faturamento
+    items: [
+      {
+        id: "item-p9",
+        product: { id: "p1", name: "X-Burger Artesanal", price: 29.0 },
+        quantity: 2,
+        selectedOptions: [],
+        notes: "Cancelado pelo cliente",
+      },
+    ],
+    statusHistory: [{ status: "cancelled", timestamp: Date.now() - 4 * 86400000 }],
+    createdAt: Date.now() - 4 * 86400000,
+  },
 ];
 
 const initialCustomers: Customer[] = [
   {
-    id: "cust-1",
+    id: "cust-mariana-silva",
     tenantId: "tenant-burger-town",
     name: "Mariana Silva",
     phone: "(11) 98765-4321",
-    normalizedPhone: "11987654321",
     street: "Rua Augusta",
     number: "1200",
     district: "Consolação",
     complement: "Apto 42",
     reference: "Próximo ao metrô",
-    ordersCount: 2,
+    totalOrders: 1,
+    totalSpent: 60.0,
     lastOrderAt: Date.now() - 15 * 60000,
     createdAt: Date.now() - 30 * 86400000,
+    updatedAt: Date.now() - 15 * 60000,
   },
   {
-    id: "cust-2",
+    id: "cust-rodrigo-costa",
     tenantId: "tenant-burger-town",
     name: "Rodrigo Costa",
     phone: "(11) 97123-8899",
-    normalizedPhone: "11971238899",
-    street: "Av. Paulista",
-    number: "900",
-    district: "Bela Vista",
-    complement: "",
-    reference: "Em frente ao shopping",
-    ordersCount: 1,
-    lastOrderAt: Date.now() - 25 * 60000,
+    totalOrders: 1,
+    totalSpent: 32.0,
+    lastOrderAt: Date.now() - 40 * 60000,
+    createdAt: Date.now() - 20 * 86400000,
+    updatedAt: Date.now() - 40 * 60000,
+  },
+  {
+    id: "cust-fernanda-lima",
+    tenantId: "tenant-pizza-bella",
+    name: "Fernanda Lima",
+    phone: "(11) 99112-2334",
+    street: "Alameda Santos",
+    number: "850",
+    district: "Cerqueira César",
+    complement: "Bloco B - 110",
+    reference: "Portaria 24h",
+    totalOrders: 1,
+    totalSpent: 61.5,
+    lastOrderAt: Date.now() - 8 * 60000,
     createdAt: Date.now() - 10 * 86400000,
+    updatedAt: Date.now() - 8 * 60000,
   },
 ];
 
@@ -470,7 +728,8 @@ export class Database {
   private async ensureTables(): Promise<void> {
     if (Database.tablesInitialized || !this.env?.DB) return;
     try {
-      await this.env.DB.batch([
+      if (this.env.DB.batch) {
+        await this.env.DB.batch([
         this.env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS tenants (
             id TEXT PRIMARY KEY,
@@ -531,18 +790,20 @@ export class Database {
             tenant_id TEXT NOT NULL,
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
-            normalized_phone TEXT NOT NULL,
-            street TEXT,
-            number TEXT,
-            district TEXT,
-            complement TEXT,
-            reference TEXT,
-            orders_count INTEGER DEFAULT 1,
-            last_order_at INTEGER,
-            created_at INTEGER
+            address_street TEXT,
+            address_number TEXT,
+            address_district TEXT,
+            address_complement TEXT,
+            address_reference TEXT,
+            total_orders INTEGER DEFAULT 1,
+            total_spent REAL DEFAULT 0,
+            last_order_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
           )
         `),
       ]);
+      }
       Database.tablesInitialized = true;
     } catch (e) {
       console.warn("D1 ensureTables warning:", e);
@@ -652,6 +913,7 @@ export class Database {
     deliveryFee?: number;
     address?: string;
     primaryColor?: string;
+    bannerImage?: string;
   }): Promise<Tenant> {
     const slug = data.slug
       ? globalStore.slugify(data.slug)
@@ -1560,17 +1822,11 @@ export class Database {
 
     globalStore.orders.unshift(newOrder);
 
-    // Salva ou atualiza automaticamente o cliente vinculado à loja no D1 e memória
-    if (newOrder.customerPhone && newOrder.customerName) {
-      try {
-        await this.upsertCustomer(tenantId, {
-          name: newOrder.customerName,
-          phone: newOrder.customerPhone,
-          address: newOrder.address,
-        });
-      } catch (custErr) {
-        console.warn("Could not upsert customer during order creation:", custErr);
-      }
+    // Auto-cadastro e persistência automática de cliente vinculado à loja
+    try {
+      await this.saveOrUpdateCustomerFromOrder(tenantId, newOrder);
+    } catch (custErr) {
+      console.warn("Auto-register customer error:", custErr);
     }
 
     const kv = this.getKv();
@@ -1658,6 +1914,266 @@ export class Database {
       inactiveTenants: tenants.length - active,
       totalOrders: allOrders.length,
       totalRevenue: totalRev,
+    };
+  }
+
+  // ===================== RELATÓRIO FINANCEIRO (D1 / MEMÓRIA) =====================
+
+  async getFinancialReport(
+    tenantId: string,
+    options?: {
+      month?: number;
+      year?: number;
+      startDate?: string;
+      endDate?: string;
+    }
+  ): Promise<FinancialReportData> {
+    const now = new Date();
+    const targetYear = options?.year ? Number(options.year) : now.getFullYear();
+    const targetMonth = options?.month ? Number(options.month) : now.getMonth() + 1;
+
+    const monthNamesPt = [
+      "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+      "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ];
+    const daysOfWeekPt = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+    let periodStartMs: number;
+    let periodEndMs: number;
+    let formattedStartDate: string;
+    let formattedEndDate: string;
+    let isCustomRange = false;
+
+    if (options?.startDate && options?.endDate) {
+      isCustomRange = true;
+      formattedStartDate = options.startDate;
+      formattedEndDate = options.endDate;
+      periodStartMs = new Date(`${options.startDate}T00:00:00.000`).getTime();
+      periodEndMs = new Date(`${options.endDate}T23:59:59.999`).getTime();
+    } else {
+      const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+      const startD = new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0);
+      const endD = new Date(targetYear, targetMonth - 1, daysInMonth, 23, 59, 59, 999);
+      periodStartMs = startD.getTime();
+      periodEndMs = endD.getTime();
+      const mStr = String(targetMonth).padStart(2, "0");
+      formattedStartDate = `${targetYear}-${mStr}-01`;
+      formattedEndDate = `${targetYear}-${mStr}-${String(daysInMonth).padStart(2, "0")}`;
+    }
+
+    // Limites do dia de hoje (00:00 às 23:59:59.999)
+    const todayStartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+    const todayEndMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+
+    const isCompletedStatus = (status: string) => {
+      if (!status) return false;
+      const s = status.trim().toLowerCase();
+      return (
+        s === "done" ||
+        s === "concluido" ||
+        s === "concluído" ||
+        s === "entregue" ||
+        s === "finalizado"
+      );
+    };
+
+    let periodCompletedOrders: Order[] = [];
+    let todayCompletedOrdersList: Order[] = [];
+
+    // 1. Tenta recuperar do Cloudflare D1
+    if (this.env?.DB) {
+      try {
+        await this.ensureTables();
+        const periodRes = await this.env.DB.prepare(`
+          SELECT * FROM orders
+          WHERE tenant_id = ?
+            AND status IN ('done', 'Concluído', 'concluido', 'Entregue', 'entregue', 'finalizado')
+            AND created_at >= ? AND created_at <= ?
+          ORDER BY created_at DESC
+        `)
+          .bind(tenantId, periodStartMs, periodEndMs)
+          .all<any>();
+
+        if (periodRes.results && periodRes.results.length > 0) {
+          periodCompletedOrders = periodRes.results.map((r: any) => this.mapOrderRow(r));
+        }
+
+        const todayRes = await this.env.DB.prepare(`
+          SELECT * FROM orders
+          WHERE tenant_id = ?
+            AND status IN ('done', 'Concluído', 'concluido', 'Entregue', 'entregue', 'finalizado')
+            AND created_at >= ? AND created_at <= ?
+          ORDER BY created_at DESC
+        `)
+          .bind(tenantId, todayStartMs, todayEndMs)
+          .all<any>();
+
+        if (todayRes.results && todayRes.results.length > 0) {
+          todayCompletedOrdersList = todayRes.results.map((r: any) => this.mapOrderRow(r));
+        }
+      } catch (e) {
+        console.warn("D1 getFinancialReport error:", e);
+      }
+    }
+
+    // 2. Fallback em memória (Store global)
+    if (periodCompletedOrders.length === 0) {
+      const tenantOrders = globalStore.orders.filter(
+        (o) =>
+          o.tenantId === tenantId ||
+          (tenantId === "marcelino" && o.tenantId === "tenant-ms-preparacoes") ||
+          (tenantId === "tenant-ms-preparacoes" && o.tenantId === "marcelino")
+      );
+      periodCompletedOrders = tenantOrders.filter(
+        (o) => isCompletedStatus(o.status) && o.createdAt >= periodStartMs && o.createdAt <= periodEndMs
+      );
+      todayCompletedOrdersList = tenantOrders.filter(
+        (o) => isCompletedStatus(o.status) && o.createdAt >= todayStartMs && o.createdAt <= todayEndMs
+      );
+    } else if (todayCompletedOrdersList.length === 0) {
+      const tenantOrders = globalStore.orders.filter(
+        (o) =>
+          o.tenantId === tenantId ||
+          (tenantId === "marcelino" && o.tenantId === "tenant-ms-preparacoes") ||
+          (tenantId === "tenant-ms-preparacoes" && o.tenantId === "marcelino")
+      );
+      todayCompletedOrdersList = tenantOrders.filter(
+        (o) => isCompletedStatus(o.status) && o.createdAt >= todayStartMs && o.createdAt <= todayEndMs
+      );
+    }
+
+    // Ordenar pedidos do período por data decrescente (mais recentes primeiro)
+    periodCompletedOrders.sort((a, b) => b.createdAt - a.createdAt);
+
+    // Cálculos de métricas principais solicitadas
+    const monthRevenue = periodCompletedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const monthCompletedOrders = periodCompletedOrders.length;
+    const averageTicket = monthCompletedOrders > 0 ? monthRevenue / monthCompletedOrders : 0;
+
+    const todayRevenue = todayCompletedOrdersList.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const todayCompletedOrders = todayCompletedOrdersList.length;
+
+    let deliveredCount = 0;
+    let pickupCount = 0;
+    let deliveryFeeTotal = 0;
+
+    periodCompletedOrders.forEach((o) => {
+      if (o.orderType === "delivery" || (o as any).delivery_type === "delivery") {
+        deliveredCount++;
+        deliveryFeeTotal += Number(o.deliveryFee) || 0;
+      } else {
+        pickupCount++;
+      }
+    });
+
+    // Mapeamento diário para gráfico de rendimento
+    const dailyMap = new Map<string, { revenue: number; count: number; dateObj: Date }>();
+
+    if (isCustomRange) {
+      const cur = new Date(periodStartMs);
+      const end = new Date(periodEndMs);
+      while (cur <= end) {
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, "0");
+        const d = String(cur.getDate()).padStart(2, "0");
+        const key = `${y}-${m}-${d}`;
+        dailyMap.set(key, { revenue: 0, count: 0, dateObj: new Date(cur) });
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else {
+      const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dStr = String(day).padStart(2, "0");
+        const mStr = String(targetMonth).padStart(2, "0");
+        const key = `${targetYear}-${mStr}-${dStr}`;
+        const dateObj = new Date(targetYear, targetMonth - 1, day, 12, 0, 0);
+        dailyMap.set(key, { revenue: 0, count: 0, dateObj });
+      }
+    }
+
+    // Acumula os pedidos nos seus respectivos dias
+    periodCompletedOrders.forEach((o) => {
+      const oDate = new Date(o.createdAt);
+      const y = oDate.getFullYear();
+      const m = String(oDate.getMonth() + 1).padStart(2, "0");
+      const d = String(oDate.getDate()).padStart(2, "0");
+      const key = `${y}-${m}-${d}`;
+
+      const existing = dailyMap.get(key);
+      if (existing) {
+        existing.revenue += Number(o.total) || 0;
+        existing.count += 1;
+      } else {
+        dailyMap.set(key, { revenue: Number(o.total) || 0, count: 1, dateObj: oDate });
+      }
+    });
+
+    const dailyRevenue: DailyRevenueItem[] = Array.from(dailyMap.entries()).map(([dateStr, item]) => {
+      const dayNum = item.dateObj.getDate();
+      const dayOfWeekStr = daysOfWeekPt[item.dateObj.getDay()] || "";
+      return {
+        day: dayNum,
+        date: dateStr,
+        dayOfWeek: dayOfWeekStr,
+        revenue: Math.round(item.revenue * 100) / 100,
+        ordersCount: item.count,
+      };
+    });
+
+    // Detalhamento por método de pagamento
+    const paymentMap: Record<string, { total: number; count: number }> = {
+      pix: { total: 0, count: 0 },
+      card: { total: 0, count: 0 },
+      cash: { total: 0, count: 0 },
+    };
+
+    periodCompletedOrders.forEach((o) => {
+      const method = (o.paymentMethod || "pix").toLowerCase();
+      if (!paymentMap[method]) {
+        paymentMap[method] = { total: 0, count: 0 };
+      }
+      paymentMap[method].total += Number(o.total) || 0;
+      paymentMap[method].count += 1;
+    });
+
+    const paymentLabels: Record<string, string> = {
+      pix: "PIX",
+      card: "Cartão (Crédito/Débito)",
+      cash: "Dinheiro em Espécie",
+    };
+
+    const paymentBreakdown: PaymentBreakdownItem[] = Object.entries(paymentMap)
+      .filter(([_, val]) => val.count > 0)
+      .map(([method, val]) => ({
+        method,
+        label: paymentLabels[method] || method.toUpperCase(),
+        total: Math.round(val.total * 100) / 100,
+        count: val.count,
+        percent: monthRevenue > 0 ? Math.round((val.total / monthRevenue) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    return {
+      period: {
+        month: targetMonth,
+        year: targetYear,
+        monthName: monthNamesPt[targetMonth - 1] || `Mês ${targetMonth}`,
+        startDate: formattedStartDate,
+        endDate: formattedEndDate,
+      },
+      metrics: {
+        todayRevenue: Math.round(todayRevenue * 100) / 100,
+        monthRevenue: Math.round(monthRevenue * 100) / 100,
+        monthCompletedOrders,
+        averageTicket: Math.round(averageTicket * 100) / 100,
+        todayCompletedOrders,
+        deliveredCount,
+        pickupCount,
+        deliveryFeeTotal: Math.round(deliveryFeeTotal * 100) / 100,
+      },
+      dailyRevenue,
+      paymentBreakdown,
+      orders: periodCompletedOrders,
     };
   }
 
@@ -1752,5 +2268,239 @@ export class Database {
       statusHistory: this.safeJsonParse(row.status_history_json, []),
       createdAt: Number(row.created_at),
     };
+  }
+
+  // ===================== CUSTOMERS =====================
+
+  private mapCustomerRow(row: any): Customer {
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      name: row.name,
+      phone: row.phone,
+      street: row.address_street || undefined,
+      number: row.address_number || undefined,
+      district: row.address_district || undefined,
+      complement: row.address_complement || undefined,
+      reference: row.address_reference || undefined,
+      totalOrders: Number(row.total_orders || 1),
+      totalSpent: Number(row.total_spent || 0),
+      lastOrderAt: Number(row.last_order_at || row.created_at || Date.now()),
+      createdAt: Number(row.created_at || Date.now()),
+      updatedAt: Number(row.updated_at || Date.now()),
+    };
+  }
+
+  async getCustomersByTenant(tenantId: string): Promise<Customer[]> {
+    if (!tenantId) return [];
+
+    // 1. D1 Database
+    if (this.env?.DB) {
+      try {
+        await this.ensureTables();
+        const res = await this.env.DB.prepare(
+          "SELECT * FROM customers WHERE tenant_id = ? ORDER BY last_order_at DESC"
+        )
+          .bind(tenantId)
+          .all<any>();
+
+        if (res.results && res.results.length > 0) {
+          return res.results.map((r) => this.mapCustomerRow(r));
+        }
+      } catch (e) {
+        console.warn("D1 getCustomersByTenant error:", e);
+      }
+    }
+
+    // 2. Fallback memory store
+    return globalStore.customers
+      .filter((c) => c.tenantId === tenantId)
+      .sort((a, b) => b.lastOrderAt - a.lastOrderAt);
+  }
+
+  async getCustomerByPhone(tenantId: string, phone: string): Promise<Customer | null> {
+    if (!tenantId || !phone) return null;
+    const cleanDigits = phone.replace(/\D/g, "");
+
+    // 1. D1 Database
+    if (this.env?.DB) {
+      try {
+        await this.ensureTables();
+        const res = await this.env.DB.prepare(
+          `SELECT * FROM customers 
+           WHERE tenant_id = ? 
+             AND (phone = ? OR REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') = ?)
+           LIMIT 1`
+        )
+          .bind(tenantId, phone, cleanDigits)
+          .first<any>();
+
+        if (res) {
+          return this.mapCustomerRow(res);
+        }
+      } catch (e) {
+        console.warn("D1 getCustomerByPhone error:", e);
+      }
+    }
+
+    // 2. Fallback memory store
+    const found = globalStore.customers.find((c) => {
+      if (c.tenantId !== tenantId) return false;
+      const cDigits = c.phone.replace(/\D/g, "");
+      return c.phone === phone || (cleanDigits.length >= 8 && cDigits === cleanDigits);
+    });
+
+    return found || null;
+  }
+
+  async saveOrUpdateCustomerFromOrder(tenantId: string, order: Order): Promise<Customer> {
+    const name = (order.customerName || "Cliente").trim();
+    const phone = (order.customerPhone || "").trim();
+    const cleanDigits = phone.replace(/\D/g, "");
+    const street = order.address?.street?.trim() || "";
+    const number = order.address?.number?.trim() || "";
+    const district = order.address?.district?.trim() || "";
+    const complement = order.address?.complement?.trim() || "";
+    const reference = order.address?.reference?.trim() || "";
+    const total = order.total || 0;
+    const now = Date.now();
+
+    // 1. Verifica se já existe cliente cadastrado para este telefone na loja
+    const existing = await this.getCustomerByPhone(tenantId, phone);
+
+    if (existing) {
+      // Atualiza os dados do cliente recorrente
+      const updatedTotalOrders = (existing.totalOrders || 1) + 1;
+      const updatedTotalSpent = (existing.totalSpent || 0) + total;
+      const updatedName = name || existing.name;
+      const updatedStreet = street || existing.street;
+      const updatedNumber = number || existing.number;
+      const updatedDistrict = district || existing.district;
+      const updatedComplement = complement || existing.complement;
+      const updatedReference = reference || existing.reference;
+
+      if (this.env?.DB) {
+        try {
+          await this.ensureTables();
+          await this.env.DB.prepare(
+            `UPDATE customers SET
+              name = ?,
+              address_street = ?,
+              address_number = ?,
+              address_district = ?,
+              address_complement = ?,
+              address_reference = ?,
+              total_orders = ?,
+              total_spent = ?,
+              last_order_at = ?,
+              updated_at = ?
+            WHERE id = ?`
+          )
+            .bind(
+              updatedName,
+              updatedStreet || null,
+              updatedNumber || null,
+              updatedDistrict || null,
+              updatedComplement || null,
+              updatedReference || null,
+              updatedTotalOrders,
+              updatedTotalSpent,
+              now,
+              now,
+              existing.id
+            )
+            .run();
+        } catch (e) {
+          console.warn("D1 update customer error:", e);
+        }
+      }
+
+      // Atualiza memória
+      existing.name = updatedName;
+      existing.street = updatedStreet;
+      existing.number = updatedNumber;
+      existing.district = updatedDistrict;
+      existing.complement = updatedComplement;
+      existing.reference = updatedReference;
+      existing.totalOrders = updatedTotalOrders;
+      existing.totalSpent = updatedTotalSpent;
+      existing.lastOrderAt = now;
+      existing.updatedAt = now;
+
+      // Atualiza KV se disponível
+      const kv = this.getKv();
+      if (kv && cleanDigits) {
+        try {
+          await kv.put(`customer:${tenantId}:${cleanDigits}`, JSON.stringify(existing));
+        } catch (e) {
+          console.warn("KV put customer error:", e);
+        }
+      }
+
+      return existing;
+    }
+
+    // 2. Se não existir, cadastra novo cliente na loja
+    const newCustomer: Customer = {
+      id: `cust-${now}-${Math.floor(1000 + Math.random() * 9000)}`,
+      tenantId,
+      name,
+      phone,
+      street: street || undefined,
+      number: number || undefined,
+      district: district || undefined,
+      complement: complement || undefined,
+      reference: reference || undefined,
+      totalOrders: 1,
+      totalSpent: total,
+      lastOrderAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (this.env?.DB) {
+      try {
+        await this.ensureTables();
+        await this.env.DB.prepare(
+          `INSERT INTO customers (
+            id, tenant_id, name, phone, address_street, address_number,
+            address_district, address_complement, address_reference,
+            total_orders, total_spent, last_order_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            newCustomer.id,
+            newCustomer.tenantId,
+            newCustomer.name,
+            newCustomer.phone,
+            newCustomer.street || null,
+            newCustomer.number || null,
+            newCustomer.district || null,
+            newCustomer.complement || null,
+            newCustomer.reference || null,
+            newCustomer.totalOrders,
+            newCustomer.totalSpent,
+            newCustomer.lastOrderAt,
+            newCustomer.createdAt,
+            newCustomer.updatedAt
+          )
+          .run();
+      } catch (e) {
+        console.warn("D1 insert customer error:", e);
+      }
+    }
+
+    globalStore.customers.unshift(newCustomer);
+
+    const kv = this.getKv();
+    if (kv && cleanDigits) {
+      try {
+        await kv.put(`customer:${tenantId}:${cleanDigits}`, JSON.stringify(newCustomer));
+      } catch (e) {
+        console.warn("KV put customer error:", e);
+      }
+    }
+
+    return newCustomer;
   }
 }

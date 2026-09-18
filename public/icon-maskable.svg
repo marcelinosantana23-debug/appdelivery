@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient (full bleed for maskable icon) -->
+    <linearGradient id="bgGradMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DC2626" />
+      <stop offset="50%" stop-color="#EA580C" />
+      <stop offset="100%" stop-color="#C2410C" />
+    </linearGradient>
+
+    <!-- Metallic/Gold Accent Gradient -->
+    <linearGradient id="goldGradMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#D97706" />
+    </linearGradient>
+
+    <!-- Glow/Shadow Filter -->
+    <filter id="shadowMask" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Full-bleed background for maskable adaptive clipping -->
+  <rect width="512" height="512" fill="url(#bgGradMask)" />
+
+  <!-- Scaled content inside safe zone (approx 78% scale centered) -->
+  <g transform="translate(56, 56) scale(0.78)">
+    <!-- Central Emblem Container -->
+    <g filter="url(#shadowMask)" transform="translate(0, -10)">
+      <!-- Plate / Cloche Base -->
+      <ellipse cx="256" cy="330" rx="160" ry="24" fill="#FFFFFF" fill-opacity="0.2" />
+      <path d="M 110 326 C 110 326 150 338 256 338 C 362 338 402 326 402 326 C 402 334 390 346 256 346 C 122 346 110 334 110 326 Z" fill="#FFFFFF" />
+
+      <!-- Cloche Dome -->
+      <path d="M 124 316 C 124 200 190 144 256 144 C 322 144 388 200 388 316 Z" fill="#FFFFFF" />
+
+      <!-- Cloche Handle -->
+      <circle cx="256" cy="126" r="22" fill="url(#goldGradMask)" />
+      <rect x="250" y="140" width="12" height="8" rx="3" fill="url(#goldGradMask)" />
+
+      <!-- Cloche Steam Waves -->
+      <path d="M 215 96 C 210 82 222 72 216 58" fill="none" stroke="url(#goldGradMask)" stroke-width="7" stroke-linecap="round" />
+      <path d="M 256 90 C 251 74 263 64 257 48" fill="none" stroke="url(#goldGradMask)" stroke-width="8" stroke-linecap="round" />
+      <path d="M 297 96 C 292 82 304 72 298 58" fill="none" stroke="url(#goldGradMask)" stroke-width="7" stroke-linecap="round" />
+
+      <!-- Delivery Speed Lightning Symbol inside Cloche -->
+      <path d="M 264 186 L 230 252 L 254 252 L 244 304 L 286 238 L 260 238 Z" fill="url(#goldGradMask)" />
+    </g>
+
+    <!-- Modern Banner Ribbon with "TOP FOOD" Typography -->
+    <g filter="url(#shadowMask)" transform="translate(0, 10)">
+      <rect x="86" y="372" width="340" height="74" rx="22" fill="#FFFFFF" />
+      <rect x="90" y="376" width="332" height="66" rx="18" fill="#18181B" />
+
+      <text x="256" y="422" 
+            font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+            font-size="34" 
+            font-weight="900" 
+            letter-spacing="4" 
+            fill="#FFFFFF" 
+            text-anchor="middle">
+        TOP <tspan fill="#F59E0B">FOOD</tspan>
+      </text>
+    </g>
+  </g>
+</svg>

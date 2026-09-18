@@ -13,25 +13,31 @@ import {
   ExternalLink,
   CheckCircle2,
   Share2,
+  Users,
+  TrendingUp,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
+import { AdminCustomers } from "./AdminCustomers";
 import { AdminMenu } from "./AdminMenu";
 import { AdminSettings } from "./AdminSettings";
+import { AdminFinancialReport } from "./AdminFinancialReport";
 import { SuperAdminPanel } from "./SuperAdminPanel";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Tenant } from "@/types";
 
 interface AdminPanelProps {
   onExit: () => void;
   onGoToSuperAdmin?: () => void;
+  initialTab?: AdminTab;
 }
 
-type AdminTab = "orders" | "menu" | "settings";
+type AdminTab = "orders" | "financial" | "customers" | "menu" | "settings";
 
-export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
+export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelProps) {
   const {
     isAdminAuthed,
     isSuperAdmin,
@@ -50,10 +56,30 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
     playAlertSound,
   } = useStore();
 
-  const [tab, setTab] = useState<AdminTab>("orders");
+  const [tab, setTab] = useState<AdminTab>(() => {
+    if (initialTab) return initialTab;
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      const t = p.get("tab")?.toLowerCase();
+      if (t === "financial" || t === "financeiro" || t === "faturamento") return "financial";
+      if (t === "customers" || t === "clientes") return "customers";
+      if (t === "menu" || t === "cardapio") return "menu";
+      if (t === "settings" || t === "config") return "settings";
+    }
+    return "orders";
+  });
+
+  const [financialKey, setFinancialKey] = useState<number>(1);
   const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(null);
   const [copiedStoreLink, setCopiedStoreLink] = useState(false);
   const lastOrderCount = useRef(orders.length);
+
+  const handleTabChange = (newTab: AdminTab) => {
+    setTab(newTab);
+    if (newTab === "financial") {
+      setFinancialKey((k) => k + 1);
+    }
+  };
 
   // Enforce that a store admin only manages their own store
   useEffect(() => {
@@ -229,6 +255,20 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
           </div>
 
           <button
+            id="admin-header-financial-btn"
+            onClick={() => handleTabChange("financial")}
+            className={`hidden md:flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
+              tab === "financial"
+                ? "bg-amber-500 text-slate-950 shadow-sm font-extrabold"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+            }`}
+            title="Acessar Relatório de Faturamento e Métricas Financeiras"
+          >
+            <TrendingUp className={`h-4 w-4 ${tab === "financial" ? "text-slate-950" : "text-emerald-400"}`} />
+            <span>Financeiro</span>
+          </button>
+
+          <button
             onClick={() => {
               toggleSound();
               if (!soundEnabled) {
@@ -279,8 +319,13 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-800 bg-slate-900">
-        <TabButton active={tab === "orders"} onClick={() => setTab("orders")} icon={<Package className="h-4 w-4" />}>
+      <div className="flex border-b border-slate-800 bg-slate-900 overflow-x-auto">
+        <TabButton
+          id="tab-btn-orders"
+          active={tab === "orders"}
+          onClick={() => handleTabChange("orders")}
+          icon={<Package className="h-4 w-4" />}
+        >
           Pedidos
           {activeOrders > 0 && (
             <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">
@@ -288,30 +333,62 @@ export function AdminPanel({ onExit, onGoToSuperAdmin }: AdminPanelProps) {
             </span>
           )}
         </TabButton>
-        <TabButton active={tab === "menu"} onClick={() => setTab("menu")} icon={<UtensilsCrossed className="h-4 w-4" />}>
+        <TabButton
+          id="tab-btn-financial"
+          active={tab === "financial"}
+          onClick={() => handleTabChange("financial")}
+          icon={<TrendingUp className="h-4 w-4 text-emerald-400" />}
+        >
+          Financeiro
+        </TabButton>
+        <TabButton
+          id="tab-btn-customers"
+          active={tab === "customers"}
+          onClick={() => handleTabChange("customers")}
+          icon={<Users className="h-4 w-4" />}
+        >
+          Clientes
+        </TabButton>
+        <TabButton
+          id="tab-btn-menu"
+          active={tab === "menu"}
+          onClick={() => handleTabChange("menu")}
+          icon={<UtensilsCrossed className="h-4 w-4" />}
+        >
           Cardápio
         </TabButton>
-        <TabButton active={tab === "settings"} onClick={() => setTab("settings")} icon={<Settings className="h-4 w-4" />}>
-          Configurações da Loja
+        <TabButton
+          id="tab-btn-settings"
+          active={tab === "settings"}
+          onClick={() => handleTabChange("settings")}
+          icon={<Settings className="h-4 w-4" />}
+        >
+          Configurações
         </TabButton>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-gray-50 text-slate-900">
-        {tab === "orders" && <AdminOrders newOrderIds={newOrderIds} />}
-        {tab === "menu" && <AdminMenu />}
-        {tab === "settings" && <AdminSettings />}
+        <ErrorBoundary fallbackTitle="Erro ao carregar conteúdo da aba">
+          {tab === "orders" && <AdminOrders newOrderIds={newOrderIds} />}
+          {tab === "financial" && <AdminFinancialReport key={financialKey} />}
+          {tab === "customers" && <AdminCustomers />}
+          {tab === "menu" && <AdminMenu />}
+          {tab === "settings" && <AdminSettings />}
+        </ErrorBoundary>
       </div>
     </div>
   );
 }
 
 function TabButton({
+  id,
   active,
   onClick,
   icon,
   children,
 }: {
+  id?: string;
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
@@ -319,6 +396,7 @@ function TabButton({
 }) {
   return (
     <button
+      id={id}
       onClick={onClick}
       className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-xs sm:text-sm font-bold transition border-b-2 ${
         active

@@ -1,19 +1,57 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Top Food - Plataforma Multi-tenant de Delivery</title>
-    <meta name="description" content="Sistema multi-lojas Top Food com vitrines dinâmicas no Cloudflare D1/KV, painel do lojista com pedidos em tempo real, RBAC isolado e Super Admin." />
-    <meta property="og:title" content="Top Food - Plataforma Multi-tenant de Delivery" />
-    <meta property="og:description" content="Sistema multi-lojas Top Food com vitrines dinâmicas no Cloudflare D1/KV, painel do lojista com pedidos em tempo real, RBAC isolado e Super Admin." />
-    <meta property="og:image" content="https://bolt.new/static/og_default.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- PWA Manifest & Theme -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#dc2626" />
+    <meta name="background-color" content="#ffffff" />
+
+    <!-- iOS / Apple Web App Support -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Top Food" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Icons & Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+
+    <!-- Captura antecipada de beforeinstallprompt para Android / Chrome -->
+    <script>
+      window.__pwaInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__pwaInstallPrompt = e;
+        window.dispatchEvent(new Event('pwa-prompt-ready'));
+      });
+    </script>
+
+    <!-- Título e Descrição Principal -->
+    <title>Top Food</title>
+    <meta name="description" content="Faça seu pedido online no Top Food!" />
+
+    <!-- Meta Tags Open Graph (WhatsApp, Facebook, Telegram) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Top Food" />
+    <meta property="og:description" content="Faça seu pedido online no Top Food!" />
+    <meta property="og:image" content="https://top-food-delivery.marcelinosantana23.workers.dev/icon-512.png" />
+    <meta property="og:url" content="https://top-food-delivery.marcelinosantana23.workers.dev" />
+
+    <!-- Meta Tags Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="https://bolt.new/static/og_default.png" />
+    <meta name="twitter:title" content="Top Food" />
+    <meta name="twitter:description" content="Faça seu pedido online no Top Food!" />
+    <meta name="twitter:image" content="https://top-food-delivery.marcelinosantana23.workers.dev/icon-512.png" />
+
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+

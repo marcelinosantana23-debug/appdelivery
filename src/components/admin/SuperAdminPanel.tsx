@@ -519,28 +519,28 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-16">
+    <div className="min-h-screen w-full max-w-full box-border overflow-x-hidden bg-slate-950 text-slate-100 pb-16">
       {/* Top Header */}
-      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-red-500 text-white shadow-lg shadow-amber-500/20">
-              <Shield className="h-5 w-5" />
+      <header className="sticky top-0 z-30 w-full border-b border-slate-800 bg-slate-900/90 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-3.5 py-3 sm:px-6 sm:py-3.5 box-border">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-red-500 text-white shadow-lg shadow-amber-500/20">
+              <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-white sm:text-lg">Top Food Platform</h1>
-                <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h1 className="text-sm font-bold text-white sm:text-lg truncate">Top Food Platform</h1>
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] sm:text-xs font-semibold text-amber-400 border border-amber-500/30 shrink-0">
                   Super Admin
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <p className="text-[11px] sm:text-xs text-slate-400 truncate max-w-[180px] sm:max-w-none">
                   Logado como: <strong className="text-slate-200">{currentUser?.email}</strong>
                 </p>
                 <button
                   onClick={openCredentialsModal}
-                  className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/30 transition border border-amber-500/30"
+                  className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/30 transition border border-amber-500/30 shrink-0"
                   title="Clique para alterar e-mail e senha"
                 >
                   Alterar dados
@@ -549,13 +549,13 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
             <button
               onClick={openCredentialsModal}
-              className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-300 shadow-sm transition hover:bg-amber-500/25 active:scale-[0.98] sm:text-sm sm:px-3.5"
+              className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs font-semibold text-amber-300 shadow-sm transition hover:bg-amber-500/25 active:scale-[0.98] sm:text-sm sm:px-3.5 sm:py-2"
               title="Alterar e-mail e senha do Super Admin"
             >
-              <Key className="h-4 w-4 text-amber-400" />
+              <Key className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 shrink-0" />
               <span className="hidden sm:inline">Alterar E-mail / Senha</span>
               <span className="sm:hidden">Credenciais</span>
             </button>
@@ -564,14 +564,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 setIsModalOpen(true);
                 setCreatedSuccess(null);
               }}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-red-600/30 transition hover:brightness-110 sm:text-sm sm:px-4"
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-red-600/30 transition hover:brightness-110 sm:text-sm sm:px-4 sm:py-2"
             >
-              <Plus className="h-4 w-4" />
-              <span>Cadastrar Nova Lanchonete</span>
+              <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="hidden sm:inline">Cadastrar Nova Lanchonete</span>
+              <span className="sm:hidden">Nova Loja</span>
             </button>
             <button
               onClick={onExit}
-              className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white"
+              className="rounded-xl border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white sm:px-3 sm:py-2"
             >
               Ver Vitrine
             </button>
@@ -581,24 +582,24 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 onExit();
               }}
               title="Encerrar sessão"
-              className="rounded-xl border border-red-900/50 bg-red-950/40 p-2 text-red-400 transition hover:bg-red-900/50 hover:text-red-200"
+              className="rounded-xl border border-red-900/50 bg-red-950/40 p-1.5 sm:p-2 text-red-400 transition hover:bg-red-900/50 hover:text-red-200"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
+      <main className="mx-auto w-full max-w-7xl px-3.5 pt-6 sm:px-6 sm:pt-8 box-border">
         {/* Super Admin Security / Database Banner */}
         <section className="mb-6 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-slate-900/80 to-slate-900/60 p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3.5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/20 text-amber-300 shadow-inner">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/20 text-amber-300 shadow-inner">
                 <Database className="h-5 w-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-sm font-bold text-white sm:text-base">
                     Gestão de Acesso do Super Admin
@@ -608,7 +609,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     Cloudflare D1 Ativo
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-300">
+                <p className="mt-1 text-xs text-slate-300 break-all [overflow-wrap:anywhere]">
                   E-mail atual: <strong className="text-amber-300 font-mono">{currentUser?.email}</strong>. Você pode alterar seu e-mail e senha a qualquer momento com persistência no banco de dados.
                 </p>
               </div>
@@ -617,7 +618,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
             <button
               type="button"
               onClick={openCredentialsModal}
-              className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/20 px-4 py-2.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/30 active:scale-[0.98] shadow-md shadow-amber-500/10"
+              className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/20 px-4 py-2.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/30 active:scale-[0.98] shadow-md shadow-amber-500/10 w-full sm:w-auto"
             >
               <Key className="h-4 w-4 text-amber-400" />
               Alterar E-mail e Senha
@@ -626,47 +627,47 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         </section>
 
         {/* KPI Platform Cards */}
-        <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+        <section className="grid gap-2.5 sm:gap-4 [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))] w-full">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-5 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-medium uppercase tracking-wider">Total Lojas</span>
-              <Store className="h-4 w-4 text-amber-400" />
+              <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">Total Lojas</span>
+              <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 shrink-0" />
             </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-white sm:text-3xl">{totalTenants}</span>
-              <span className="text-xs text-emerald-400 font-semibold">{activeTenants} ativas</span>
+            <div className="mt-2 flex flex-wrap items-baseline gap-1.5 sm:gap-2">
+              <span className="text-xl sm:text-3xl font-black text-white">{totalTenants}</span>
+              <span className="text-[11px] sm:text-xs text-emerald-400 font-semibold">{activeTenants} ativas</span>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-5 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-medium uppercase tracking-wider">Lojas Inativas</span>
-              <Power className="h-4 w-4 text-red-400" />
+              <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">Lojas Inativas</span>
+              <Power className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-400 shrink-0" />
             </div>
             <div className="mt-2">
-              <span className="text-2xl font-black text-white sm:text-3xl">
+              <span className="text-xl sm:text-3xl font-black text-white">
                 {totalTenants - activeTenants}
               </span>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-5 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-medium uppercase tracking-wider">Pedidos na Rede</span>
-              <ShoppingBag className="h-4 w-4 text-blue-400" />
+              <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">Pedidos na Rede</span>
+              <ShoppingBag className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-400 shrink-0" />
             </div>
             <div className="mt-2">
-              <span className="text-2xl font-black text-white sm:text-3xl">{totalOrders}</span>
+              <span className="text-xl sm:text-3xl font-black text-white">{totalOrders}</span>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-5 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-medium uppercase tracking-wider">Volume Faturado</span>
-              <DollarSign className="h-4 w-4 text-emerald-400" />
+              <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">Volume Faturado</span>
+              <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400 shrink-0" />
             </div>
             <div className="mt-2">
-              <span className="text-2xl font-black text-emerald-400 sm:text-3xl">
+              <span className="text-lg sm:text-3xl font-black text-emerald-400 truncate block">
                 R$ {totalRevenue.toFixed(2).replace(".", ",")}
               </span>
             </div>
@@ -984,7 +985,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
           </div>
         ) : (
           /* Cards Grid com Box de Credenciais */
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 w-full">
             {filteredTenants.map((t) => {
               const isActive = t.status === "active";
               const adminLogin = (t as any).adminEmail || t.email;
@@ -994,18 +995,18 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               return (
                 <div
                   key={t.id}
-                  className={`relative flex flex-col justify-between rounded-2xl border transition-all ${
+                  className={`relative flex flex-col justify-between rounded-2xl border transition-all w-full min-w-0 overflow-hidden box-border ${
                     isActive
                       ? "border-slate-800 bg-slate-900/60 hover:border-slate-700 shadow-sm"
                       : "border-red-950/60 bg-slate-900/30 opacity-80"
                   }`}
                 >
                   {/* Top Store Info */}
-                  <div className="p-5">
+                  <div className="p-3.5 sm:p-5 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl text-2xl shadow-inner border border-white/10"
+                          className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-2xl shadow-inner border border-white/10"
                           style={{
                             backgroundColor: `${t.primaryColor || "#E63946"}20`,
                             color: t.primaryColor || "#E63946",
@@ -1013,13 +1014,13 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         >
                           <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <h3 className="font-bold text-white text-base leading-tight">
+                            <h3 className="font-bold text-white text-base leading-tight truncate">
                               {getSafeDisplayName(t.name, "Lanchonete")}
                             </h3>
                           </div>
-                          <span className="text-xs text-slate-400">/loja/{getSafeSlug(t.slug, "loja")}</span>
+                          <span className="text-xs text-slate-400 block truncate">/loja/{getSafeSlug(t.slug, "loja")}</span>
                         </div>
                       </div>
 
@@ -1027,7 +1028,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       <button
                         onClick={() => handleStatusToggle(t)}
                         title={isActive ? "Clique para desativar loja" : "Clique para ativar loja"}
-                        className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+                        className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold shrink-0 transition ${
                           isActive
                             ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
                             : "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20"
@@ -1046,17 +1047,17 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
                     {/* Meta info */}
                     <div className="mt-4 space-y-1.5 border-t border-slate-800/80 pt-3 text-xs text-slate-300">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500">E-mail de Contato:</span>
-                        <span className="font-medium text-slate-200">{t.email}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-500 shrink-0">E-mail de Contato:</span>
+                        <span className="font-medium text-slate-200 truncate" title={t.email}>{t.email}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500">WhatsApp de Pedidos:</span>
-                        <span className="font-medium text-slate-200">{t.whatsapp}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-500 shrink-0">WhatsApp de Pedidos:</span>
+                        <span className="font-medium text-slate-200 truncate">{t.whatsapp}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Chave PIX:</span>
-                        <span className="font-medium text-slate-200 max-w-[170px] truncate" title={t.pixKey}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-500 shrink-0">Chave PIX:</span>
+                        <span className="font-medium text-slate-200 truncate max-w-[170px]" title={t.pixKey}>
                           {t.pixKey}
                         </span>
                       </div>
@@ -1075,7 +1076,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     </div>
 
                     {/* Links Exclusivos e Isolados da Loja (Multi-tenant) */}
-                    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/80 p-3 space-y-3">
+                    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/80 p-2.5 sm:p-3 space-y-3">
                       {/* a) Vitrine Pública do Cliente */}
                       <div>
                         <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
@@ -1084,50 +1085,52 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono">/loja/{t.slug}</span>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-1.5">
                           <div
-                            className="flex-1 truncate rounded-lg border border-slate-800/90 bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-slate-300 select-all"
+                            className="w-full sm:w-auto flex-1 rounded-lg border border-slate-800/90 bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-slate-300 select-all break-all [overflow-wrap:anywhere]"
                             title={`${origin}/loja/${t.slug}`}
                           >
                             {origin}/loja/{t.slug}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(`${origin}/loja/${t.slug}`, `${t.slug}-public`)}
-                            className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
-                              copiedKey === `${t.slug}-public`
-                                ? "bg-emerald-500 text-white"
-                                : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
-                            }`}
-                            title="Copiar Link da Vitrine Pública"
-                          >
-                            {copiedKey === `${t.slug}-public` ? (
-                              <>
-                                <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                                <span>Copiado!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-3.5 w-3.5" />
-                                <span>Copiar Link</span>
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onViewStoreFront) {
-                                onViewStoreFront(t);
-                              } else {
-                                window.open(`/loja/${t.slug}`, "_blank");
-                              }
-                            }}
-                            className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
-                            title="Abrir Vitrine Pública da Lanchonete"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            <span>Abrir Loja</span>
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(`${origin}/loja/${t.slug}`, `${t.slug}-public`)}
+                              className={`flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                                copiedKey === `${t.slug}-public`
+                                  ? "bg-emerald-500 text-white"
+                                  : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
+                              }`}
+                              title="Copiar Link da Vitrine Pública"
+                            >
+                              {copiedKey === `${t.slug}-public` ? (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                                  <span>Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Copiar Link</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onViewStoreFront) {
+                                  onViewStoreFront(t);
+                                } else {
+                                  window.open(`/loja/${t.slug}`, "_blank");
+                                }
+                              }}
+                              className="flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
+                              title="Abrir Vitrine Pública da Lanchonete"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                              <span>Abrir Loja</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -1139,58 +1142,61 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono">/admin?tenant={t.slug}</span>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-1.5">
                           <div
-                            className="flex-1 truncate rounded-lg border border-slate-800/90 bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-slate-300 select-all"
+                            className="w-full sm:w-auto flex-1 rounded-lg border border-slate-800/90 bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-slate-300 select-all break-all [overflow-wrap:anywhere]"
                             title={`${origin}/admin?tenant=${t.slug}`}
                           >
                             {origin}/admin?tenant={t.slug}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(`${origin}/admin?tenant=${t.slug}`, `${t.slug}-admin`)}
-                            className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
-                              copiedKey === `${t.slug}-admin`
-                                ? "bg-emerald-500 text-white"
-                                : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
-                            }`}
-                            title="Copiar Link de Acesso ao Painel Admin"
-                          >
-                            {copiedKey === `${t.slug}-admin` ? (
-                              <>
-                                <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                                <span>Copiado!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-3.5 w-3.5" />
-                                <span>Copiar Link</span>
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onManageStore(t)}
-                            className="flex shrink-0 items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/20 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/30 transition"
-                            title="Acessar Painel de Administração desta Loja"
-                          >
-                            <span>Gerenciar</span>
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(`${origin}/admin?tenant=${t.slug}`, `${t.slug}-admin`)}
+                              className={`flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                                copiedKey === `${t.slug}-admin`
+                                  ? "bg-emerald-500 text-white"
+                                  : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
+                              }`}
+                              title="Copiar Link de Acesso ao Painel Admin"
+                            >
+                              {copiedKey === `${t.slug}-admin` ? (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                                  <span>Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Copiar Link</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onManageStore(t)}
+                              className="flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/20 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/30 transition"
+                              title="Acessar Painel de Administração desta Loja"
+                            >
+                              <Settings className="h-3.5 w-3.5 shrink-0" />
+                              <span>Gerenciar</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
 
                     {/* c) Credenciais de Acesso do Lojista (Login & Senha) */}
-                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2.5">
+                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 sm:p-3 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
-                          <Key className="h-3.5 w-3.5 text-amber-400" />
+                          <Key className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                           <span>Acesso do Lojista (Login & Senha)</span>
                         </span>
                         <button
                           type="button"
                           onClick={() => openTenantCredentialsModal(t)}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 hover:text-amber-200 underline transition"
+                          className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 hover:text-amber-200 underline transition shrink-0"
                           title="Alterar e-mail e senha no banco de dados"
                         >
                           <span>Alterar</span>
@@ -1199,12 +1205,12 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         {/* Login */}
-                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5">
+                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5 min-w-0">
                           <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                             Login (E-mail):
                           </span>
                           <div className="flex items-center justify-between gap-1 mt-0.5">
-                            <span className="font-mono text-slate-200 text-xs truncate select-all" title={adminLogin}>
+                            <span className="font-mono text-slate-200 text-xs select-all break-all [overflow-wrap:anywhere]" title={adminLogin}>
                               {adminLogin}
                             </span>
                             <button
@@ -1223,15 +1229,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         </div>
 
                         {/* Senha */}
-                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5">
+                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5 min-w-0">
                           <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                             Senha Atual:
                           </span>
                           <div className="flex items-center justify-between gap-1 mt-0.5">
-                            <span className="font-mono font-medium text-amber-300 text-xs select-all">
+                            <span className="font-mono font-medium text-amber-300 text-xs select-all break-all [overflow-wrap:anywhere]">
                               {isPassVisible ? adminPass : "••••••••"}
                             </span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
                                 onClick={() => toggleCardPasswordVisibility(t.id)}
@@ -1284,31 +1290,31 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   </div>
 
                   {/* Actions Footer */}
-                  <div className="border-t border-slate-800/80 bg-slate-950/40 p-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center flex-wrap gap-2">
+                  <div className="border-t border-slate-800/80 bg-slate-950/40 p-2.5 sm:p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 w-full sm:w-auto">
                       <button
                         onClick={() => onManageStore(t)}
-                        className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 py-2 px-3 text-xs font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
+                        className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 rounded-xl bg-amber-500/15 py-2 px-2.5 sm:px-3 text-xs font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
                       >
-                        <Settings className="h-3.5 w-3.5" />
+                        <Settings className="h-3.5 w-3.5 shrink-0" />
                         <span>Gerenciar Loja</span>
                       </button>
 
                       <button
                         onClick={() => openTenantCredentialsModal(t)}
-                        className="flex items-center gap-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 py-2 px-3 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/30"
+                        className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 py-2 px-2.5 sm:px-3 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/30"
                         title="Alterar Login e Senha do Lojista no Banco de Dados"
                       >
-                        <Key className="h-3.5 w-3.5 text-amber-400" />
+                        <Key className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                         <span>Alterar Login / Senha</span>
                       </button>
 
                       <button
                         onClick={() => handleOpenStoreConfig(t)}
-                        className="flex items-center gap-1.5 rounded-xl bg-slate-800/90 border border-slate-700 py-2 px-3 text-xs font-semibold text-slate-200 transition hover:bg-slate-750 hover:text-white"
+                        className="w-full sm:w-auto justify-center flex items-center gap-1.5 rounded-xl bg-slate-800/90 border border-slate-700 py-2 px-2.5 sm:px-3 text-xs font-semibold text-slate-200 transition hover:bg-slate-750 hover:text-white"
                         title="Configurações da Loja e Foto/Banner da Vitrine"
                       >
-                        <ImageIcon className="h-3.5 w-3.5 text-amber-400" />
+                        <ImageIcon className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                         <span>Configurações & Banner</span>
                       </button>
                     </div>
@@ -1316,9 +1322,9 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     <button
                       onClick={() => handleDelete(t)}
                       title="Excluir Lanchonete"
-                      className="flex items-center gap-1 rounded-xl border border-red-900/30 bg-red-950/20 px-3 py-2 text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 transition"
+                      className="w-full sm:w-auto justify-center flex items-center gap-1 rounded-xl border border-red-900/30 bg-red-950/20 px-3 py-2 text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 transition"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5 shrink-0" />
                       <span>Excluir</span>
                     </button>
                   </div>
@@ -1331,8 +1337,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
       {/* MODAL: Cadastrar Nova Lanchonete */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl text-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-2xl text-slate-100 box-border">
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div>
@@ -1340,7 +1346,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
                     <Sparkles className="h-4 w-4" />
                   </div>
-                  <h3 className="text-lg font-bold text-white">Cadastrar Nova Lanchonete</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Cadastrar Nova Lanchonete</h3>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
                   Gera uma nova instância virgem (limpa) com banco de dados e conta exclusiva para o cliente.
@@ -1367,65 +1373,67 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 </div>
 
                 {/* a) Link da Vitrine Pública do Cliente */}
-                <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 space-y-2">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 sm:p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
-                      <Store className="h-4 w-4" /> Link da Vitrine Pública do Cliente
+                      <Store className="h-4 w-4 shrink-0" /> Link da Vitrine Pública do Cliente
                     </span>
                     <span className="text-[10px] text-slate-500 font-mono">Para os clientes pedirem</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 truncate rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-200 select-all">
+                  <div className="flex flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-2">
+                    <div className="w-full sm:w-auto flex-1 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-200 select-all break-all [overflow-wrap:anywhere]">
                       {origin}/loja/{createdSuccess.tenant.slug}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyToClipboard(
-                          `${origin}/loja/${createdSuccess.tenant.slug}`,
-                          "modal-public"
-                        )
-                      }
-                      className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
-                        copiedKey === "modal-public"
-                          ? "bg-emerald-500 text-white"
-                          : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
-                      }`}
-                    >
-                      {copiedKey === "modal-public" ? (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                          <span>Copiado!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3.5 w-3.5" />
-                          <span>Copiar Link</span>
-                        </>
-                      )}
-                    </button>
-                    <a
-                      href={`/loja/${createdSuccess.tenant.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      <span>Abrir Loja</span>
-                    </a>
+                    <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard(
+                            `${origin}/loja/${createdSuccess.tenant.slug}`,
+                            "modal-public"
+                          )
+                        }
+                        className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                          copiedKey === "modal-public"
+                            ? "bg-emerald-500 text-white"
+                            : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
+                        }`}
+                      >
+                        {copiedKey === "modal-public" ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                            <span>Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Copiar Link</span>
+                          </>
+                        )}
+                      </button>
+                      <a
+                        href={`/loja/${createdSuccess.tenant.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        <span>Abrir Loja</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
 
                 {/* b) Link de Acesso ao Painel Admin da Loja */}
-                <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 space-y-2">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 sm:p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-xs font-bold text-sky-400">
-                      <Settings className="h-4 w-4" /> Link de Acesso ao Painel Admin da Loja
+                      <Settings className="h-4 w-4 shrink-0" /> Link de Acesso ao Painel Admin da Loja
                     </span>
                     <span className="text-[10px] text-slate-500 font-mono">Para o lojista gerenciar</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 truncate rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-200 select-all">
+                  <div className="flex flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-2">
+                    <div className="w-full sm:w-auto flex-1 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-200 select-all break-all [overflow-wrap:anywhere]">
                       {origin}/admin?tenant={createdSuccess.tenant.slug}
                     </div>
                     <button
@@ -1436,7 +1444,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           "modal-admin"
                         )
                       }
-                      className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                      className={`flex w-full sm:w-auto shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
                         copiedKey === "modal-admin"
                           ? "bg-emerald-500 text-white"
                           : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
@@ -1535,6 +1543,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         deliveryFee: 5.0,
                         address: "",
                         primaryColor: "#E63946",
+                        bannerImage: "",
                       });
                     }}
                     className="rounded-xl border border-slate-800 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"
@@ -1787,8 +1796,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
       {/* Tenant Store Credentials Modal (Super Admin managing merchant login and password) */}
       {isTenantCredentialsModalOpen && selectedTenantForCredentials && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-2xl my-8 box-border">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
               <div className="flex items-center gap-3">
@@ -2001,8 +2010,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
       {/* Super Admin Credentials Modal */}
       {isCredentialsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-2xl my-8 box-border">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
               <div className="flex items-center gap-3">
@@ -2170,8 +2179,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       )}
       {/* Super Admin Store Settings & Banner Modal */}
       {isStoreConfigModalOpen && editingTenantConfig && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl animate-scale-in text-white my-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl sm:rounded-3xl border border-slate-700 bg-slate-900 p-4 sm:p-6 shadow-2xl animate-scale-in text-white my-auto box-border">
             <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-amber-500/20 text-xl border border-amber-500/30">

@@ -6,6 +6,7 @@ import type {
   OrderStatus,
   TenantStatus,
   TenantCredential,
+  FinancialReportData,
 } from "@/types";
 
 const BASE_URL = "/api";
@@ -377,4 +378,45 @@ export async function fetchOrderDetailsApi(
     return { success: false, error: err.message || "Erro ao consultar status do pedido" };
   }
 }
+
+export async function fetchTenantFinancialReportApi(
+  slugOrId: string,
+  params?: {
+    month?: number;
+    year?: number;
+    startDate?: string;
+    endDate?: string;
+  }
+): Promise<{
+  success: boolean;
+  tenant?: { id: string; name: string; slug: string };
+  period?: FinancialReportData["period"];
+  metrics?: FinancialReportData["metrics"];
+  dailyRevenue?: FinancialReportData["dailyRevenue"];
+  paymentBreakdown?: FinancialReportData["paymentBreakdown"];
+  orders?: Order[];
+  error?: string;
+}> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.month) query.set("month", String(params.month));
+    if (params?.year) query.set("year", String(params.year));
+    if (params?.startDate) query.set("startDate", params.startDate);
+    if (params?.endDate) query.set("endDate", params.endDate);
+
+    const queryString = query.toString();
+    const url = `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/financial-report${
+      queryString ? `?${queryString}` : ""
+    }`;
+
+    const res = await fetch(url);
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || "Erro de conexão ao carregar relatório financeiro",
+    };
+  }
+}
+
 

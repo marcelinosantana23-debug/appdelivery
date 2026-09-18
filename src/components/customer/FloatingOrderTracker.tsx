@@ -1,16 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Package,
+  PackageCheck,
   ChefHat,
   Bike,
   ShoppingBag,
-  ChevronRight,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   X,
-  Clock,
   RefreshCw,
+  Phone,
+  MapPin,
+  CreditCard,
+  Sparkles,
 } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { fetchOrderDetailsApi } from "@/services/api";
+import { useStore } from "@/context/StoreContext";
+import { formatPrice } from "@/utils/order";
 import {
   getActiveOrderData,
   updateActiveOrderStatus,
@@ -20,26 +27,88 @@ import {
 interface FloatingOrderTrackerProps {
   currentTenantSlug?: string;
   hasFloatingCart?: boolean;
-  onOpenOrder: (order: Order) => void;
 }
 
 export function FloatingOrderTracker({
   currentTenantSlug,
   hasFloatingCart = false,
-  onOpenOrder,
 }: FloatingOrderTrackerProps) {
+  const { config, orders } = useStore();
   const [orderId, setOrderId] = useState<string | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
   const [status, setStatus] = useState<OrderStatus>("received");
   const [isPickup, setIsPickup] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [isCompletedCelebration, setIsCompletedCelebration] = useState(false);
 
-  // Checa se há pedido ativo válido vinculado à loja atual
+  // Mapeamento das 4 etapas visuais simples exigidas:
+  // [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega ] ➔ [ Concluído ]
+  const currentStepNumber = useMemo(() => {
+    switch (status) {
+      case "received":
+        return 1;
+      case "preparing":
+        return 2;
+      case "delivering":
+        return 3;
+      case "done":
+        return 4;
+      default:
+        return 1;
+    }
+  }, [status]);
+
+  const stepsConfig = useMemo(
+    () => [
+      {
+        step: 1,
+        key: "received",
+        label: "Pedido Recebido",
+        shortLabel: "Recebido",
+        icon: PackageCheck,
+      },
+      {
+        step: 2,
+        key: "preparing",
+        label: "Em Preparo",
+        shortLabel: "Em Preparo",
+        icon: ChefHat,
+      },
+      {
+        step: 3,
+        key: "delivering",
+        label: isPickup ? "Pronto no Balcão" : "Saiu para Entrega",
+        shortLabel: isPickup ? "Pronto" : "A Caminho",
+        icon: isPickup ? ShoppingBag : Bike,
+      },
+      {
+        step: 4,
+        key: "done",
+        label: "Concluído",
+        shortLabel: "Concluído",
+        icon: CheckCircle2,
+      },
+    ],
+    [isPickup]
+  );
+
+  // Link para WhatsApp da loja
+  const storeWhatsAppUrl = useMemo(() => {
+    const phone = config.whatsapp ? config.whatsapp.replace(/\D/g, "") : "";
+    if (!phone || !orderId) return null;
+    const msg = encodeURIComponent(
+      `Olá! Gostaria de acompanhar meu pedido #${orderId} na loja ${config.name}.`
+    );
+    return `https://wa.me/55${phone}?text=${msg}`;
+  }, [config.whatsapp, config.name, orderId]);
+
+  // Consulta o localStorage para verificar se existe um pedido ativo vinculado a esta loja
   const checkActiveOrder = useCallback(() => {
     const data = getActiveOrderData(currentTenantSlug);
 
-    // Se não há dados, ou se o status for finalizado/cancelado, oculta imediatamente
+    // Se não há dados, ou se o status salvo já for finalizado/cancelado, oculta totalmente (tela limpa)
     if (!data || !data.orderId || data.status === "done" || data.status === "cancelled") {
       setOrderId(null);
       setOrder(null);
@@ -47,9 +116,50 @@ export function FloatingOrderTracker({
     }
 
     setOrderId(data.orderId);
-    setStatus(data.status);
+    if (data.status) {
+      setStatus(data.status);
+    }
     setIsPickup(data.orderType === "pickup");
   }, [currentTenantSlug]);
+
+  // Sincroniza pedido em tempo real com o array de pedidos do StoreContext caso já esteja na memória
+  useEffect(() => {
+    if (!orderId) return;
+    const cleanId = orderId.replace(/^#/, "");
+    const matchingOrder = orders.find(
+      (o) => o.id === orderId || o.id === `#${cleanId}` || o.id.replace(/^#/, "") === cleanId
+    );
+
+    if (matchingOrder) {
+      setOrder(matchingOrder);
+      if (matchingOrder.status !== status) {
+        setStatus(matchingOrder.status);
+      }
+      setIsPickup(
+        matchingOrder.orderType === "pickup" ||
+          (matchingOrder as any).delivery_type === "pickup"
+      );
+
+      // Se passou para concluído, agenda fechamento automático
+      if (matchingOrder.status === "done") {
+        setIsCompletedCelebration(true);
+        clearActiveOrder();
+        const t = setTimeout(() => {
+          setOrderId(null);
+          setOrder(null);
+          setIsCompletedCelebration(false);
+        }, 4000);
+        return () => clearTimeout(t);
+      } else if (matchingOrder.status === "cancelled") {
+        clearActiveOrder();
+        const t = setTimeout(() => {
+          setOrderId(null);
+          setOrder(null);
+        }, 3000);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [orders, orderId, status]);
 
   // Busca o status atualizado do pedido na API do backend
   const pollOrderStatus = useCallback(
@@ -59,26 +169,45 @@ export function FloatingOrderTracker({
       try {
         const res = await fetchOrderDetailsApi(idToPoll, currentTenantSlug);
         if (res.success && res.order) {
-          // Se o pedido foi concluído ou cancelado no backend, oculta o banner imediatamente
-          if (res.order.status === "done" || res.order.status === "cancelled") {
+          const apiOrder = res.order;
+          setOrder(apiOrder);
+          setStatus(apiOrder.status);
+          setIsPickup(
+            apiOrder.orderType === "pickup" || (apiOrder as any).delivery_type === "pickup"
+          );
+
+          // Se o pedido foi concluído ("Concluído" ou "Entregue")
+          if (apiOrder.status === "done") {
+            setIsCompletedCelebration(true);
+            updateActiveOrderStatus("done");
             clearActiveOrder();
-            setOrderId(null);
-            setOrder(null);
+            setTimeout(() => {
+              setOrderId(null);
+              setOrder(null);
+              setIsCompletedCelebration(false);
+            }, 4000);
             return;
           }
 
-          setOrder(res.order);
-          setStatus(res.order.status);
-          setIsPickup(res.order.orderType === "pickup" || (res.order as any).delivery_type === "pickup");
-          updateActiveOrderStatus(res.order.status);
-        } else {
-          // Se a API não encontrou o pedido para este tenant, remove o pedido fantasma
+          // Se o pedido foi cancelado
+          if (apiOrder.status === "cancelled") {
+            clearActiveOrder();
+            setTimeout(() => {
+              setOrderId(null);
+              setOrder(null);
+            }, 3000);
+            return;
+          }
+
+          updateActiveOrderStatus(apiOrder.status);
+        } else if (res.error && (res.error.includes("404") || res.error.includes("not found"))) {
+          // Se a API não encontrou o pedido para esta loja, remove do localStorage
           clearActiveOrder();
           setOrderId(null);
           setOrder(null);
         }
       } catch (err) {
-        console.warn("Erro ao consultar status do pedido ativo:", err);
+        console.warn("Aviso ao consultar status do pedido ativo:", err);
       } finally {
         setIsPolling(false);
       }
@@ -86,12 +215,17 @@ export function FloatingOrderTracker({
     [currentTenantSlug]
   );
 
-  // Inicialização e listeners de atualização de pedidos
+  // Inicialização e listeners de eventos do localStorage e StoreContext
   useEffect(() => {
     checkActiveOrder();
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "topfood_active_order_id" || e.key === "topfood_active_order_data") {
+      if (
+        e.key === "topfood_active_order_id" ||
+        e.key === "active_order_id" ||
+        e.key === "topfood_active_order_data" ||
+        e.key === "topfood_active_order_status"
+      ) {
         checkActiveOrder();
         setIsDismissed(false);
       }
@@ -101,16 +235,32 @@ export function FloatingOrderTracker({
       setOrderId(null);
       setOrder(null);
       setIsDismissed(true);
+      setIsCompletedCelebration(false);
     };
 
     const handleActiveOrderUpdate = (e: any) => {
       const detail = e.detail;
       if (!detail) return;
 
-      if (detail.status === "done" || detail.status === "cancelled") {
+      if (detail.status === "done") {
+        setStatus("done");
+        setIsCompletedCelebration(true);
         clearActiveOrder();
-        setOrderId(null);
-        setOrder(null);
+        setTimeout(() => {
+          setOrderId(null);
+          setOrder(null);
+          setIsCompletedCelebration(false);
+        }, 4000);
+        return;
+      }
+
+      if (detail.status === "cancelled") {
+        setStatus("cancelled");
+        clearActiveOrder();
+        setTimeout(() => {
+          setOrderId(null);
+          setOrder(null);
+        }, 3000);
         return;
       }
 
@@ -122,7 +272,9 @@ export function FloatingOrderTracker({
       }
       if (detail.order) {
         setOrder(detail.order);
-        setIsPickup(detail.order.orderType === "pickup" || detail.order.delivery_type === "pickup");
+        setIsPickup(
+          detail.order.orderType === "pickup" || detail.order.delivery_type === "pickup"
+        );
       }
       setIsDismissed(false);
     };
@@ -138,124 +290,105 @@ export function FloatingOrderTracker({
     };
   }, [checkActiveOrder]);
 
-  // Polling automático a cada 5 segundos enquanto o pedido estiver ativo
+  // Polling automático a cada 3.5 segundos enquanto o pedido estiver ativo
   useEffect(() => {
-    if (!orderId || isDismissed) return;
+    if (!orderId || isDismissed || isCompletedCelebration) return;
 
     pollOrderStatus(orderId);
 
     const interval = setInterval(() => {
       pollOrderStatus(orderId);
-    }, 5000);
+    }, 3500);
 
     return () => clearInterval(interval);
-  }, [orderId, isDismissed, pollOrderStatus]);
+  }, [orderId, isDismissed, isCompletedCelebration, pollOrderStatus]);
 
-  // Se não há pedido ativo ou foi encerrado/dispensado, NUNCA exibe nada (anti-fantasma)
-  if (!orderId || isDismissed || status === "done" || status === "cancelled") {
-    return null;
-  }
-
-  // Configuração visual dinâmica conforme Regra 3 (Entrega vs. Retirada no Balcão)
-  const getDisplayConfig = () => {
+  // Informações de status contextual
+  const getStatusDetails = () => {
     if (status === "received") {
       return {
-        label: "Recebido",
-        desc: "Seu pedido foi recebido e aguarda confirmação da loja ⏳",
-        step: 1,
-        totalSteps: 3,
-        stepLabel: "Recebido",
-        bgColor: "from-amber-500/10 to-amber-500/5",
-        textColor: "text-amber-700 dark:text-amber-400",
-        badgeBg: "bg-amber-100 dark:bg-amber-950/60",
-        badgeText: "text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60",
-        dotColor: "bg-amber-500",
-        progressBarColor: "w-1/3 bg-amber-500",
-        icon: Package,
+        badge: "Recebido",
+        title: "Pedido Recebido!",
+        description: "Seu pedido foi registrado e aguarda confirmação da cozinha.",
+        accentColor: "text-amber-600 dark:text-amber-400",
+        badgeBg: "bg-amber-100 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300",
+        pulseColor: "bg-amber-500",
+        icon: PackageCheck,
       };
     }
-
     if (status === "preparing") {
       return {
-        label: "Em preparo",
-        desc: "Seu pedido foi aceito e está sendo preparado! 🍳",
-        step: 2,
-        totalSteps: 3,
-        stepLabel: "Em preparo",
-        bgColor: "from-orange-500/10 to-orange-500/5",
-        textColor: "text-orange-700 dark:text-orange-400",
-        badgeBg: "bg-orange-100 dark:bg-orange-950/60",
-        badgeText: "text-orange-800 dark:text-orange-300 border border-orange-200 dark:border-orange-800/60",
-        dotColor: "bg-orange-500",
-        progressBarColor: "w-2/3 bg-orange-500",
+        badge: "Em Preparo",
+        title: "Em Preparo!",
+        description: "A cozinha já aceitou seu pedido e está preparando tudo com cuidado.",
+        accentColor: "text-orange-600 dark:text-orange-400",
+        badgeBg: "bg-orange-100 dark:bg-orange-950/60 border-orange-200 dark:border-orange-800/60 text-orange-800 dark:text-orange-300",
+        pulseColor: "bg-orange-500",
         icon: ChefHat,
       };
     }
-
-    // status === "delivering"
-    if (isPickup) {
+    if (status === "delivering") {
+      if (isPickup) {
+        return {
+          badge: "Pronto no Balcão",
+          title: "Pronto para Retirada! 🛍️",
+          description: "Seu pedido já está pronto! Você já pode retirar no balcão da loja.",
+          accentColor: "text-emerald-600 dark:text-emerald-400",
+          badgeBg: "bg-emerald-100 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300",
+          pulseColor: "bg-emerald-500",
+          icon: ShoppingBag,
+        };
+      }
       return {
-        label: "Pronto p/ Retirada",
-        desc: "Seu pedido está pronto para retirada no balcão! 🛍️",
-        step: 3,
-        totalSteps: 3,
-        stepLabel: "Pronto no Balcão",
-        bgColor: "from-emerald-500/10 to-emerald-500/5",
-        textColor: "text-emerald-700 dark:text-emerald-400",
-        badgeBg: "bg-emerald-100 dark:bg-emerald-950/60",
-        badgeText: "text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60",
-        dotColor: "bg-emerald-500",
-        progressBarColor: "w-full bg-emerald-500",
-        icon: ShoppingBag,
+        badge: "Saiu para Entrega",
+        title: "Saiu para Entrega! 🛵",
+        description: "O entregador já está a caminho com seu pedido.",
+        accentColor: "text-blue-600 dark:text-blue-400",
+        badgeBg: "bg-blue-100 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800/60 text-blue-800 dark:text-blue-300",
+        pulseColor: "bg-blue-500",
+        icon: Bike,
       };
     }
-
-    // status === "delivering" (delivery flow)
+    if (status === "done") {
+      return {
+        badge: "Concluído",
+        title: "Pedido Concluído! 🎉",
+        description: "Seu pedido foi entregue com sucesso. Bom apetite!",
+        accentColor: "text-emerald-600 dark:text-emerald-400",
+        badgeBg: "bg-emerald-100 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300",
+        pulseColor: "bg-emerald-500",
+        icon: CheckCircle2,
+      };
+    }
+    // Cancelled
     return {
-      label: "Saiu para entrega",
-      desc: "Seu pedido saiu para entrega! 🛵",
-      step: 3,
-      totalSteps: 3,
-      stepLabel: "Em entrega",
-      bgColor: "from-blue-500/10 to-blue-500/5",
-      textColor: "text-blue-700 dark:text-blue-400",
-      badgeBg: "bg-blue-100 dark:bg-blue-950/60",
-      badgeText: "text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60",
-      dotColor: "bg-blue-500",
-      progressBarColor: "w-full bg-blue-500",
-      icon: Bike,
+      badge: "Cancelado",
+      title: "Pedido Cancelado",
+      description: "Este pedido foi cancelado pelo estabelecimento.",
+      accentColor: "text-red-600 dark:text-red-400",
+      badgeBg: "bg-red-100 dark:bg-red-950/60 border-red-200 dark:border-red-800/60 text-red-800 dark:text-red-300",
+      pulseColor: "bg-red-500",
+      icon: X,
     };
-  };
-
-  const config = getDisplayConfig();
-  const StatusIcon = config.icon;
-
-  const handleCardClick = () => {
-    if (order) {
-      onOpenOrder(order);
-    } else {
-      const fallbackOrder: Order = {
-        id: orderId,
-        items: [],
-        orderType: isPickup ? "pickup" : "delivery",
-        paymentMethod: "pix",
-        subtotal: 0,
-        deliveryFee: 0,
-        total: 0,
-        status: status,
-        customerName: "Cliente",
-        customerPhone: "",
-        createdAt: Date.now(),
-        statusHistory: [{ status: status, timestamp: Date.now() }],
-      };
-      onOpenOrder(fallbackOrder);
-    }
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDismissed(true);
   };
+
+  // Se não há pedido ativo ou foi dispensado, NUNCA exibe nada (tela 100% limpa)
+  if (!orderId || isDismissed) {
+    return null;
+  }
+
+  // Se o pedido já for cancelado e não estiver em celebração, oculta imediatamente
+  if (status === "cancelled" && !order) {
+    return null;
+  }
+
+  const details = getStatusDetails();
+  const ActiveIcon = details.icon;
 
   return (
     <div
@@ -264,91 +397,258 @@ export function FloatingOrderTracker({
         hasFloatingCart ? "bottom-24 sm:bottom-28" : "bottom-3 sm:bottom-4"
       }`}
     >
-      <div className="mx-auto max-w-lg pointer-events-auto">
+      <div className="mx-auto max-w-xl pointer-events-auto">
         <div
-          onClick={handleCardClick}
-          className="group relative cursor-pointer overflow-hidden rounded-2xl border border-gray-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl transition-all hover:shadow-amber-500/10 hover:border-amber-300 dark:hover:border-amber-700 active:scale-[0.99] p-3.5 sm:p-4"
+          className={`relative overflow-hidden rounded-2xl sm:rounded-3xl border border-gray-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-2xl transition-all duration-300 ${
+            status === "done"
+              ? "ring-2 ring-emerald-500/50 shadow-emerald-500/10"
+              : "shadow-black/15 hover:shadow-black/20"
+          }`}
         >
-          {/* Fundo sutil com gradiente */}
-          <div
-            className={`absolute inset-0 bg-gradient-to-r ${config.bgColor} pointer-events-none transition-colors duration-500`}
-          />
-
-          <div className="relative flex items-center justify-between gap-3">
-            {/* Ícone com pulso e status */}
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${config.badgeBg} ${config.textColor} shadow-sm`}
-              >
-                <StatusIcon className="h-6 w-6 transition-transform group-hover:scale-110" />
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span
-                    className={`animate-ping absolute inline-flex h-full w-full rounded-full ${config.dotColor} opacity-75`}
-                  />
-                  <span
-                    className={`relative inline-flex rounded-full h-3 w-3 ${config.dotColor}`}
-                  />
-                </span>
-              </div>
-
-              {/* Textos de status */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-xs font-bold text-gray-900 dark:text-white">
-                    Pedido {orderId}
-                  </span>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tracking-tight ${config.badgeBg} ${config.badgeText}`}
-                  >
-                    {config.label}
-                  </span>
-                  {isPolling && (
-                    <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />
-                  )}
-                </div>
-                <p className="mt-0.5 text-xs text-gray-700 dark:text-gray-200 font-medium truncate">
-                  {config.desc}
-                </p>
-              </div>
-            </div>
-
-            {/* Ações */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <div className="hidden sm:flex flex-col items-end">
-                <span className="text-[10px] text-gray-400 flex items-center gap-1 font-medium">
-                  <Clock className="h-3 w-3 text-emerald-500" />
-                  Ao vivo
-                </span>
-                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center">
-                  Acompanhar
-                  <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                </span>
-              </div>
-
-              <button
-                type="button"
-                id="dismiss-tracker-banner"
-                onClick={handleDismiss}
-                title="Minimizar aviso"
-                className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+          {/* Barra de destaque superior de progresso animado */}
+          <div className="h-1.5 w-full bg-gray-100 dark:bg-slate-800 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-700 ease-out ${
+                status === "done"
+                  ? "bg-emerald-500 w-full"
+                  : status === "delivering"
+                  ? "bg-blue-500 w-3/4"
+                  : status === "preparing"
+                  ? "bg-orange-500 w-1/2"
+                  : "bg-amber-500 w-1/4"
+              }`}
+            />
           </div>
 
-          {/* Barra de progresso visual */}
-          <div className="relative mt-3 pt-1">
-            <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400 mb-1">
-              <span>Recebido</span>
-              <span>Em preparo</span>
-              <span>{isPickup ? "Pronto no Balcão" : "Saiu p/ Entrega"}</span>
+          <div className="p-3.5 sm:p-4">
+            {/* Cabeçalho do Card Flutuante */}
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                {/* Ícone com pulso em tempo real */}
+                <div
+                  className={`relative flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl border ${details.badgeBg} shadow-sm`}
+                >
+                  <ActiveIcon className={`h-5 w-5 sm:h-6 sm:w-6 ${details.accentColor}`} />
+                  {status !== "done" && status !== "cancelled" && (
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span
+                        className={`animate-ping absolute inline-flex h-full w-full rounded-full ${details.pulseColor} opacity-75`}
+                      />
+                      <span
+                        className={`relative inline-flex rounded-full h-3 w-3 ${details.pulseColor}`}
+                      />
+                    </span>
+                  )}
+                </div>
+
+                {/* Textos de identificação e status atual */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-bold text-gray-900 dark:text-white">
+                      Pedido #{orderId}
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] sm:text-[11px] font-bold ${details.badgeBg}`}
+                    >
+                      {details.badge}
+                    </span>
+                    {isPolling && (
+                      <RefreshCw
+                        className="h-3 w-3 animate-spin text-gray-400 shrink-0"
+                        title="Atualizando status..."
+                      />
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300 font-medium truncate">
+                    {details.description}
+                  </p>
+                </div>
+              </div>
+
+              {/* Ações da direita: Resumo, expandir e fechar */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {order?.total ? (
+                  <span className="hidden sm:inline-block text-xs font-bold text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                    {formatPrice(order.total, config)}
+                  </span>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => setIsExpanded((prev) => !prev)}
+                  className="flex h-8 items-center gap-1 px-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                  title={isExpanded ? "Ocultar resumo" : "Ver resumo"}
+                >
+                  <span className="hidden sm:inline">{isExpanded ? "Ocultar" : "Resumo"}</span>
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  id="dismiss-tracker-banner"
+                  onClick={handleDismiss}
+                  title="Minimizar acompanhamento"
+                  className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-800">
-              <div
-                className={`h-full rounded-full transition-all duration-700 ease-out ${config.progressBarColor}`}
-              />
+
+            {/* As 4 Etapas Visuais Simples:
+                [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega ] ➔ [ Concluído ] */}
+            <div className="mt-3.5 pt-2 border-t border-gray-100 dark:border-slate-800/80">
+              <div className="relative flex items-center justify-between">
+                {/* Linha de fundo dos conectores */}
+                <div className="absolute left-4 right-4 top-4 -translate-y-1/2 h-1 bg-gray-200 dark:bg-slate-800 -z-0 rounded-full" />
+
+                {/* Linha de progresso preenchida em tempo real */}
+                <div
+                  className="absolute left-4 top-4 -translate-y-1/2 h-1 bg-emerald-500 -z-0 rounded-full transition-all duration-700 ease-out"
+                  style={{
+                    width:
+                      currentStepNumber === 1
+                        ? "0%"
+                        : currentStepNumber === 2
+                        ? "33%"
+                        : currentStepNumber === 3
+                        ? "66%"
+                        : "calc(100% - 2rem)",
+                  }}
+                />
+
+                {/* Os 4 Nós das Etapas */}
+                {stepsConfig.map((s) => {
+                  const isPast = s.step < currentStepNumber;
+                  const isCurrent = s.step === currentStepNumber;
+                  const StepIcon = s.icon;
+
+                  let nodeStyles = "bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-slate-700";
+                  let labelStyles = "text-gray-400 dark:text-gray-500 font-medium";
+
+                  if (isPast) {
+                    nodeStyles = "bg-emerald-500 text-white shadow-sm";
+                    labelStyles = "text-emerald-700 dark:text-emerald-400 font-semibold";
+                  } else if (isCurrent) {
+                    if (s.key === "received") {
+                      nodeStyles = "bg-amber-500 text-white shadow-md ring-4 ring-amber-500/20";
+                      labelStyles = "text-amber-800 dark:text-amber-300 font-bold";
+                    } else if (s.key === "preparing") {
+                      nodeStyles = "bg-orange-500 text-white shadow-md ring-4 ring-orange-500/20";
+                      labelStyles = "text-orange-800 dark:text-orange-300 font-bold";
+                    } else if (s.key === "delivering") {
+                      nodeStyles = "bg-blue-500 text-white shadow-md ring-4 ring-blue-500/20";
+                      labelStyles = "text-blue-800 dark:text-blue-300 font-bold";
+                    } else {
+                      nodeStyles = "bg-emerald-500 text-white shadow-md ring-4 ring-emerald-500/20";
+                      labelStyles = "text-emerald-800 dark:text-emerald-300 font-bold";
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={s.step}
+                      className="relative z-10 flex flex-col items-center flex-1 text-center"
+                    >
+                      <div
+                        className={`relative flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full transition-all duration-300 ${nodeStyles}`}
+                      >
+                        {isPast ? (
+                          <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 stroke-[2.5]" />
+                        ) : (
+                          <StepIcon className={`h-4 w-4 sm:h-4.5 sm:w-4.5 ${isCurrent ? "scale-110" : ""}`} />
+                        )}
+
+                        {/* Efeito pulsante na etapa atual */}
+                        {isCurrent && status !== "done" && status !== "cancelled" && (
+                          <span className="absolute inset-0 -z-10 animate-ping rounded-full bg-current opacity-30" />
+                        )}
+                      </div>
+
+                      <span className={`mt-1.5 text-[10px] sm:text-[11px] leading-tight transition-colors ${labelStyles}`}>
+                        <span className="hidden sm:inline">{s.label}</span>
+                        <span className="sm:hidden">{s.shortLabel}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Aviso de conclusão comemorativo automático */}
+            {isCompletedCelebration && (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-2.5 text-xs text-emerald-800 dark:text-emerald-200 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span className="font-semibold">Pedido concluído! O aviso sumirá em instantes.</span>
+                </div>
+                <span className="text-[10px] text-emerald-600 font-mono">Concluído</span>
+              </div>
+            )}
+
+            {/* Seção resumida expansível (Sem modais ou telas extras) */}
+            {isExpanded && (
+              <div className="mt-3.5 pt-3 border-t border-gray-100 dark:border-slate-800 text-xs space-y-2.5 animate-slide-down">
+                {/* Itens do pedido */}
+                {order?.items && order.items.length > 0 ? (
+                  <div className="rounded-xl bg-gray-50 dark:bg-slate-800/60 p-2.5 space-y-1.5">
+                    <p className="font-bold text-gray-700 dark:text-gray-300 text-[11px] uppercase tracking-wider">
+                      Itens do Pedido:
+                    </p>
+                    <div className="max-h-36 overflow-y-auto space-y-1 divide-y divide-gray-100 dark:divide-slate-700/50">
+                      {order.items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-start pt-1 first:pt-0">
+                          <span className="text-gray-800 dark:text-gray-200 font-medium">
+                            {item.quantity}x {item.product.name}
+                          </span>
+                          <span className="text-gray-500 dark:text-gray-400 font-mono">
+                            {formatPrice(item.totalPrice, config)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Detalhes de entrega ou retirada */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-slate-800/60 p-2 text-gray-700 dark:text-gray-300">
+                    <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span className="truncate">
+                      {isPickup
+                        ? "Retirada no Balcão da Loja"
+                        : order?.address
+                        ? `${order.address.street}, ${order.address.number}`
+                        : "Entrega em Domicílio"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-slate-800/60 p-2 text-gray-700 dark:text-gray-300">
+                    <CreditCard className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span className="capitalize truncate">
+                      Pagamento: {order?.paymentMethod || "Não informado"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Botão de contato direto pelo WhatsApp se disponível */}
+                {storeWhatsAppUrl && (
+                  <a
+                    href={storeWhatsAppUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-3 transition text-xs shadow-sm"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    Falar com a Loja no WhatsApp
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

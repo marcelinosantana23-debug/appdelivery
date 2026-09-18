@@ -28,7 +28,7 @@ api.use(
 
 // Resposta expressa de pré-vôo OPTIONS para clientes móveis e redes externas
 api.options("*", (c) => {
-  return c.text("", 204);
+  return c.body(null, 204);
 });
 
 // Helper para instanciar a camada de banco de dados diretamente com o objeto env da requisição Cloudflare Workers
@@ -1200,6 +1200,46 @@ api.get("/tenants/:slugOrId/orders", async (c) => {
   return c.json({ success: true, orders }, 200);
 });
 
+// ===================== CLIENTES (CADASTRO E CONSULTA) =====================
+api.get("/tenants/:slugOrId/customers", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const customers = await db.getCustomersByTenant(tenant.id);
+    return c.json({ success: true, customers }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao listar clientes" }, 500);
+  }
+});
+
+api.get("/tenants/:slugOrId/customers/lookup", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const phone = c.req.query("phone");
+
+    if (!phone) {
+      return c.json({ success: false, error: "Telefone não informado" }, 400);
+    }
+
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const customer = await db.getCustomerByPhone(tenant.id, phone);
+    return c.json({ success: true, customer }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao consultar cliente" }, 500);
+  }
+});
+
 // SSE Stream para escuta de pedidos em tempo real no painel do restaurante
 api.get("/tenants/:slugOrId/orders/stream", async (c) => {
   const db = getDb(c);
@@ -1391,4 +1431,51 @@ api.get("/tenants/:slugOrId/orders/:orderId", async (c) => {
   }
 });
 
+// ===================== RELATÓRIO FINANCEIRO E DESEMPENHO (CLOUDFLARE D1) =====================
+api.get("/tenants/:slugOrId/financial-report", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const monthQuery = c.req.query("month");
+    const yearQuery = c.req.query("year");
+    const startDateQuery = c.req.query("startDate");
+    const endDateQuery = c.req.query("endDate");
+
+    const options = {
+      month: monthQuery ? parseInt(monthQuery, 10) : undefined,
+      year: yearQuery ? parseInt(yearQuery, 10) : undefined,
+      startDate: startDateQuery || undefined,
+      endDate: endDateQuery || undefined,
+    };
+
+    const report = await db.getFinancialReport(tenant.id, options);
+
+    return c.json(
+      {
+        success: true,
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+        },
+        ...report,
+      },
+      200
+    );
+  } catch (e: any) {
+    console.error("Erro na rota de relatório financeiro:", e);
+    return c.json(
+      { success: false, error: e.message || "Erro ao processar relatório financeiro" },
+      500
+    );
+  }
+});
+
 export default api;
+
