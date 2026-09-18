@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
-import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, RefreshCw, ShoppingBag } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, ShoppingBag } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
+import { playOrderStatusUpdateChime } from "@/utils/audio";
 
 interface OrderTrackingProps {
   order: Order;
@@ -15,7 +16,9 @@ interface OrderTrackingProps {
 export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrackingProps) {
   const { config } = useStore();
   const [order, setOrder] = useState<Order>(initialOrder);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const statusRef = useRef<OrderStatus>(initialOrder.status);
+  statusRef.current = order.status;
 
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
 
@@ -30,36 +33,91 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     { status: "done", label: isPickup ? "Retirado" : "Finalizado", icon: CheckCircle2 },
   ];
 
-  // Polling automático e sincronização em tempo real na tela de detalhes
+  // Aplica atualização de status em tempo real por eventos (sem loops de polling)
+  const applyStatus = useCallback((newStatus: OrderStatus, updatedOrder?: Order | null) => {
+    const prevStatus = statusRef.current;
+    if (updatedOrder) {
+      setOrder(updatedOrder);
+    } else {
+      setOrder((prev) => ({ ...prev, status: newStatus }));
+    }
+
+    if (newStatus !== prevStatus) {
+      statusRef.current = newStatus;
+      playOrderStatusUpdateChime(newStatus);
+      updateActiveOrderStatus(newStatus);
+    }
+  }, []);
+
+  // Carga pontual inicial na montagem (uma única requisição, sem repetição)
   useEffect(() => {
     let isMounted = true;
-
-    const poll = async () => {
-      try {
-        setIsRefreshing(true);
-        const res = await fetchOrderDetailsApi(initialOrder.id, config.slug);
+    fetchOrderDetailsApi(initialOrder.id, config.slug)
+      .then((res) => {
         if (isMounted && res.success && res.order) {
-          setOrder(res.order);
-          updateActiveOrderStatus(res.order.status);
+          applyStatus(res.order.status, res.order);
         }
-      } catch (err) {
-        console.warn("Polling order details error:", err);
-      } finally {
-        if (isMounted) setIsRefreshing(false);
-      }
-    };
+      })
+      .catch((err) => {
+        console.warn("Fetch order details error:", err);
+      });
 
-    poll();
-    const interval = setInterval(poll, 3000);
+    return () => {
+      isMounted = false;
+    };
+  }, [initialOrder.id, config.slug, applyStatus]);
+
+  // Transmissão por Eventos (SSE + BroadcastChannel + CustomEvent)
+  useEffect(() => {
+    const cleanId = initialOrder.id.replace(/^#/, "");
+    let eventSource: EventSource | null = null;
+    let bc: BroadcastChannel | null = null;
+
+    try {
+      const sseUrl = `/api/orders/${encodeURIComponent(cleanId)}/stream`;
+      eventSource = new EventSource(sseUrl);
+
+      eventSource.addEventListener("status_update", (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload && payload.status) {
+            applyStatus(payload.status, payload.order);
+          }
+        } catch (err) {
+          console.warn("Erro ao ler evento SSE em OrderTracking:", err);
+        }
+      });
+    } catch (err) {
+      console.warn("EventSource SSE não disponível:", err);
+    }
+
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        bc = new BroadcastChannel("topfood_order_events");
+        bc.onmessage = (e) => {
+          const data = e.data;
+          if (data && (data.type === "ORDER_STATUS_CHANGED" || data.type === "ACTIVE_ORDER_UPDATED")) {
+            const incomingId = (data.orderId || "").replace(/^#/, "");
+            if (incomingId === cleanId && data.status) {
+              applyStatus(data.status, data.order || data.orderData);
+            }
+          }
+        };
+      } catch (err) {
+        console.warn("BroadcastChannel error:", err);
+      }
+    }
 
     const handleActiveOrderUpdate = (e: any) => {
       const detail = e.detail;
-      if (detail?.orderId && (detail.orderId === initialOrder.id || detail.orderId === initialOrder.id.replace(/^#/, "") || `#${detail.orderId}` === initialOrder.id)) {
+      if (
+        detail?.orderId &&
+        (detail.orderId === initialOrder.id ||
+          detail.orderId.replace(/^#/, "") === cleanId ||
+          `#${detail.orderId}` === initialOrder.id)
+      ) {
         if (detail.status) {
-          setOrder((prev) => ({ ...prev, status: detail.status }));
-        }
-        if (detail.order) {
-          setOrder(detail.order);
+          applyStatus(detail.status, detail.order || detail.orderData);
         }
       }
     };
@@ -67,11 +125,15 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     window.addEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
 
     return () => {
-      isMounted = false;
-      clearInterval(interval);
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (bc) {
+        bc.close();
+      }
       window.removeEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
     };
-  }, [initialOrder.id, config.slug]);
+  }, [initialOrder.id, applyStatus]);
 
   const currentIndex = statusSteps.findIndex((s) => s.status === order.status);
   const isCancelled = order.status === "cancelled";
@@ -96,8 +158,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
           </span>
-          <span>Ao vivo (10s)</span>
-          {isRefreshing && <RefreshCw className="h-3 w-3 animate-spin text-emerald-600" />}
+          <span>Ao vivo (Tempo Real)</span>
         </div>
       </div>
 

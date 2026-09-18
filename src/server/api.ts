@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { Database } from "./db";
+import { orderEvents } from "./events";
 import type { Env, OrderStatus, TenantStatus, OrderItem } from "./types";
 
 export const api = new Hono<{ Bindings: Env }>();
@@ -1429,6 +1430,125 @@ api.get("/tenants/:slugOrId/orders/:orderId", async (c) => {
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao buscar pedido" }, 500);
   }
+});
+
+// SSE Stream público para rastreamento em tempo real do status do pedido no celular do cliente
+// 100% orientado a eventos (Zero polling / loops de banco de dados no Cloudflare D1)
+api.get("/orders/:orderId/stream", async (c) => {
+  const db = getDb(c);
+  const rawId = c.req.param("orderId");
+  const cleanId = rawId.replace(/^#/, "");
+
+  return streamSSE(c, async (stream) => {
+    // 1. Envia estado inicial imediato
+    try {
+      const initialOrder = await db.getOrderById(rawId);
+      if (initialOrder) {
+        await stream.writeSSE({
+          event: "status_update",
+          data: JSON.stringify({
+            orderId: cleanId,
+            status: initialOrder.status,
+            order: initialOrder,
+            timestamp: Date.now(),
+          }),
+        });
+      }
+    } catch (e) {
+      console.warn("SSE initial order fetch error:", e);
+    }
+
+    // 2. Inscreve no barramento de eventos (acionado quando o lojista altera o status no admin)
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
+      const pClean = payload.orderId.replace(/^#/, "");
+      if (pClean === cleanId || payload.order.id === rawId || payload.order.id === `#${cleanId}`) {
+        try {
+          await stream.writeSSE({
+            event: "status_update",
+            data: JSON.stringify(payload),
+          });
+        } catch (err) {
+          console.warn("Failed to write order SSE event:", err);
+        }
+      }
+    });
+
+    stream.onAbort(() => {
+      unsubscribe();
+    });
+
+    // 3. Heartbeat keepalive leve (apenas sleep sem consultar o banco)
+    while (!stream.aborted) {
+      await stream.sleep(25000);
+      try {
+        await stream.writeSSE({
+          event: "ping",
+          data: "{}",
+        });
+      } catch {
+        break;
+      }
+    }
+
+    unsubscribe();
+  });
+});
+
+api.get("/tenants/:slugOrId/orders/:orderId/stream", async (c) => {
+  const db = getDb(c);
+  const rawId = c.req.param("orderId");
+  const cleanId = rawId.replace(/^#/, "");
+
+  return streamSSE(c, async (stream) => {
+    try {
+      const initialOrder = await db.getOrderById(rawId);
+      if (initialOrder) {
+        await stream.writeSSE({
+          event: "status_update",
+          data: JSON.stringify({
+            orderId: cleanId,
+            status: initialOrder.status,
+            order: initialOrder,
+            timestamp: Date.now(),
+          }),
+        });
+      }
+    } catch (e) {
+      console.warn("SSE tenant initial order fetch error:", e);
+    }
+
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
+      const pClean = payload.orderId.replace(/^#/, "");
+      if (pClean === cleanId || payload.order.id === rawId || payload.order.id === `#${cleanId}`) {
+        try {
+          await stream.writeSSE({
+            event: "status_update",
+            data: JSON.stringify(payload),
+          });
+        } catch (err) {
+          console.warn("Failed to write order SSE event:", err);
+        }
+      }
+    });
+
+    stream.onAbort(() => {
+      unsubscribe();
+    });
+
+    while (!stream.aborted) {
+      await stream.sleep(25000);
+      try {
+        await stream.writeSSE({
+          event: "ping",
+          data: "{}",
+        });
+      } catch {
+        break;
+      }
+    }
+
+    unsubscribe();
+  });
 });
 
 // ===================== RELATÓRIO FINANCEIRO E DESEMPENHO (CLOUDFLARE D1) =====================

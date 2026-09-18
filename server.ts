@@ -78,6 +78,36 @@ async function startServer() {
         res.setHeader(key, val);
       });
 
+      // Se a resposta for um EventStream SSE (Server-Sent Events), transmite os chunks em tempo real
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/event-stream") && response.body) {
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("X-Accel-Buffering", "no");
+        if (typeof res.flushHeaders === "function") {
+          res.flushHeaders();
+        }
+
+        const reader = response.body.getReader();
+        req.on("close", () => {
+          reader.cancel().catch(() => {});
+        });
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value);
+            if (typeof (res as any).flush === "function") {
+              (res as any).flush();
+            }
+          }
+        } catch {
+          // Conexão encerrada pelo cliente
+        }
+        return res.end();
+      }
+
       const buffer = await response.arrayBuffer();
       res.end(Buffer.from(buffer));
     } catch (err: unknown) {

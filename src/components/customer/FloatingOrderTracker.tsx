@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   PackageCheck,
   ChefHat,
@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronUp,
   X,
-  RefreshCw,
   Phone,
   MapPin,
   CreditCard,
@@ -18,6 +17,7 @@ import type { Order, OrderStatus } from "@/types";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice } from "@/utils/order";
+import { playOrderStatusUpdateChime } from "@/utils/audio";
 import {
   getActiveOrderData,
   updateActiveOrderStatus,
@@ -40,8 +40,11 @@ export function FloatingOrderTracker({
   const [isPickup, setIsPickup] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isPolling, setIsPolling] = useState(false);
   const [isCompletedCelebration, setIsCompletedCelebration] = useState(false);
+
+  // Referência para controlar alterações reais de status e evitar alertas repetidos
+  const statusRef = useRef<OrderStatus>(status);
+  statusRef.current = status;
 
   // Mapeamento das 4 etapas visuais simples exigidas:
   // [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega ] ➔ [ Concluído ]
@@ -122,6 +125,52 @@ export function FloatingOrderTracker({
     setIsPickup(data.orderType === "pickup");
   }, [currentTenantSlug]);
 
+  // Aplica a alteração de status recebida em tempo real da cozinha/admin
+  const applyStatusUpdate = useCallback(
+    (newStatus: OrderStatus, updatedOrder?: Order | null) => {
+      const prevStatus = statusRef.current;
+
+      if (updatedOrder) {
+        setOrder(updatedOrder);
+        setIsPickup(
+          updatedOrder.orderType === "pickup" ||
+            (updatedOrder as any).delivery_type === "pickup"
+        );
+      }
+
+      // Se o status alterou de fato:
+      if (newStatus !== prevStatus) {
+        statusRef.current = newStatus;
+        setStatus(newStatus);
+
+        // 3. Alerta sonoro agradável no celular do cliente
+        playOrderStatusUpdateChime(newStatus);
+
+        // Atualiza o estado no localStorage (mantém a barra visível nas etapas intermediárias)
+        updateActiveOrderStatus(newStatus);
+
+        // Se o status for concluído / entregue
+        if (newStatus === "done") {
+          setIsCompletedCelebration(true);
+          // Mantém a etapa 'Concluído' visível por 4.5 segundos antes de remover da tela e do localStorage
+          setTimeout(() => {
+            clearActiveOrder();
+            setOrderId(null);
+            setOrder(null);
+            setIsCompletedCelebration(false);
+          }, 4500);
+        } else if (newStatus === "cancelled") {
+          setTimeout(() => {
+            clearActiveOrder();
+            setOrderId(null);
+            setOrder(null);
+          }, 3000);
+        }
+      }
+    },
+    []
+  );
+
   // Sincroniza pedido em tempo real com o array de pedidos do StoreContext caso já esteja na memória
   useEffect(() => {
     if (!orderId) return;
@@ -131,89 +180,34 @@ export function FloatingOrderTracker({
     );
 
     if (matchingOrder) {
-      setOrder(matchingOrder);
-      if (matchingOrder.status !== status) {
-        setStatus(matchingOrder.status);
-      }
-      setIsPickup(
-        matchingOrder.orderType === "pickup" ||
-          (matchingOrder as any).delivery_type === "pickup"
-      );
-
-      // Se passou para concluído, agenda fechamento automático
-      if (matchingOrder.status === "done") {
-        setIsCompletedCelebration(true);
-        clearActiveOrder();
-        const t = setTimeout(() => {
-          setOrderId(null);
-          setOrder(null);
-          setIsCompletedCelebration(false);
-        }, 4000);
-        return () => clearTimeout(t);
-      } else if (matchingOrder.status === "cancelled") {
-        clearActiveOrder();
-        const t = setTimeout(() => {
-          setOrderId(null);
-          setOrder(null);
-        }, 3000);
-        return () => clearTimeout(t);
-      }
+      applyStatusUpdate(matchingOrder.status, matchingOrder);
     }
-  }, [orders, orderId, status]);
+  }, [orders, orderId, applyStatusUpdate]);
 
-  // Busca o status atualizado do pedido na API do backend
-  const pollOrderStatus = useCallback(
-    async (idToPoll: string) => {
-      if (!idToPoll) return;
-      setIsPolling(true);
-      try {
-        const res = await fetchOrderDetailsApi(idToPoll, currentTenantSlug);
-        if (res.success && res.order) {
-          const apiOrder = res.order;
-          setOrder(apiOrder);
-          setStatus(apiOrder.status);
+  // Carga pontual inicial (uma única vez ao montar ou alterar orderId - SEM setInterval / polling)
+  useEffect(() => {
+    if (!orderId) return;
+    let isMounted = true;
+
+    fetchOrderDetailsApi(orderId, currentTenantSlug)
+      .then((res) => {
+        if (isMounted && res.success && res.order) {
+          setOrder(res.order);
           setIsPickup(
-            apiOrder.orderType === "pickup" || (apiOrder as any).delivery_type === "pickup"
+            res.order.orderType === "pickup" || (res.order as any).delivery_type === "pickup"
           );
-
-          // Se o pedido foi concluído ("Concluído" ou "Entregue")
-          if (apiOrder.status === "done") {
-            setIsCompletedCelebration(true);
-            updateActiveOrderStatus("done");
-            clearActiveOrder();
-            setTimeout(() => {
-              setOrderId(null);
-              setOrder(null);
-              setIsCompletedCelebration(false);
-            }, 4000);
-            return;
+          if (res.order.status && res.order.status !== statusRef.current) {
+            statusRef.current = res.order.status;
+            setStatus(res.order.status);
           }
-
-          // Se o pedido foi cancelado
-          if (apiOrder.status === "cancelled") {
-            clearActiveOrder();
-            setTimeout(() => {
-              setOrderId(null);
-              setOrder(null);
-            }, 3000);
-            return;
-          }
-
-          updateActiveOrderStatus(apiOrder.status);
-        } else if (res.error && (res.error.includes("404") || res.error.includes("not found"))) {
-          // Se a API não encontrou o pedido para esta loja, remove do localStorage
-          clearActiveOrder();
-          setOrderId(null);
-          setOrder(null);
         }
-      } catch (err) {
-        console.warn("Aviso ao consultar status do pedido ativo:", err);
-      } finally {
-        setIsPolling(false);
-      }
-    },
-    [currentTenantSlug]
-  );
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId, currentTenantSlug]);
 
   // Inicialização e listeners de eventos do localStorage e StoreContext
   useEffect(() => {
@@ -242,39 +236,12 @@ export function FloatingOrderTracker({
       const detail = e.detail;
       if (!detail) return;
 
-      if (detail.status === "done") {
-        setStatus("done");
-        setIsCompletedCelebration(true);
-        clearActiveOrder();
-        setTimeout(() => {
-          setOrderId(null);
-          setOrder(null);
-          setIsCompletedCelebration(false);
-        }, 4000);
-        return;
-      }
-
-      if (detail.status === "cancelled") {
-        setStatus("cancelled");
-        clearActiveOrder();
-        setTimeout(() => {
-          setOrderId(null);
-          setOrder(null);
-        }, 3000);
-        return;
-      }
-
-      if (detail.orderId) {
+      if (detail.orderId && !orderId) {
         setOrderId(detail.orderId);
       }
+
       if (detail.status) {
-        setStatus(detail.status);
-      }
-      if (detail.order) {
-        setOrder(detail.order);
-        setIsPickup(
-          detail.order.orderType === "pickup" || detail.order.delivery_type === "pickup"
-        );
+        applyStatusUpdate(detail.status, detail.order || detail.orderData);
       }
       setIsDismissed(false);
     };
@@ -288,20 +255,70 @@ export function FloatingOrderTracker({
       window.removeEventListener("topfood-active-order-cleared", handleOrderCleared);
       window.removeEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
     };
-  }, [checkActiveOrder]);
+  }, [checkActiveOrder, applyStatusUpdate, orderId]);
 
-  // Polling automático a cada 3.5 segundos enquanto o pedido estiver ativo
+  // Conexão de Eventos em Tempo Real (SSE Stream da Cozinha + BroadcastChannel entre abas)
+  // ZERO INTERVALOS / ZERO POLLING / ZERO LOOPS DE BANCO D1
   useEffect(() => {
     if (!orderId || isDismissed || isCompletedCelebration) return;
 
-    pollOrderStatus(orderId);
+    const cleanId = orderId.replace(/^#/, "");
+    let eventSource: EventSource | null = null;
+    let bc: BroadcastChannel | null = null;
 
-    const interval = setInterval(() => {
-      pollOrderStatus(orderId);
-    }, 3500);
+    // 1. Conexão SSE de eventos em tempo real
+    try {
+      const sseUrl = `/api/orders/${encodeURIComponent(cleanId)}/stream`;
+      eventSource = new EventSource(sseUrl);
 
-    return () => clearInterval(interval);
-  }, [orderId, isDismissed, isCompletedCelebration, pollOrderStatus]);
+      eventSource.addEventListener("status_update", (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload && payload.status) {
+            applyStatusUpdate(payload.status, payload.order);
+          }
+        } catch (err) {
+          console.warn("Erro ao ler evento de status SSE:", err);
+        }
+      });
+    } catch (err) {
+      console.warn("EventSource SSE não suportado:", err);
+    }
+
+    // 2. BroadcastChannel nativo para comunicação instantânea entre abas no mesmo dispositivo
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        bc = new BroadcastChannel("topfood_order_events");
+        bc.onmessage = (e) => {
+          const data = e.data;
+          if (
+            data &&
+            (data.type === "ORDER_STATUS_CHANGED" || data.type === "ACTIVE_ORDER_UPDATED")
+          ) {
+            const incomingId = (data.orderId || "").replace(/^#/, "");
+            if ((!incomingId || incomingId === cleanId) && data.status) {
+              applyStatusUpdate(data.status, data.order || data.orderData);
+            }
+          } else if (data && data.type === "ACTIVE_ORDER_CLEARED") {
+            setOrderId(null);
+            setOrder(null);
+            setIsDismissed(true);
+          }
+        };
+      } catch (err) {
+        console.warn("BroadcastChannel error:", err);
+      }
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (bc) {
+        bc.close();
+      }
+    };
+  }, [orderId, isDismissed, isCompletedCelebration, applyStatusUpdate]);
 
   // Informações de status contextual
   const getStatusDetails = () => {
@@ -452,12 +469,6 @@ export function FloatingOrderTracker({
                     >
                       {details.badge}
                     </span>
-                    {isPolling && (
-                      <RefreshCw
-                        className="h-3 w-3 animate-spin text-gray-400 shrink-0"
-                        title="Atualizando status..."
-                      />
-                    )}
                   </div>
                   <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300 font-medium truncate">
                     {details.description}

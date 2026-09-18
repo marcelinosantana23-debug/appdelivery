@@ -824,21 +824,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
       );
 
-      // 2. Se for o pedido ativo do cliente no localStorage, sincroniza na hora
+      // 2. Notifica abas locais e cliente via BroadcastChannel e CustomEvent
       try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("topfood-active-order-updated", {
+              detail: { orderId, status },
+            })
+          );
+          if ("BroadcastChannel" in window) {
+            const bc = new BroadcastChannel("topfood_order_events");
+            bc.postMessage({
+              type: "ORDER_STATUS_CHANGED",
+              orderId,
+              status,
+              timestamp: Date.now(),
+            });
+            setTimeout(() => {
+              try {
+                bc.close();
+              } catch (err) {
+                void err;
+              }
+            }, 100);
+          }
+        }
+
         const activeId = localStorage.getItem("topfood_active_order_id");
         if (
           activeId &&
           (activeId === orderId || activeId.replace(/^#/, "") === orderId.replace(/^#/, ""))
         ) {
           localStorage.setItem("topfood_active_order_status", status);
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("topfood-active-order-updated", {
-                detail: { orderId, status },
-              })
-            );
-          }
         }
       } catch {
         // ignore

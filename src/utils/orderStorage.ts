@@ -15,6 +15,17 @@ const ALT_STORAGE_KEY = "active_order_id";
 const DATA_STORAGE_KEY = "topfood_active_order_data";
 const STATUS_STORAGE_KEY = "topfood_active_order_status";
 
+let orderBroadcastChannel: BroadcastChannel | null = null;
+export function getOrderBroadcastChannel(): BroadcastChannel | null {
+  if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+    if (!orderBroadcastChannel) {
+      orderBroadcastChannel = new BroadcastChannel("topfood_order_events");
+    }
+    return orderBroadcastChannel;
+  }
+  return null;
+}
+
 export function saveActiveOrder(
   orderId: string,
   tenantSlug?: string,
@@ -52,6 +63,16 @@ export function saveActiveOrder(
           detail: { orderId, status: data.status, orderData: data },
         })
       );
+    }
+
+    const bc = getOrderBroadcastChannel();
+    if (bc) {
+      bc.postMessage({
+        type: "ACTIVE_ORDER_UPDATED",
+        orderId,
+        status: data.status,
+        orderData: data,
+      });
     }
   } catch (err) {
     console.warn("Failed to save active order to localStorage:", err);
@@ -131,16 +152,36 @@ export function getActiveOrderData(currentTenantSlug?: string): StoredActiveOrde
 
 export function updateActiveOrderStatus(status: OrderStatus): void {
   try {
-    if (status === "done" || status === "cancelled") {
-      clearActiveOrder();
-      return;
+    localStorage.setItem(STATUS_STORAGE_KEY, status);
+    const rawData = localStorage.getItem(DATA_STORAGE_KEY);
+    let orderId = localStorage.getItem(STORAGE_KEY) || "";
+
+    if (rawData) {
+      try {
+        const current = JSON.parse(rawData) as StoredActiveOrder;
+        current.status = status;
+        orderId = current.orderId || orderId;
+        localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(current));
+      } catch {
+        // ignore
+      }
     }
 
-    localStorage.setItem(STATUS_STORAGE_KEY, status);
-    const current = getActiveOrderData();
-    if (current) {
-      current.status = status;
-      localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(current));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("topfood-active-order-updated", {
+          detail: { orderId, status },
+        })
+      );
+    }
+
+    const bc = getOrderBroadcastChannel();
+    if (bc) {
+      bc.postMessage({
+        type: "ACTIVE_ORDER_UPDATED",
+        orderId,
+        status,
+      });
     }
   } catch {
     // ignore
@@ -155,6 +196,10 @@ export function clearActiveOrder(): void {
     localStorage.removeItem(STATUS_STORAGE_KEY);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("topfood-active-order-cleared"));
+    }
+    const bc = getOrderBroadcastChannel();
+    if (bc) {
+      bc.postMessage({ type: "ACTIVE_ORDER_CLEARED" });
     }
   } catch (err) {
     console.warn("Failed to clear active order from localStorage:", err);

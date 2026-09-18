@@ -12,6 +12,7 @@ import type {
   PaymentBreakdownItem,
 } from "./types";
 import { mockProducts } from "../data/mockData";
+import { orderEvents } from "./events";
 
 // Seed data para demonstração e inicialização
 const initialTenants: Tenant[] = [
@@ -1889,6 +1890,13 @@ export class Database {
       } catch (e) {
         console.warn("KV update order error:", e);
       }
+    }
+
+    // 5. Emite evento em tempo real para os clientes conectados
+    try {
+      orderEvents.emit(order);
+    } catch (e) {
+      console.warn("Error emitting order event:", e);
     }
 
     return order;
