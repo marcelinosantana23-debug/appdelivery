@@ -49,9 +49,9 @@ export function AdminMenu() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+    <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex flex-col max-w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full max-w-full overflow-x-hidden">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             value={search}
@@ -62,7 +62,7 @@ export function AdminMenu() {
         </div>
         <button
           onClick={() => { setEditing(null); setShowForm(true); }}
-          className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white transition hover:bg-primary-dark"
+          className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white transition hover:bg-primary-dark shrink-0"
         >
           <Plus className="h-4 w-4" />
           Novo
@@ -72,29 +72,31 @@ export function AdminMenu() {
       {filtered.map((product) => (
         <div
           key={product.id}
-          className={`flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm ${
+          className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm w-full max-w-full overflow-x-hidden ${
             !product.available ? "opacity-60" : ""
           }`}
         >
-          <img
-            src={product.image}
-            alt={product.name}
-            className="h-14 w-14 rounded-lg object-cover"
-          />
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-gray-800 text-sm">{product.name}</h3>
-              {!product.available && (
-                <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-600">
-                  Pausado
-                </span>
-              )}
+          <div className="flex items-center gap-3 w-full sm:w-auto min-w-0 flex-1">
+            <img
+              src={product.image}
+              alt={product.name}
+              className="h-14 w-14 rounded-lg object-cover shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-gray-800 text-sm truncate">{product.name}</h3>
+                {!product.available && (
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-600 shrink-0">
+                    Pausado
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 truncate">
+                {categories.find((c) => c.id === product.category)?.name} · {formatPrice(product.price, config)}
+              </p>
             </div>
-            <p className="text-xs text-gray-400">
-              {categories.find((c) => c.id === product.category)?.name} · {formatPrice(product.price, config)}
-            </p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 self-end sm:self-center shrink-0">
             <button
               onClick={() => toggleAvailable(product.id)}
               className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${

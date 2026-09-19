@@ -1,6 +1,7 @@
 import { Clock, MapPin, Store, AlertTriangle, Bike, Sparkles } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { StoreLogo, getSafeDisplayName } from "@/components/common/StoreLogo";
+import { StoreLogo } from "@/components/common/StoreLogo";
+import { getSafeDisplayName } from "@/utils/storeFormat";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 
 interface HeaderProps {

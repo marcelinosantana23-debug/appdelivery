@@ -3,6 +3,21 @@
 
 let sharedAudioCtx: AudioContext | null = null;
 
+if (typeof window !== "undefined") {
+  const unlockAudioContext = () => {
+    try {
+      if (sharedAudioCtx && sharedAudioCtx.state === "suspended") {
+        sharedAudioCtx.resume().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  };
+  window.addEventListener("click", unlockAudioContext, { passive: true });
+  window.addEventListener("touchstart", unlockAudioContext, { passive: true });
+  window.addEventListener("pointerdown", unlockAudioContext, { passive: true });
+}
+
 function getAudioContext(): AudioContext | null {
   try {
     if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {

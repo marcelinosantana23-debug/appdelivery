@@ -160,7 +160,7 @@ export function AdminSettings() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl p-4 space-y-5">
+    <div className="mx-auto w-full max-w-2xl p-3 sm:p-4 space-y-4 sm:space-y-5 flex flex-col max-w-full overflow-x-hidden">
       {/* Store status toggle */}
       <div className="rounded-2xl bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">

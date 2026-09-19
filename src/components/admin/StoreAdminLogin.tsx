@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ArrowLeft, Lock, Mail, Eye, EyeOff, Store, Shield, AlertCircle, AlertTriangle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { StoreLogo, getSafeDisplayName } from "@/components/common/StoreLogo";
+import { StoreLogo } from "@/components/common/StoreLogo";
+import { getSafeDisplayName } from "@/utils/storeFormat";
 
 interface StoreAdminLoginProps {
   onBack: () => void;

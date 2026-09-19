@@ -433,9 +433,9 @@ export function AdminFinancialReport() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6 pb-20">
+    <div className="mx-auto w-full max-w-6xl p-3 sm:p-6 space-y-4 sm:space-y-6 pb-20 flex flex-col max-w-full overflow-x-hidden">
       {/* Top Banner / Breadcrumb & D1 Connectivity */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-white p-4 border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-white p-4 border border-slate-200 shadow-sm w-full max-w-full overflow-x-hidden">
         <div>
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 font-bold">
@@ -454,7 +454,7 @@ export function AdminFinancialReport() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto max-w-full">
           <span className="hidden md:inline text-[11px] text-slate-400">
             Atualizado às {lastSync.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </span>
@@ -462,7 +462,7 @@ export function AdminFinancialReport() {
           <button
             onClick={() => fetchReportData()}
             disabled={isSyncing}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition disabled:opacity-50"
             title="Atualizar dados do Cloudflare D1"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin text-amber-600" : ""}`} />
@@ -472,7 +472,7 @@ export function AdminFinancialReport() {
           <button
             onClick={handleExportCsv}
             disabled={!reportData?.orders?.length}
-            className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition disabled:opacity-40 shadow-sm"
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition disabled:opacity-40 shadow-sm"
             title="Exportar dados do mês em planilha CSV"
           >
             <Download className="h-3.5 w-3.5" />
@@ -992,22 +992,22 @@ export function AdminFinancialReport() {
           </div>
 
           {/* Barra de pesquisa e filtro de pagamento */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto max-w-full">
+            <div className="relative flex-1 sm:flex-initial">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Buscar por cliente ou #ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-amber-500 transition w-44 sm:w-56"
+                className="rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-amber-500 transition w-full sm:w-56"
               />
             </div>
 
             <select
               value={paymentFilter}
               onChange={(e) => setPaymentFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-500"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-500 w-full sm:w-auto"
             >
               <option value="all">Todos Pagamentos</option>
               <option value="pix">Apenas PIX</option>

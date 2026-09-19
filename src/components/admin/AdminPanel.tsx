@@ -10,14 +10,14 @@ import {
   Shield,
   CornerUpLeft,
   Copy,
-  ExternalLink,
   CheckCircle2,
   Share2,
   Users,
   TrendingUp,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { StoreLogo } from "@/components/common/StoreLogo";
+import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
@@ -148,16 +148,16 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 text-slate-100">
+    <div className="fixed inset-0 z-50 flex flex-col w-full max-w-full overflow-x-hidden bg-slate-900 text-slate-100">
       {/* Super Admin breadcrumb banner if drilling down */}
       {isSuperAdmin && superAdminViewingStore && (
-        <div className="flex items-center justify-between border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs">
-          <div className="flex items-center gap-2 text-amber-300">
-            <Shield className="h-4 w-4 text-amber-400" />
-            <span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 sm:px-4 py-2 text-xs w-full max-w-full overflow-x-hidden">
+          <div className="flex items-center gap-2 text-amber-300 min-w-0">
+            <Shield className="h-4 w-4 text-amber-400 shrink-0" />
+            <span className="truncate">
               Você está gerenciando a lanchonete:{" "}
               <strong className="text-white font-bold">{currentTenant?.name || superAdminViewingStore.name}</strong>{" "}
-              (/loja/{currentTenant?.slug || superAdminViewingStore.slug})
+              <span className="hidden sm:inline">(/loja/{currentTenant?.slug || superAdminViewingStore.slug})</span>
             </span>
           </div>
           <button
@@ -168,84 +168,105 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
                 setSuperAdminViewingStore(null);
               }
             }}
-            className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1 font-semibold text-amber-200 border border-amber-500/40 hover:bg-amber-500/30 transition"
+            className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-200 border border-amber-500/40 hover:bg-amber-500/30 transition text-xs shrink-0 self-end sm:self-auto"
           >
             <CornerUpLeft className="h-3.5 w-3.5" />
-            <span>Voltar ao Painel Geral de Lojas</span>
+            <span>Voltar ao Super Admin</span>
           </button>
         </div>
       )}
 
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onExit}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition hover:bg-slate-700"
-            title="Voltar para a vitrine"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-800 border border-slate-700 text-xl shadow-inner">
-              <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-bold text-white sm:text-base leading-tight">
-                  {getSafeDisplayName(config.name, "Minha Lanchonete")}
-                </h1>
-                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400 border border-slate-700">
-                  {isSuperAdmin ? "Super Admin" : "Admin da Loja"}
-                </span>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-slate-800 bg-slate-900 px-3 sm:px-4 py-2 sm:py-3 gap-2.5 sm:gap-3 w-full max-w-full overflow-x-hidden">
+        <div className="flex items-center justify-between sm:justify-start gap-2.5 min-w-0 w-full sm:w-auto">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={onExit}
+              className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition hover:bg-slate-700"
+              title="Voltar para a vitrine"
+            >
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-800 border border-slate-700 text-base sm:text-xl shadow-inner">
+                <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover" />
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const storeUrl = getOfficialStoreUrl(config.slug);
-                    const success = await copyTextToClipboard(storeUrl);
-                    if (success) {
-                      setCopiedStoreLink(true);
-                      setTimeout(() => setCopiedStoreLink(false), 2500);
-                    }
-                  }}
-                  className="flex items-center gap-1 font-mono text-[11px] text-amber-400 hover:text-amber-300 hover:underline transition"
-                  title="Clique para copiar o link oficial do cardápio para clientes"
-                >
-                  {copiedStoreLink ? (
-                    <>
-                      <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                      <span className="text-emerald-400 font-semibold">Link Copiado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="h-3 w-3" />
-                      <span>/loja/{getSafeSlug(config.slug, "loja")}</span>
-                      <Copy className="h-3 w-3 text-slate-400 ml-0.5" />
-                    </>
-                  )}
-                </button>
-                <span className="text-slate-600">•</span>
-                <span className="text-[11px] text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
-                  {currentUser?.email}
-                </span>
-                <a
-                  href={getOfficialStoreUrl(config.slug)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hidden sm:flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition"
-                  title="Abrir cardápio em nova aba"
-                >
-                  <ExternalLink className="h-2.5 w-2.5" />
-                  <span>Ver Cardápio</span>
-                </a>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h1 className="text-xs sm:text-sm md:text-base font-bold text-white leading-tight truncate max-w-[130px] sm:max-w-none">
+                    {getSafeDisplayName(config.name, "Minha Lanchonete")}
+                  </h1>
+                  <span className="rounded-full bg-slate-800 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold text-slate-400 border border-slate-700 shrink-0">
+                    {isSuperAdmin ? "Super Admin" : "Admin"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const storeUrl = getOfficialStoreUrl(config.slug);
+                      const success = await copyTextToClipboard(storeUrl);
+                      if (success) {
+                        setCopiedStoreLink(true);
+                        setTimeout(() => setCopiedStoreLink(false), 2500);
+                      }
+                    }}
+                    className="flex items-center gap-1 font-mono text-[10px] sm:text-[11px] text-amber-400 hover:text-amber-300 transition shrink-0"
+                    title="Clique para copiar o link oficial do cardápio"
+                  >
+                    {copiedStoreLink ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                        <span className="text-emerald-400 font-semibold">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="h-3 w-3" />
+                        <span className="truncate max-w-[100px] sm:max-w-none">/loja/{getSafeSlug(config.slug, "loja")}</span>
+                        <Copy className="h-3 w-3 text-slate-400 ml-0.5 hidden sm:inline" />
+                      </>
+                    )}
+                  </button>
+                  <span className="text-slate-600 hidden sm:inline">•</span>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 truncate max-w-[110px] sm:max-w-[180px]">
+                    {currentUser?.email}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
+
+          <div className="flex items-center gap-1.5 sm:hidden">
+            <button
+              onClick={() => {
+                toggleSound();
+                if (!soundEnabled) {
+                  playAlertSound();
+                }
+              }}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                soundEnabled
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+              title={soundEnabled ? "Som ativado" : "Som desativado"}
+            >
+              {soundEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={() => {
+                logout();
+                setSuperAdminViewingStore(null);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-slate-300 hover:text-red-400"
+              title="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap w-full sm:w-auto justify-between sm:justify-end">
           <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -275,7 +296,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
                 playAlertSound();
               }
             }}
-            className={`flex h-9 items-center gap-1.5 px-2.5 rounded-xl transition ${
+            className={`hidden sm:flex h-9 items-center gap-1.5 px-2.5 rounded-xl transition ${
               soundEnabled
                 ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
                 : "bg-slate-800 text-slate-500 hover:bg-slate-700"
@@ -290,7 +311,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
 
           <button
             onClick={toggleStore}
-            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition ${
+            className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-bold transition ${
               isStoreOpen
                 ? "bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm"
                 : "bg-slate-800 text-slate-300 hover:bg-slate-700"
@@ -309,7 +330,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
               logout();
               setSuperAdminViewingStore(null);
             }}
-            className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-red-500/20 hover:text-red-400"
+            className="hidden sm:flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-red-500/20 hover:text-red-400"
             title="Sair da conta"
           >
             <LogOut className="h-4 w-4" />
@@ -319,7 +340,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-800 bg-slate-900 overflow-x-auto">
+      <div className="flex flex-col sm:flex-row border-b border-slate-800 bg-slate-900 w-full max-w-full overflow-x-hidden shrink-0 divide-y divide-slate-800/40 sm:divide-y-0">
         <TabButton
           id="tab-btn-orders"
           active={tab === "orders"}
@@ -368,7 +389,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 text-slate-900">
+      <div className="flex-1 overflow-y-auto bg-gray-50 text-slate-900 w-full max-w-full overflow-x-hidden flex flex-col">
         <ErrorBoundary fallbackTitle="Erro ao carregar conteúdo da aba">
           {tab === "orders" && <AdminOrders newOrderIds={newOrderIds} />}
           {tab === "financial" && <AdminFinancialReport key={financialKey} />}
@@ -398,14 +419,14 @@ function TabButton({
     <button
       id={id}
       onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-xs sm:text-sm font-bold transition border-b-2 ${
+      className={`flex flex-row items-center justify-start sm:justify-center gap-2.5 px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold transition w-full sm:flex-1 max-w-full overflow-x-hidden border-l-4 sm:border-l-0 sm:border-b-2 ${
         active
-          ? "border-amber-500 text-white bg-slate-800/50"
-          : "border-transparent text-slate-400 hover:text-slate-200"
+          ? "border-amber-500 text-white bg-slate-800/80 sm:bg-slate-800/50"
+          : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
       }`}
     >
-      {icon}
-      {children}
+      <span className="shrink-0">{icon}</span>
+      <span className="truncate flex items-center gap-1.5">{children}</span>
     </button>
   );
 }

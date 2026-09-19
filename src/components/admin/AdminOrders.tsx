@@ -42,8 +42,8 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
     : orders;
 
   return (
-    <div className="mx-auto max-w-4xl p-4 space-y-4">
-      <div className="flex gap-2">
+    <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex flex-col max-w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row gap-2 w-full max-w-full overflow-x-hidden">
         <FilterButton active={filter === "active"} onClick={() => setFilter("active")}>
           Ativos ({orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length})
         </FilterButton>
@@ -109,10 +109,10 @@ function OrderCard({
 
   const getAdvanceButtonLabel = () => {
     if (order.status === "received") {
-      return "Aceitar e Produzir";
+      return "Aceitar / Colocar em Preparo";
     }
     if (order.status === "preparing") {
-      return isPickup ? "Marcar como 'Pronto no Balcão'" : "Marcar como 'Saiu para Entrega'";
+      return isPickup ? "Marcar como 'Pronto no Balcão'" : "Enviar para Entrega";
     }
     if (order.status === "delivering") {
       return isPickup ? "Marcar como 'Retirado'" : "Marcar como 'Entregue'";
@@ -306,7 +306,7 @@ function OrderCard({
 
       {/* Actions */}
       {!isCancelled && !isDone && (
-        <div className="flex gap-2 border-t border-gray-100 px-4 py-3">
+        <div className="flex flex-col sm:flex-row gap-2 border-t border-gray-100 px-4 py-3 w-full">
           {canAdvance && (
             <button
               id={`advance-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
@@ -349,8 +349,8 @@ function FilterButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-        active ? "bg-primary text-white" : "bg-white text-gray-500 shadow-sm"
+      className={`rounded-lg px-3 py-2 text-sm font-semibold transition text-center w-full sm:w-auto ${
+        active ? "bg-primary text-white" : "bg-white text-gray-500 shadow-sm hover:bg-gray-50"
       }`}
     >
       {children}

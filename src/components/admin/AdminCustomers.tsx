@@ -58,7 +58,7 @@ export function AdminCustomers() {
   const totalOrdersAll = customers.reduce((acc, c) => acc + (c.totalOrders || 1), 0);
 
   return (
-    <div className="mx-auto max-w-5xl p-4 space-y-5">
+    <div className="mx-auto w-full max-w-5xl p-3 sm:p-4 space-y-4 sm:space-y-5 flex flex-col max-w-full overflow-x-hidden">
       {/* Header & Stats */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-200 pb-4">
         <div>

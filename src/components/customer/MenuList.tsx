@@ -3,7 +3,8 @@ import { Plus, MessageCircle, Clock, Bike, MapPin, Flame, LayoutGrid, List, Spar
 import type { Product } from "@/types";
 import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
-import { StoreLogo, getSafeDisplayName } from "@/components/common/StoreLogo";
+import { StoreLogo } from "@/components/common/StoreLogo";
+import { getSafeDisplayName } from "@/utils/storeFormat";
 
 interface MenuListProps {
   products: Product[];

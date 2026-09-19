@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Shield, ChevronDown, Check, LayoutDashboard, Settings, LogOut, Search } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { StoreLogo } from "@/components/common/StoreLogo";
+import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 
 interface SuperAdminInspectorBarProps {
   onGoToStoreAdmin?: () => void;

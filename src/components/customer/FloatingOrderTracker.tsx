@@ -22,6 +22,7 @@ import {
   getActiveOrderData,
   updateActiveOrderStatus,
   clearActiveOrder,
+  normalizeOrderStatus,
 } from "@/utils/orderStorage";
 
 interface FloatingOrderTrackerProps {
@@ -47,9 +48,10 @@ export function FloatingOrderTracker({
   statusRef.current = status;
 
   // Mapeamento das 4 etapas visuais simples exigidas:
-  // [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega ] ➔ [ Concluído ]
+  // [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega ] ➔ [ Entregue ]
   const currentStepNumber = useMemo(() => {
-    switch (status) {
+    const s = normalizeOrderStatus(status);
+    switch (s) {
       case "received":
         return 1;
       case "preparing":
@@ -89,8 +91,8 @@ export function FloatingOrderTracker({
       {
         step: 4,
         key: "done",
-        label: "Concluído",
-        shortLabel: "Concluído",
+        label: isPickup ? "Retirado" : "Entregue",
+        shortLabel: isPickup ? "Retirado" : "Entregue",
         icon: CheckCircle2,
       },
     ],
@@ -111,23 +113,30 @@ export function FloatingOrderTracker({
   const checkActiveOrder = useCallback(() => {
     const data = getActiveOrderData(currentTenantSlug);
 
-    // Se não há dados, ou se o status salvo já for finalizado/cancelado, oculta totalmente (tela limpa)
-    if (!data || !data.orderId || data.status === "done" || data.status === "cancelled") {
-      setOrderId(null);
-      setOrder(null);
+    // Se não há dados, oculta totalmente (a não ser que esteja no meio da comemoração de entregue)
+    if (!data || !data.orderId) {
+      if (!isCompletedCelebration) {
+        setOrderId(null);
+        setOrder(null);
+      }
       return;
     }
 
+    const norm = normalizeOrderStatus(data.status);
     setOrderId(data.orderId);
-    if (data.status) {
-      setStatus(data.status);
-    }
+    setStatus(norm);
+    statusRef.current = norm;
     setIsPickup(data.orderType === "pickup");
-  }, [currentTenantSlug]);
+
+    if (norm === "done") {
+      setIsCompletedCelebration(true);
+    }
+  }, [currentTenantSlug, isCompletedCelebration]);
 
   // Aplica a alteração de status recebida em tempo real da cozinha/admin
   const applyStatusUpdate = useCallback(
-    (newStatus: OrderStatus, updatedOrder?: Order | null) => {
+    (rawStatus: OrderStatus | string, updatedOrder?: Order | null, playSound = true) => {
+      const normStatus = normalizeOrderStatus(rawStatus);
       const prevStatus = statusRef.current;
 
       if (updatedOrder) {
@@ -139,32 +148,34 @@ export function FloatingOrderTracker({
       }
 
       // Se o status alterou de fato:
-      if (newStatus !== prevStatus) {
-        statusRef.current = newStatus;
-        setStatus(newStatus);
+      if (normStatus !== prevStatus) {
+        statusRef.current = normStatus;
+        setStatus(normStatus);
 
-        // 3. Alerta sonoro agradável no celular do cliente
-        playOrderStatusUpdateChime(newStatus);
+        // 2. Alerta sonoro agradável e instantâneo no celular do cliente
+        if (playSound) {
+          playOrderStatusUpdateChime(normStatus);
+        }
 
         // Atualiza o estado no localStorage (mantém a barra visível nas etapas intermediárias)
-        updateActiveOrderStatus(newStatus);
+        updateActiveOrderStatus(normStatus);
 
-        // Se o status for concluído / entregue
-        if (newStatus === "done") {
+        // Se o status for entregue/concluído
+        if (normStatus === "done") {
           setIsCompletedCelebration(true);
-          // Mantém a etapa 'Concluído' visível por 4.5 segundos antes de remover da tela e do localStorage
+          // Mantém "Entregue" visível por 5 segundos antes de remover a barra e o ID do localStorage
           setTimeout(() => {
             clearActiveOrder();
             setOrderId(null);
             setOrder(null);
             setIsCompletedCelebration(false);
-          }, 4500);
-        } else if (newStatus === "cancelled") {
+          }, 5000);
+        } else if (normStatus === "cancelled") {
           setTimeout(() => {
             clearActiveOrder();
             setOrderId(null);
             setOrder(null);
-          }, 3000);
+          }, 3500);
         }
       }
     },
@@ -184,23 +195,45 @@ export function FloatingOrderTracker({
     }
   }, [orders, orderId, applyStatusUpdate]);
 
-  // Carga pontual inicial (uma única vez ao montar ou alterar orderId - SEM setInterval / polling)
+  // 3. Persistência: Carga pontual inicial no Cloudflare D1 (apenas uma vez na inicialização/recarregamento)
   useEffect(() => {
     if (!orderId) return;
     let isMounted = true;
 
     fetchOrderDetailsApi(orderId, currentTenantSlug)
       .then((res) => {
-        if (isMounted && res.success && res.order) {
-          setOrder(res.order);
-          setIsPickup(
-            res.order.orderType === "pickup" || (res.order as any).delivery_type === "pickup"
-          );
-          if (res.order.status && res.order.status !== statusRef.current) {
-            statusRef.current = res.order.status;
-            setStatus(res.order.status);
-          }
+        if (!isMounted || !res.success || !res.order) return;
+        const norm = normalizeOrderStatus(res.order.status);
+        setOrder(res.order);
+        setIsPickup(
+          res.order.orderType === "pickup" || (res.order as any).delivery_type === "pickup"
+        );
+
+        if (norm === "done") {
+          setIsCompletedCelebration(true);
+          setStatus("done");
+          statusRef.current = "done";
+          setTimeout(() => {
+            if (isMounted) {
+              clearActiveOrder();
+              setOrderId(null);
+              setOrder(null);
+              setIsCompletedCelebration(false);
+            }
+          }, 5000);
+          return;
         }
+
+        if (norm === "cancelled") {
+          clearActiveOrder();
+          setOrderId(null);
+          setOrder(null);
+          return;
+        }
+
+        setStatus(norm);
+        statusRef.current = norm;
+        updateActiveOrderStatus(norm);
       })
       .catch(() => {});
 
@@ -258,7 +291,6 @@ export function FloatingOrderTracker({
   }, [checkActiveOrder, applyStatusUpdate, orderId]);
 
   // Conexão de Eventos em Tempo Real (SSE Stream da Cozinha + BroadcastChannel entre abas)
-  // ZERO INTERVALOS / ZERO POLLING / ZERO LOOPS DE BANCO D1
   useEffect(() => {
     if (!orderId || isDismissed || isCompletedCelebration) return;
 
@@ -271,7 +303,7 @@ export function FloatingOrderTracker({
       const sseUrl = `/api/orders/${encodeURIComponent(cleanId)}/stream`;
       eventSource = new EventSource(sseUrl);
 
-      eventSource.addEventListener("status_update", (e: MessageEvent) => {
+      const handleEventMessage = (e: MessageEvent) => {
         try {
           const payload = JSON.parse(e.data);
           if (payload && payload.status) {
@@ -280,7 +312,10 @@ export function FloatingOrderTracker({
         } catch (err) {
           console.warn("Erro ao ler evento de status SSE:", err);
         }
-      });
+      };
+
+      eventSource.addEventListener("status_update", handleEventMessage);
+      eventSource.onmessage = handleEventMessage;
     } catch (err) {
       console.warn("EventSource SSE não suportado:", err);
     }
@@ -300,15 +335,33 @@ export function FloatingOrderTracker({
               applyStatusUpdate(data.status, data.order || data.orderData);
             }
           } else if (data && data.type === "ACTIVE_ORDER_CLEARED") {
-            setOrderId(null);
-            setOrder(null);
-            setIsDismissed(true);
+            if (!isCompletedCelebration) {
+              setOrderId(null);
+              setOrder(null);
+              setIsDismissed(true);
+            }
           }
         };
       } catch (err) {
         console.warn("BroadcastChannel error:", err);
       }
     }
+
+    // 3. Sincronização ao focar ou retornar para a aba
+    const handleFocusSync = () => {
+      if (document.visibilityState === "visible") {
+        fetchOrderDetailsApi(cleanId, currentTenantSlug)
+          .then((res) => {
+            if (res.success && res.order?.status) {
+              applyStatusUpdate(res.order.status, res.order);
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener("focus", handleFocusSync);
+    document.addEventListener("visibilitychange", handleFocusSync);
 
     return () => {
       if (eventSource) {
@@ -317,14 +370,17 @@ export function FloatingOrderTracker({
       if (bc) {
         bc.close();
       }
+      window.removeEventListener("focus", handleFocusSync);
+      document.removeEventListener("visibilitychange", handleFocusSync);
     };
-  }, [orderId, isDismissed, isCompletedCelebration, applyStatusUpdate]);
+  }, [orderId, isDismissed, isCompletedCelebration, applyStatusUpdate, currentTenantSlug]);
 
   // Informações de status contextual
   const getStatusDetails = () => {
-    if (status === "received") {
+    const norm = normalizeOrderStatus(status);
+    if (norm === "received") {
       return {
-        badge: "Recebido",
+        badge: "Pedido Recebido",
         title: "Pedido Recebido!",
         description: "Seu pedido foi registrado e aguarda confirmação da cozinha.",
         accentColor: "text-amber-600 dark:text-amber-400",
@@ -333,7 +389,7 @@ export function FloatingOrderTracker({
         icon: PackageCheck,
       };
     }
-    if (status === "preparing") {
+    if (norm === "preparing") {
       return {
         badge: "Em Preparo",
         title: "Em Preparo!",
@@ -344,7 +400,7 @@ export function FloatingOrderTracker({
         icon: ChefHat,
       };
     }
-    if (status === "delivering") {
+    if (norm === "delivering") {
       if (isPickup) {
         return {
           badge: "Pronto no Balcão",
@@ -366,10 +422,10 @@ export function FloatingOrderTracker({
         icon: Bike,
       };
     }
-    if (status === "done") {
+    if (norm === "done") {
       return {
-        badge: "Concluído",
-        title: "Pedido Concluído! 🎉",
+        badge: isPickup ? "Retirado" : "Entregue",
+        title: isPickup ? "Pedido Retirado! 🎉" : "Pedido Entregue! 🎉",
         description: "Seu pedido foi entregue com sucesso. Bom apetite!",
         accentColor: "text-emerald-600 dark:text-emerald-400",
         badgeBg: "bg-emerald-100 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300",
@@ -666,3 +722,7 @@ export function FloatingOrderTracker({
     </div>
   );
 }
+
+export const FloatingOrderStatus = FloatingOrderTracker;
+export const OrderTracker = FloatingOrderTracker;
+

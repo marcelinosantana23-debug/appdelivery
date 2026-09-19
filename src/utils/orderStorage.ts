@@ -8,12 +8,65 @@ export interface StoredActiveOrder {
   status?: OrderStatus;
   orderType?: OrderType;
   timestamp: number;
+  completedAt?: number;
 }
 
 const STORAGE_KEY = "topfood_active_order_id";
 const ALT_STORAGE_KEY = "active_order_id";
 const DATA_STORAGE_KEY = "topfood_active_order_data";
 const STATUS_STORAGE_KEY = "topfood_active_order_status";
+
+/**
+ * Normaliza qualquer variante de status de pedido (ex: português, inglês, banco D1)
+ * para o enum estrito OrderStatus ("received" | "preparing" | "delivering" | "done" | "cancelled")
+ */
+export function normalizeOrderStatus(raw: string | undefined | null): OrderStatus {
+  if (!raw) return "received";
+  const s = String(raw).toLowerCase().trim().replace(/[\s-]+/g, "_");
+  if (
+    s === "pending" ||
+    s === "recebido" ||
+    s === "received" ||
+    s === "pendente" ||
+    s === "novo"
+  ) {
+    return "received";
+  }
+  if (
+    s === "preparing" ||
+    s === "em_preparo" ||
+    s === "preparo" ||
+    s === "producao" ||
+    s === "em_producao" ||
+    s === "aceito"
+  ) {
+    return "preparing";
+  }
+  if (
+    s === "delivering" ||
+    s === "saiu_para_entrega" ||
+    s === "a_caminho" ||
+    s === "entrega" ||
+    s === "pronto" ||
+    s === "pronto_balcao"
+  ) {
+    return "delivering";
+  }
+  if (
+    s === "completed" ||
+    s === "done" ||
+    s === "entregue" ||
+    s === "concluido" ||
+    s === "concluído" ||
+    s === "finalizado"
+  ) {
+    return "done";
+  }
+  if (s === "cancelled" || s === "cancelado") {
+    return "cancelled";
+  }
+  return (raw as OrderStatus) || "received";
+}
 
 let orderBroadcastChannel: BroadcastChannel | null = null;
 export function getOrderBroadcastChannel(): BroadcastChannel | null {
@@ -29,29 +82,29 @@ export function getOrderBroadcastChannel(): BroadcastChannel | null {
 export function saveActiveOrder(
   orderId: string,
   tenantSlug?: string,
-  extra?: { storeName?: string; total?: number; status?: OrderStatus; orderType?: OrderType }
+  extra?: { storeName?: string; total?: number; status?: OrderStatus | string; orderType?: OrderType }
 ): void {
   try {
     if (!orderId) return;
 
+    const normStatus = normalizeOrderStatus(extra?.status || "received");
+
     // Se o pedido já for finalizado ou cancelado, não salva como ativo
-    if (extra?.status === "done" || extra?.status === "cancelled") {
+    if (normStatus === "done" || normStatus === "cancelled") {
       clearActiveOrder();
       return;
     }
 
     localStorage.setItem(STORAGE_KEY, orderId);
     localStorage.setItem(ALT_STORAGE_KEY, orderId);
-    if (extra?.status) {
-      localStorage.setItem(STATUS_STORAGE_KEY, extra.status);
-    }
+    localStorage.setItem(STATUS_STORAGE_KEY, normStatus);
 
     const data: StoredActiveOrder = {
       orderId,
       tenantSlug,
       storeName: extra?.storeName,
       total: extra?.total,
-      status: extra?.status || "received",
+      status: normStatus,
       orderType: extra?.orderType || "delivery",
       timestamp: Date.now(),
     };
@@ -60,7 +113,7 @@ export function saveActiveOrder(
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("topfood-active-order-updated", {
-          detail: { orderId, status: data.status, orderData: data },
+          detail: { orderId, status: normStatus, orderData: data },
         })
       );
     }
@@ -70,7 +123,7 @@ export function saveActiveOrder(
       bc.postMessage({
         type: "ACTIVE_ORDER_UPDATED",
         orderId,
-        status: data.status,
+        status: normStatus,
         orderData: data,
       });
     }
@@ -107,12 +160,14 @@ export function getActiveOrderData(currentTenantSlug?: string): StoredActiveOrde
     }
 
     if (!parsed) {
-      const storedStatus = (localStorage.getItem(STATUS_STORAGE_KEY) as OrderStatus) || "received";
+      const storedStatus = normalizeOrderStatus(localStorage.getItem(STATUS_STORAGE_KEY));
       parsed = {
         orderId: rawId,
         status: storedStatus,
         timestamp: Date.now(),
       };
+    } else {
+      parsed.status = normalizeOrderStatus(parsed.status);
     }
 
     if (!parsed || !parsed.orderId) {
@@ -120,10 +175,14 @@ export function getActiveOrderData(currentTenantSlug?: string): StoredActiveOrde
       return null;
     }
 
-    // Regra 1: Pedidos encerrados (done ou cancelled) NUNCA devem ter banner ativo
+    // Regra 1: Pedidos encerrados (done ou cancelled)
+    // Permite uma janela de 8 segundos para a barra do cliente exibir "Entregue" antes de limpar
     if (parsed.status === "done" || parsed.status === "cancelled") {
-      clearActiveOrder();
-      return null;
+      const completionTime = parsed.completedAt || parsed.timestamp || 0;
+      if (Date.now() - completionTime > 8000) {
+        clearActiveOrder();
+        return null;
+      }
     }
 
     // Regra 2: Pedidos com mais de 24 horas expiram automaticamente
@@ -150,27 +209,41 @@ export function getActiveOrderData(currentTenantSlug?: string): StoredActiveOrde
   }
 }
 
-export function updateActiveOrderStatus(status: OrderStatus): void {
+export function updateActiveOrderStatus(status: OrderStatus | string): void {
   try {
-    localStorage.setItem(STATUS_STORAGE_KEY, status);
+    const norm = normalizeOrderStatus(status);
+    localStorage.setItem(STATUS_STORAGE_KEY, norm);
     const rawData = localStorage.getItem(DATA_STORAGE_KEY);
-    let orderId = localStorage.getItem(STORAGE_KEY) || "";
+    let orderId = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(ALT_STORAGE_KEY) || "";
+
+    let current: StoredActiveOrder = {
+      orderId,
+      status: norm,
+      timestamp: Date.now(),
+    };
 
     if (rawData) {
       try {
-        const current = JSON.parse(rawData) as StoredActiveOrder;
-        current.status = status;
+        current = JSON.parse(rawData) as StoredActiveOrder;
+        current.status = norm;
         orderId = current.orderId || orderId;
-        localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(current));
       } catch {
         // ignore
       }
     }
 
+    if (norm === "done" || norm === "cancelled") {
+      if (!current.completedAt) {
+        current.completedAt = Date.now();
+      }
+    }
+
+    localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(current));
+
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("topfood-active-order-updated", {
-          detail: { orderId, status },
+          detail: { orderId, status: norm, orderData: current },
         })
       );
     }
@@ -180,7 +253,8 @@ export function updateActiveOrderStatus(status: OrderStatus): void {
       bc.postMessage({
         type: "ACTIVE_ORDER_UPDATED",
         orderId,
-        status,
+        status: norm,
+        orderData: current,
       });
     }
   } catch {

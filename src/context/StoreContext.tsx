@@ -23,8 +23,9 @@ import {
   fetchAllTenantCredentialsApi,
   updateTenantCredentialsApi,
 } from "@/services/api";
-import { getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { playNewOrderChime } from "@/utils/audio";
+import { updateActiveOrderStatus } from "@/utils/orderStorage";
 import type { ToastMessage } from "@/components/common/Toast";
 
 interface StoreContextValue {
@@ -850,12 +851,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const activeId = localStorage.getItem("topfood_active_order_id");
+        const activeId = localStorage.getItem("topfood_active_order_id") || localStorage.getItem("active_order_id");
         if (
-          activeId &&
-          (activeId === orderId || activeId.replace(/^#/, "") === orderId.replace(/^#/, ""))
+          !activeId ||
+          activeId === orderId ||
+          activeId.replace(/^#/, "") === orderId.replace(/^#/, "")
         ) {
-          localStorage.setItem("topfood_active_order_status", status);
+          updateActiveOrderStatus(status);
         }
       } catch {
         // ignore
@@ -1133,6 +1135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useStore() {
   const ctx = useContext(StoreContext);
   if (!ctx) throw new Error("useStore must be used within StoreProvider");

@@ -34,7 +34,8 @@ import {
 import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
 import type { Tenant, TenantStatus } from "@/types";
-import { StoreLogo, getSafeDisplayName, getSafeSlug } from "@/components/common/StoreLogo";
+import { StoreLogo } from "@/components/common/StoreLogo";
+import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
 
 interface SuperAdminPanelProps {
@@ -519,10 +520,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   };
 
   return (
-    <div className="min-h-screen w-full max-w-full box-border overflow-x-hidden bg-slate-950 text-slate-100 pb-16">
+    <div className="min-h-screen w-full max-w-full box-border overflow-x-hidden bg-slate-950 text-slate-100 pb-16 flex flex-col">
       {/* Top Header */}
       <header className="sticky top-0 z-30 w-full border-b border-slate-800 bg-slate-900/90 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-3.5 py-3 sm:px-6 sm:py-3.5 box-border">
+        <div className="mx-auto flex w-full max-w-7xl flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 sm:py-3.5 box-border">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-red-500 text-white shadow-lg shadow-amber-500/20">
               <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -591,7 +592,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto w-full max-w-7xl px-3.5 pt-6 sm:px-6 sm:pt-8 box-border">
+      <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-5 sm:pt-8 box-border flex flex-col max-w-full overflow-x-hidden">
         {/* Super Admin Security / Database Banner */}
         <section className="mb-6 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-slate-900/80 to-slate-900/60 p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

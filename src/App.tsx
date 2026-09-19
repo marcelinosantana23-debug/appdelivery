@@ -16,6 +16,7 @@ import { StoreAdminLogin } from "@/components/admin/StoreAdminLogin";
 import { ToastContainer } from "@/components/common/Toast";
 import { OfflineIndicator } from "@/components/common/OfflineIndicator";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
 
 type View = "menu" | "checkout" | "tracking" | "admin" | "superadmin";
@@ -368,8 +369,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <StoreProvider>
-      <AppContent />
-    </StoreProvider>
+    <ErrorBoundary fallbackTitle="Ocorreu um erro ao carregar o aplicativo">
+      <StoreProvider>
+        <AppContent />
+      </StoreProvider>
+    </ErrorBoundary>
   );
 }
