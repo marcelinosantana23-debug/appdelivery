@@ -98,6 +98,80 @@ app.get("/manifest.json", async (c) => {
   });
 });
 
+// 4.1. Redirecionamento de manifest dinâmico por vitrine
+app.get("/manifest/:slug", (c) => {
+  const slug = c.req.param("slug");
+  return c.redirect(`/api/manifest/${slug}`);
+});
+
+// 4.2. Injeção de metatags PWA dinâmicas na rota de vitrine /loja/:slug
+app.get("/loja/:slug*", async (c, next) => {
+  const slug = c.req.param("slug");
+  const assets = c.env?.ASSETS;
+
+  if (assets && typeof assets.fetch === "function" && slug) {
+    try {
+      const { Database } = await import("./server/db");
+      const db = new Database(c.env);
+      const loja = await db.getTenantByIdOrSlug(slug);
+
+      if (loja) {
+        const indexUrl = new URL("/index.html", c.req.url);
+        const indexRes = await assets.fetch(new Request(indexUrl.toString(), c.req.raw));
+
+        if (indexRes.status === 200) {
+          let html = await indexRes.text();
+          const storeName = loja.name || "Top Food";
+          const logoUrl = loja.logo && loja.logo.trim() ? loja.logo : "/icon-512.png";
+          const manifestUrl = `/api/manifest/${loja.slug}.json`;
+
+          html = html.replace(/<title>.*?<\/title>/i, `<title>${storeName}</title>`);
+
+          if (html.includes('name="apple-mobile-web-app-title"')) {
+            html = html.replace(
+              /<meta\s+name="apple-mobile-web-app-title"\s+content=".*?"\s*\/?>/i,
+              `<meta name="apple-mobile-web-app-title" content="${storeName}" />`
+            );
+          } else {
+            html = html.replace("</head>", `  <meta name="apple-mobile-web-app-title" content="${storeName}" />\n</head>`);
+          }
+
+          if (html.includes('rel="manifest"')) {
+            html = html.replace(
+              /<link\s+rel="manifest"\s+href=".*?"\s*\/?>/i,
+              `<link rel="manifest" href="${manifestUrl}" />`
+            );
+          } else {
+            html = html.replace("</head>", `  <link rel="manifest" href="${manifestUrl}" />\n</head>`);
+          }
+
+          if (html.includes('rel="apple-touch-icon"')) {
+            html = html.replace(
+              /<link\s+rel="apple-touch-icon"[^>]*\/?>/i,
+              `<link rel="apple-touch-icon" href="${logoUrl}" />`
+            );
+          } else {
+            html = html.replace("</head>", `  <link rel="apple-touch-icon" href="${logoUrl}" />\n</head>`);
+          }
+
+          html = html.replace(
+            /<link\s+rel="icon"\s+type="image\/svg\+xml"[^>]*\/?>/i,
+            `<link rel="icon" href="${logoUrl}" />`
+          );
+
+          const headers = new Headers(indexRes.headers);
+          headers.set("Content-Type", "text/html; charset=utf-8");
+          return new Response(html, { status: 200, headers });
+        }
+      }
+    } catch (err) {
+      console.warn("Worker error processing /loja/:slug HTML:", err);
+    }
+  }
+
+  return next();
+});
+
 // 5. Static assets & SPA fallback using Cloudflare Workers Static Assets binding (wrangler.toml: [assets])
 app.get("*", async (c, next) => {
   const path = c.req.path;

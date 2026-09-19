@@ -1,0 +1,608 @@
+import React, { useState, useRef } from "react";
+import {
+  Sparkles,
+  Upload,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+  Copy,
+  ExternalLink,
+  Store,
+  Layers,
+  ShoppingBag,
+  Phone,
+  Lock,
+  Mail,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Zap,
+  Smartphone,
+  Check,
+} from "lucide-react";
+import type { Tenant, Product } from "@/types";
+import { copyTextToClipboard, getStoreUrl } from "@/utils/url";
+
+interface AiMenuImportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (tenant: Tenant) => void;
+}
+
+type ImportStep = "idle" | "uploading" | "analyzing" | "extracting_logo" | "creating_store" | "done";
+
+export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+}) => {
+  const [file, setFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [fileBase64, setFileBase64] = useState<string | null>(null);
+  const [mimeType, setMimeType] = useState<string>("image/jpeg");
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const [step, setStep] = useState<ImportStep>("idle");
+  const [progressMsg, setProgressMsg] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCreds, setCopiedCreds] = useState(false);
+
+  const [importResult, setImportResult] = useState<{
+    tenant: Tenant;
+    credentials: { email: string; password?: string };
+    produtosCount: number;
+    categoriasCount: number;
+    produtos?: Product[];
+    logoUrl?: string;
+    hasLogo?: boolean;
+    extractedData?: {
+      nome_loja: string;
+      descricao: string;
+      telefone: string;
+      primaryColor?: string;
+    };
+  } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!isOpen) return null;
+
+  const handleFileSelect = (selectedFile: File) => {
+    setErrorMessage("");
+    const validTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/jpg",
+      "application/pdf",
+    ];
+
+    if (!validTypes.includes(selectedFile.type) && !selectedFile.name.match(/\.(jpg|jpeg|png|webp|pdf)$/i)) {
+      setErrorMessage("Por favor, selecione uma imagem (JPG, PNG, WEBP) ou documento PDF do cardápio.");
+      return;
+    }
+
+    if (selectedFile.size > 20 * 1024 * 1024) {
+      setErrorMessage("O arquivo é muito grande. O tamanho máximo permitido é de 20MB.");
+      return;
+    }
+
+    setFile(selectedFile);
+    setMimeType(selectedFile.type || "image/jpeg");
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setFileBase64(dataUrl);
+      if (selectedFile.type.startsWith("image/")) {
+        setFilePreview(dataUrl);
+      } else {
+        setFilePreview(null);
+      }
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleStartImport = async () => {
+    if (!fileBase64) {
+      setErrorMessage("Faça o upload de uma foto ou PDF do cardápio para continuar.");
+      return;
+    }
+
+    setErrorMessage("");
+    setStep("uploading");
+    setProgressMsg("Enviando arquivo do cardápio...");
+
+    // Timer simulando feedback visual dos passos do pipeline
+    const timer1 = setTimeout(() => {
+      setStep("analyzing");
+      setProgressMsg("Analisando cardápio com Gemini 3 Multimodal...");
+    }, 1200);
+
+    const timer2 = setTimeout(() => {
+      setStep("extracting_logo");
+      setProgressMsg("Identificando itens e gerando/extraindo logotipo exclusivo...");
+    }, 3800);
+
+    const timer3 = setTimeout(() => {
+      setStep("creating_store");
+      setProgressMsg("Gravando lanchonete, produtos e vitrine no Cloudflare D1...");
+    }, 6500);
+
+    try {
+      const response = await fetch("/api/admin/lojas/importar-cardapio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileBase64,
+          mimeType,
+          fileName: file?.name || "cardapio.jpg",
+        }),
+      });
+
+      const data = await response.json();
+
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Não foi possível processar o cardápio com a IA.");
+      }
+
+      setStep("done");
+      setImportResult(data);
+      onSuccess(data.tenant);
+    } catch (err: any) {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+      setStep("idle");
+      setErrorMessage(
+        err.message ||
+          "Erro ao processar o cardápio. Verifique se o arquivo está nítido e se a chave GEMINI_API_KEY está configurada."
+      );
+    }
+  };
+
+  const resetForm = () => {
+    setFile(null);
+    setFilePreview(null);
+    setFileBase64(null);
+    setStep("idle");
+    setProgressMsg("");
+    setErrorMessage("");
+    setImportResult(null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-2xl rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden my-auto">
+        {/* Header */}
+        <div className="relative bg-gradient-to-r from-violet-900/60 via-purple-900/40 to-slate-900 p-5 sm:p-6 border-b border-slate-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 via-purple-600 to-amber-500 text-white shadow-lg shadow-purple-500/25">
+                <Sparkles className="h-6 w-6 text-amber-200 animate-pulse" />
+              </div>
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                  Cadastro Inteligente por IA
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Gemini Multimodal
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Envie a foto ou PDF do cardápio físico para criar a loja, produtos e logo em segundos
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5 sm:p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+          {errorMessage && (
+            <div className="rounded-2xl border border-red-500/40 bg-red-950/40 p-4 text-xs text-red-200 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold text-red-300 mb-0.5">Erro no processamento:</strong>
+                <span>{errorMessage}</span>
+              </div>
+            </div>
+          )}
+
+          {/* ESTADO 1: FORMULÁRIO DE UPLOAD */}
+          {step === "idle" && (
+            <div className="space-y-4">
+              {/* Dropzone */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-6 sm:p-8 cursor-pointer transition text-center ${
+                  isDragOver
+                    ? "border-violet-500 bg-violet-500/10 scale-[1.01]"
+                    : file
+                    ? "border-emerald-500/60 bg-emerald-950/20"
+                    : "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-800/40"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0]);
+                    }
+                  }}
+                />
+
+                {file ? (
+                  <div className="flex flex-col items-center gap-3">
+                    {filePreview ? (
+                      <div className="relative h-44 w-auto max-w-full rounded-2xl overflow-hidden border border-slate-700 shadow-md">
+                        <img
+                          src={filePreview}
+                          alt="Prévia do cardápio"
+                          className="h-full w-auto object-contain bg-slate-950"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30">
+                        <FileText className="h-10 w-10" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-bold text-white flex items-center justify-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        {file.name}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {(file.size / (1024 * 1024)).toFixed(2)} MB • Clique ou arraste para substituir
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600/30 to-amber-500/30 text-amber-300 border border-amber-500/30">
+                      <Upload className="h-7 w-7" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        Arraste e solte o cardápio aqui ou clique para selecionar
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Formatos aceitos: Imagens (JPG, PNG, WEBP) ou Documento PDF (até 20MB)
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Informações explicativas do recurso */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3.5">
+                  <div className="flex items-center gap-2 text-violet-400 font-semibold text-xs mb-1">
+                    <Zap className="h-4 w-4 shrink-0" />
+                    1. Cardápio Completo
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    A IA lê nomes, descrições, preços e adicionais de todos os itens do cardápio.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3.5">
+                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs mb-1">
+                    <Sparkles className="h-4 w-4 shrink-0" />
+                    2. Logo & Marca
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Extrai o logo existente ou gera uma nova logo vetorial moderna adaptada para a loja.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3.5">
+                  <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs mb-1">
+                    <Smartphone className="h-4 w-4 shrink-0" />
+                    3. PWA Dinâmico
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Cria automaticamente o manifest e ícones com a marca da lanchonete para o cliente instalar.
+                  </p>
+                </div>
+              </div>
+
+              {/* Botão de Ação */}
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartImport}
+                  disabled={!fileBase64}
+                  className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs sm:text-sm font-bold shadow-lg transition ${
+                    fileBase64
+                      ? "bg-gradient-to-r from-violet-600 via-purple-600 to-amber-500 text-white shadow-purple-600/30 hover:brightness-110 active:scale-95"
+                      : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4 text-amber-200" />
+                  Importar e Criar Loja por IA
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ESTADO 2: PROCESSANDO EM TEMPO REAL */}
+          {step !== "idle" && step !== "done" && (
+            <div className="py-8 sm:py-12 flex flex-col items-center text-center space-y-6">
+              <div className="relative">
+                <div className="h-20 w-20 rounded-full border-4 border-violet-500/20 border-t-violet-500 animate-spin flex items-center justify-center">
+                  <Sparkles className="h-8 w-8 text-amber-400 animate-pulse" />
+                </div>
+              </div>
+
+              <div className="space-y-2 max-w-md">
+                <h3 className="text-base sm:text-lg font-bold text-white">Processando com Inteligência Artificial</h3>
+                <p className="text-xs sm:text-sm text-slate-300 font-medium">{progressMsg}</p>
+                <p className="text-[11px] text-slate-500">
+                  O Gemini está estruturando os itens, calculando preços e preparando a vitrine no Cloudflare D1.
+                </p>
+              </div>
+
+              {/* Steps checklist */}
+              <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-950 p-4 space-y-2.5 text-left text-xs">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Upload e conversão de mídia</span>
+                </div>
+                <div
+                  className={`flex items-center gap-2 ${
+                    step === "analyzing" || step === "extracting_logo" || step === "creating_store"
+                      ? "text-emerald-400"
+                      : "text-slate-500"
+                  }`}
+                >
+                  {step === "uploading" ? (
+                    <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  )}
+                  <span>Análise visual com Gemini Multimodal</span>
+                </div>
+                <div
+                  className={`flex items-center gap-2 ${
+                    step === "extracting_logo" || step === "creating_store"
+                      ? "text-emerald-400"
+                      : step === "analyzing"
+                      ? "text-amber-400 font-medium"
+                      : "text-slate-500"
+                  }`}
+                >
+                  {step === "analyzing" ? (
+                    <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
+                  ) : step === "extracting_logo" || step === "creating_store" ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border border-slate-700" />
+                  )}
+                  <span>Extração / Geração de logotipo vetorial</span>
+                </div>
+                <div
+                  className={`flex items-center gap-2 ${
+                    step === "creating_store" ? "text-amber-400 font-medium" : "text-slate-500"
+                  }`}
+                >
+                  {step === "creating_store" ? (
+                    <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border border-slate-700" />
+                  )}
+                  <span>Persistência no Cloudflare D1 e PWA dinâmico</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ESTADO 3: SUCESSO COMPLETO */}
+          {step === "done" && importResult && (
+            <div className="space-y-5 animate-in fade-in duration-300">
+              <div className="rounded-2xl border border-emerald-500/40 bg-emerald-950/20 p-4 text-center">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mb-2">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <h3 className="text-base font-bold text-white">Lanchonete Criada com Sucesso pela IA!</h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Cardápio extraído, logo gerada e vitrine PWA já publicada no Cloudflare D1.
+                </p>
+              </div>
+
+              {/* Loja & Logo Gerada */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                <div className="relative h-20 w-20 shrink-0 rounded-2xl overflow-hidden border border-amber-500/30 bg-slate-900 flex items-center justify-center p-1 shadow-lg shadow-amber-500/10">
+                  {importResult.logoUrl ? (
+                    <img
+                      src={importResult.logoUrl}
+                      alt={importResult.tenant.name}
+                      className="h-full w-full object-contain rounded-xl"
+                    />
+                  ) : (
+                    <Store className="h-8 w-8 text-amber-400" />
+                  )}
+                </div>
+
+                <div className="min-w-0 text-center sm:text-left flex-1">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                    <h4 className="text-base font-bold text-white truncate">{importResult.tenant.name}</h4>
+                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+                      Vitrine Ativa
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                    {importResult.tenant.tagline || importResult.extractedData?.descricao}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-2 text-xs text-slate-300">
+                    <span className="flex items-center gap-1 text-amber-400">
+                      <ShoppingBag className="h-3.5 w-3.5" />
+                      <strong>{importResult.produtosCount}</strong> produtos
+                    </span>
+                    <span className="flex items-center gap-1 text-violet-400">
+                      <Layers className="h-3.5 w-3.5" />
+                      <strong>{importResult.categoriasCount}</strong> categorias
+                    </span>
+                    {importResult.tenant.whatsapp && (
+                      <span className="flex items-center gap-1 text-slate-400">
+                        <Phone className="h-3.5 w-3.5" />
+                        {importResult.tenant.whatsapp}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Link da Vitrine Dinâmica */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Smartphone className="h-3.5 w-3.5 text-amber-400" />
+                  Link da Vitrine (PWA Personalizado com a Marca da Loja):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={getStoreUrl(importResult.tenant.slug)}
+                    className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      copyTextToClipboard(getStoreUrl(importResult.tenant.slug));
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition"
+                  >
+                    {copiedLink ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedLink ? "Copiado" : "Copiar Link"}
+                  </button>
+                  <a
+                    href={getStoreUrl(importResult.tenant.slug)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 px-3 py-2 text-xs font-bold text-slate-950 transition shadow-sm"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Abrir Vitrine
+                  </a>
+                </div>
+              </div>
+
+              {/* Credenciais de Acesso do Lojista */}
+              <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-slate-900 to-slate-900 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                    <Lock className="h-4 w-4 text-amber-400" />
+                    Credenciais Geradas para o Lojista Acessar o Painel:
+                  </div>
+                  <button
+                    onClick={() => {
+                      const textToCopy = `Acesso ao Painel Top Food:\nLoja: ${importResult.tenant.name}\nE-mail: ${importResult.credentials.email}\nSenha: ${importResult.credentials.password}\nLink: ${window.location.origin}/admin`;
+                      copyTextToClipboard(textToCopy);
+                      setCopiedCreds(true);
+                      setTimeout(() => setCopiedCreds(false), 2000);
+                    }}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition"
+                  >
+                    {copiedCreds ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedCreds ? "Copiado!" : "Copiar Credenciais"}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-2.5">
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1 mb-1">
+                      <Mail className="h-3 w-3 text-slate-500" />
+                      E-mail do Administrador:
+                    </span>
+                    <p className="font-mono text-white font-medium break-all">{importResult.credentials.email}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-2.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <Lock className="h-3 w-3 text-slate-500" />
+                        Senha de Acesso:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                    <p className="font-mono text-amber-300 font-bold text-sm">
+                      {showPassword ? importResult.credentials.password : "••••••••"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botões de Ação Final */}
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                >
+                  Importar Outro Cardápio
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl bg-gradient-to-r from-red-600 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:brightness-110 transition"
+                >
+                  Concluir e Voltar ao Painel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -43,6 +43,47 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
+  // Sincroniza metatags dinâmicas do PWA (título, apple-mobile-web-app-title, manifest e ícones da loja)
+  useEffect(() => {
+    if (!config?.name) return;
+
+    // 1. Atualiza title
+    document.title = config.name;
+
+    // 2. Atualiza apple-mobile-web-app-title para salvar na tela inicial com o nome da loja
+    let metaAppleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (!metaAppleTitle) {
+      metaAppleTitle = document.createElement("meta");
+      metaAppleTitle.setAttribute("name", "apple-mobile-web-app-title");
+      document.head.appendChild(metaAppleTitle);
+    }
+    metaAppleTitle.setAttribute("content", config.name);
+
+    // 3. Atualiza link do manifest dinâmico exclusivo da loja
+    if (config.slug) {
+      const manifestUrl = `/api/manifest/${config.slug}.json`;
+      let linkManifest = document.querySelector('link[rel="manifest"]');
+      if (!linkManifest) {
+        linkManifest = document.createElement("link");
+        linkManifest.setAttribute("rel", "manifest");
+        document.head.appendChild(linkManifest);
+      }
+      linkManifest.setAttribute("href", manifestUrl);
+    }
+
+    // 4. Atualiza favicons e apple-touch-icon com a logo da lanchonete
+    if (config.logo && config.logo.trim()) {
+      const linkIcon = document.querySelector('link[rel="icon"]');
+      if (linkIcon) {
+        linkIcon.setAttribute("href", config.logo);
+      }
+      const linkAppleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+      if (linkAppleIcon) {
+        linkAppleIcon.setAttribute("href", config.logo);
+      }
+    }
+  }, [config?.name, config?.slug, config?.logo]);
+
   useEffect(() => {
     observerRef.current?.disconnect();
     observerRef.current = new IntersectionObserver(

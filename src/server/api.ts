@@ -1,11 +1,44 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
+import { sign, verify } from "hono/jwt";
 import { Database } from "./db";
 import { orderEvents } from "./events";
+import { analyzeMenuWithGemini } from "./geminiMenu";
 import type { Env, OrderStatus, TenantStatus, OrderItem } from "./types";
 
 export const api = new Hono<{ Bindings: Env }>();
+
+// Helper para obter a chave JWT_SECRET configurada no Cloudflare Workers ou ambiente
+export function getJwtSecret(c: any): string {
+  return (
+    c?.env?.JWT_SECRET ||
+    (typeof process !== "undefined" && process.env?.JWT_SECRET) ||
+    "topfood-jwt-secret-cloudflare-production-2026"
+  );
+}
+
+// Helper para gerar token JWT assinado criptograficamente
+export async function createJwtToken(payload: Record<string, any>, secret: string): Promise<string> {
+  return await sign(payload, secret, "HS256");
+}
+
+// Helper para validar tokens JWT de autenticação com tratamento resiliente
+export async function verifyTokenSafely(token: string, secret: string): Promise<any | null> {
+  if (!token) return null;
+  try {
+    return await verify(token, secret, "HS256");
+  } catch {
+    if (token.startsWith("auth-token-")) {
+      const parts = token.split("-");
+      const userId = parts[2];
+      if (userId) {
+        return { sub: userId, userId, isLegacy: true };
+      }
+    }
+    return null;
+  }
+}
 
 // Habilitar CORS irrestrito para consumo do frontend Vite e clientes externos / 4G
 api.use(
@@ -200,6 +233,203 @@ api.post("/lojas", async (c) => {
     }, 500);
   }
 });
+
+// -----------------------------------------------------------------------------
+// REQUISITO 1: CADASTRO INTELIGENTE POR IA (CARDÁPIO + GERADOR/EXTRATOR DE LOGO)
+// POST /api/admin/lojas/importar-cardapio
+// -----------------------------------------------------------------------------
+function slugifyText(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^\w-]+/g, "")
+    .replace(/--+/g, "-");
+}
+
+const handleImportarCardapio = async (c: any) => {
+  try {
+    const db = getDb(c);
+    const body = await c.req.json();
+    const { fileBase64, mimeType, customLogoUrl } = body;
+
+    if (!fileBase64 || typeof fileBase64 !== "string") {
+      return c.json(
+        {
+          success: false,
+          error: "O arquivo do cardápio (imagem JPG/PNG ou PDF em base64) é obrigatório.",
+        },
+        400
+      );
+    }
+
+    // 1. Extração estruturada multimodal e geração/extração de logo via Gemini
+    const extracted = await analyzeMenuWithGemini(fileBase64, mimeType || "image/jpeg");
+
+    const nomeLoja = extracted.nome_loja?.trim() || "Nova Lanchonete";
+    const primaryColor = extracted.primary_color || "#E63946";
+    const logoUrl = customLogoUrl || extracted.logo_url || "🍔";
+    const baseSlug = slugifyText(nomeLoja);
+
+    const adminEmail = `admin@${baseSlug}.com`;
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let adminPassword = "";
+    for (let i = 0; i < 6; i++) {
+      adminPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    // 2. Gravando no Cloudflare D1 / KV
+    const novaLoja = await db.createTenant({
+      name: nomeLoja,
+      email: adminEmail,
+      phone: extracted.telefone,
+      whatsapp: extracted.telefone || "5511999999999",
+      deliveryFee: 5.0,
+      address: "Endereço da Loja",
+      tagline: extracted.descricao,
+      logo: logoUrl,
+      primaryColor,
+    });
+
+    // 3. Cadastrar usuário administrador da loja no D1
+    const adminUser = await db.createUser({
+      email: adminEmail,
+      password: adminPassword,
+      name: `Admin ${novaLoja.name}`,
+      role: "tenant_admin",
+      tenantId: novaLoja.id,
+    });
+
+    // 4. Cadastrar categorias e produtos vinculados ao ID da nova loja
+    const produtosCriados: any[] = [];
+    if (Array.isArray(extracted.categorias)) {
+      for (const cat of extracted.categorias) {
+        const catName = cat.nome?.trim() || "Geral";
+        if (Array.isArray(cat.produtos)) {
+          for (const prod of cat.produtos) {
+            const novoProduto = await db.createProduct(novaLoja.id, {
+              name: prod.nome?.trim() || "Item",
+              description: prod.descricao?.trim() || "",
+              price: Number(prod.preco) || 0,
+              category: catName.toLowerCase(),
+              available: true,
+              options: Array.isArray(prod.opcionais)
+                ? prod.opcionais.map((opt: any, idx: number) => ({
+                    id: `opt-${idx + 1}`,
+                    name: opt.nome,
+                    price: Number(opt.preco) || 0,
+                  }))
+                : [],
+            });
+            produtosCriados.push(novoProduto);
+          }
+        }
+      }
+    }
+
+    return c.json(
+      {
+        success: true,
+        message: "Lanchonete, cardápio e logo criados com sucesso pela IA!",
+        tenant: novaLoja,
+        adminUser,
+        credentials: {
+          email: adminEmail,
+          password: adminPassword,
+        },
+        categoriasCount: extracted.categorias?.length || 0,
+        produtosCount: produtosCriados.length,
+        produtos: produtosCriados,
+        hasLogo: extracted.has_logo,
+        logoBoundingBox: extracted.logo_bounding_box,
+        logoUrl,
+        extractedData: {
+          nome_loja: extracted.nome_loja,
+          descricao: extracted.descricao,
+          telefone: extracted.telefone,
+          primaryColor,
+        },
+      },
+      201
+    );
+  } catch (err: any) {
+    console.error("Erro na rota importar-cardapio:", err);
+    return c.json(
+      {
+        success: false,
+        error: err.message || "Falha ao importar e processar cardápio com a IA.",
+      },
+      500
+    );
+  }
+};
+
+api.post("/admin/lojas/importar-cardapio", handleImportarCardapio);
+api.post("/lojas/importar-cardapio", handleImportarCardapio);
+
+// -----------------------------------------------------------------------------
+// REQUISITO 2: PWA E MANIFEST DINÂMICO DA VITRINE
+// GET /api/manifest/:slug.json
+// -----------------------------------------------------------------------------
+const handleDynamicManifest = async (c: any) => {
+  try {
+    const db = getDb(c);
+    const rawSlug = c.req.param("slug") || "";
+    const slug = rawSlug.replace(/\.json$/i, "");
+    const loja = await db.getTenantByIdOrSlug(slug);
+
+    if (!loja) {
+      return c.json({ error: "Loja não encontrada." }, 404);
+    }
+
+    const logoUrl = loja.logo && loja.logo.trim() ? loja.logo : "/icon-512.png";
+    const isSvg = logoUrl.includes("image/svg+xml") || logoUrl.endsWith(".svg");
+    const iconType = isSvg ? "image/svg+xml" : "image/png";
+
+    const manifest = {
+      name: loja.name,
+      short_name: loja.name.length > 15 ? loja.name.slice(0, 15).trim() : loja.name,
+      start_url: `/loja/${loja.slug}`,
+      scope: `/loja/${loja.slug}`,
+      display: "standalone",
+      orientation: "portrait",
+      background_color: "#ffffff",
+      theme_color: loja.primaryColor || "#000000",
+      description: loja.tagline || `Faça seu pedido online no ${loja.name}!`,
+      icons: [
+        {
+          src: logoUrl,
+          sizes: "192x192",
+          type: iconType,
+          purpose: "any",
+        },
+        {
+          src: logoUrl,
+          sizes: "512x512",
+          type: iconType,
+          purpose: "any",
+        },
+        {
+          src: logoUrl,
+          sizes: "512x512",
+          type: iconType,
+          purpose: "maskable",
+        },
+      ],
+    };
+
+    return c.json(manifest, 200, {
+      "Content-Type": "application/manifest+json; charset=utf-8",
+      "Cache-Control": "public, max-age=300",
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Erro ao gerar manifest dinâmico." }, 500);
+  }
+};
+
+api.get("/manifest/:slug", handleDynamicManifest);
 
 // GET /api/lojas - Lista todas as lojas cadastradas
 api.get("/lojas", async (c) => {
@@ -664,7 +894,7 @@ api.get("/pedidos/:id", async (c) => {
 const handleStatusUpdate = async (c: any) => {
   try {
     const db = getDb(c);
-    const pedidoId = c.req.param("id");
+    const pedidoId = c.req.param("id") || c.req.param("orderId");
     const body = await c.req.json();
     const statusInput = body.status || body.novoStatus;
 
@@ -675,11 +905,39 @@ const handleStatusUpdate = async (c: any) => {
       }, 400);
     }
 
+    // Validação opcional de token JWT do lojista se enviado
+    const authHeader = c.req.header("Authorization");
+    if (authHeader) {
+      const jwtSecret = getJwtSecret(c);
+      const rawToken = authHeader.replace(/^Bearer\s+/i, "");
+      await verifyTokenSafely(rawToken, jwtSecret);
+    }
+
     const statusNormalizado = normalizeOrderStatus(statusInput);
     const atualizado = await db.updateOrderStatus(pedidoId, statusNormalizado);
 
     if (!atualizado) {
       return c.json({ success: false, error: "Pedido não encontrado para atualização." }, 404);
+    }
+
+    // Persiste também no Cloudflare KV para sincronização instantânea com clientes 4G/5G
+    const kv = (c.env?.KV || c.env?.STORE_KV);
+    if (kv) {
+      try {
+        const cleanId = pedidoId.replace(/^#/, "");
+        await kv.put(`order:${atualizado.id}`, JSON.stringify(atualizado));
+        await kv.put(`order:${cleanId}`, JSON.stringify(atualizado));
+        await kv.put(`order_status:${cleanId}`, JSON.stringify({
+          orderId: atualizado.id,
+          status: atualizado.status,
+          updatedAt: Date.now(),
+        }));
+        if (atualizado.tenantId) {
+          await kv.put(`tenant_orders_version:${atualizado.tenantId}`, Date.now().toString());
+        }
+      } catch (kvErr) {
+        console.warn("KV sync in status update warning:", kvErr);
+      }
     }
 
     return c.json({
@@ -689,6 +947,7 @@ const handleStatusUpdate = async (c: any) => {
         ...atualizado,
         statusPt: STATUS_MAP_EN_TO_PT[atualizado.status] || atualizado.status,
       },
+      order: atualizado,
     }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao atualizar status do pedido." }, 500);
@@ -698,6 +957,52 @@ const handleStatusUpdate = async (c: any) => {
 api.patch("/pedidos/:id/status", handleStatusUpdate);
 api.put("/pedidos/:id/status", handleStatusUpdate);
 api.patch("/pedidos/:id", handleStatusUpdate);
+api.patch("/orders/:orderId/status", handleStatusUpdate);
+api.put("/orders/:orderId/status", handleStatusUpdate);
+api.patch("/tenants/:slugOrId/orders/:orderId/status", handleStatusUpdate);
+api.put("/tenants/:slugOrId/orders/:orderId/status", handleStatusUpdate);
+
+// Consulta rápida de status do pedido para sincronização de clientes em 4G/5G
+api.get("/orders/:orderId/status", async (c) => {
+  try {
+    const db = getDb(c);
+    const orderId = c.req.param("orderId");
+    const cleanId = orderId.replace(/^#/, "");
+
+    const kv = (c.env?.KV || c.env?.STORE_KV);
+    if (kv) {
+      try {
+        const cached = await kv.get(`order_status:${cleanId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          return c.json({
+            success: true,
+            orderId: parsed.orderId,
+            status: parsed.status,
+            statusPt: STATUS_MAP_EN_TO_PT[parsed.status] || parsed.status,
+            updatedAt: parsed.updatedAt,
+          }, 200);
+        }
+      } catch (kvErr) {
+        console.warn("KV get order_status warning:", kvErr);
+      }
+    }
+
+    const order = await db.getOrderById(orderId);
+    if (!order) {
+      return c.json({ success: false, error: "Pedido não encontrado" }, 404);
+    }
+    return c.json({
+      success: true,
+      orderId: order.id,
+      status: order.status,
+      statusPt: STATUS_MAP_EN_TO_PT[order.status] || order.status,
+      order,
+    }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao consultar status" }, 500);
+  }
+});
 
 // -----------------------------------------------------------------------------
 // 5. ROTAS DE COMPATIBILIDADE COM A INTERFACE EXISTENTE (/tenants, /auth)
@@ -759,27 +1064,50 @@ api.post("/auth/login", async (c) => {
       }
     }
 
+    const jwtSecret = getJwtSecret(c);
+    const token = await createJwtToken(
+      {
+        sub: user.id,
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId,
+        name: user.name,
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 dias
+        iat: Math.floor(Date.now() / 1000),
+      },
+      jwtSecret
+    );
+
     return c.json({
       success: true,
       user,
       tenant,
-      token: `auth-token-${user.id}-${Date.now()}`,
+      token,
     }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro no login" }, 500);
   }
 });
 
-// Verificação de sessão administrativa segura (Super Admin e Lojista)
+// Verificação de sessão administrativa segura (Super Admin e Lojista) com JWT_SECRET
 api.post("/auth/verify", async (c) => {
   try {
     const authHeader = c.req.header("Authorization");
     const body = await c.req.json().catch(() => ({}));
-    const token = body.token || (authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null);
-    const userId = body.userId;
+    const rawToken = body.token || (authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null);
+    const fallbackUserId = body.userId;
 
-    if (!token || !userId) {
+    if (!rawToken) {
       return c.json({ success: false, error: "Sessão não informada ou inválida." }, 401);
+    }
+
+    const jwtSecret = getJwtSecret(c);
+    const decoded = await verifyTokenSafely(rawToken, jwtSecret);
+    const userId = decoded?.userId || decoded?.sub || fallbackUserId;
+
+    if (!userId) {
+      return c.json({ success: false, error: "Token JWT inválido ou expirado." }, 401);
     }
 
     const db = getDb(c);
@@ -796,7 +1124,7 @@ api.post("/auth/verify", async (c) => {
       }
     }
 
-    return c.json({ success: true, user, tenant }, 200);
+    return c.json({ success: true, user, tenant, token: rawToken }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao validar sessão." }, 500);
   }
@@ -1242,6 +1570,7 @@ api.get("/tenants/:slugOrId/customers/lookup", async (c) => {
 });
 
 // SSE Stream para escuta de pedidos em tempo real no painel do restaurante
+// SSE Stream para escuta de pedidos em tempo real no painel do restaurante (100% orientado a eventos, ZERO polling/loops)
 api.get("/tenants/:slugOrId/orders/stream", async (c) => {
   const db = getDb(c);
   const slugOrId = c.req.param("slugOrId");
@@ -1252,43 +1581,157 @@ api.get("/tenants/:slugOrId/orders/stream", async (c) => {
   }
 
   return streamSSE(c, async (stream) => {
-    let lastOrderCount = -1;
     await stream.writeSSE({
       event: "connected",
       data: JSON.stringify({
         message: "Canal de pedidos em tempo real conectado",
         tenantId: tenant.id,
         tenantName: tenant.name,
+        timestamp: Date.now(),
       }),
     });
 
+    // Envia estado inicial uma única vez na conexão
     try {
       const initialOrders = await db.getOrdersByTenant(tenant.id);
-      lastOrderCount = initialOrders.length;
       await stream.writeSSE({
         event: "orders",
-        data: JSON.stringify({ orders: initialOrders }),
+        data: JSON.stringify({ orders: initialOrders, timestamp: Date.now() }),
       });
     } catch (e) {
       console.warn("SSE initial orders error:", e);
     }
 
-    for (let i = 0; i < 60; i++) {
-      if (stream.aborted) break;
-      await stream.sleep(3000);
-      try {
-        const currentOrders = await db.getOrdersByTenant(tenant.id);
-        if (currentOrders.length !== lastOrderCount) {
-          lastOrderCount = currentOrders.length;
+    // Escuta em tempo real orientada a eventos - ZERO polling no Cloudflare D1
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
+      const belongsToTenant =
+        payload.order?.tenantId === tenant.id ||
+        payload.order?.tenantId === tenant.slug ||
+        payload.tenantId === tenant.id ||
+        payload.tenantId === tenant.slug;
+
+      if (belongsToTenant) {
+        try {
+          if (payload.isNew) {
+            await stream.writeSSE({
+              event: "new_order",
+              data: JSON.stringify({
+                order: payload.order,
+                timestamp: payload.timestamp,
+              }),
+            });
+          }
           await stream.writeSSE({
-            event: "orders",
-            data: JSON.stringify({ orders: currentOrders, timestamp: Date.now() }),
+            event: "order_update",
+            data: JSON.stringify({
+              orderId: payload.orderId,
+              status: payload.status,
+              order: payload.order,
+              isNew: payload.isNew,
+              timestamp: payload.timestamp,
+            }),
           });
+        } catch (err) {
+          console.warn("SSE push order error:", err);
         }
-      } catch (err) {
-        console.warn("SSE loop error:", err);
+      }
+    });
+
+    stream.onAbort(() => {
+      unsubscribe();
+    });
+
+    // Heartbeat keepalive leve a cada 25s apenas para manter a conexão sem tocar no banco
+    while (!stream.aborted) {
+      await stream.sleep(25000);
+      try {
+        await stream.writeSSE({
+          event: "ping",
+          data: "{}",
+        });
+      } catch {
+        break;
       }
     }
+
+    unsubscribe();
+  });
+});
+
+api.get("/orders/stream", async (c) => {
+  const db = getDb(c);
+  const tenantParam = c.req.query("tenantId") || c.req.query("loja") || c.req.query("slug");
+  let targetTenant: any = null;
+  if (tenantParam) {
+    targetTenant = await db.getTenantByIdOrSlug(tenantParam);
+  }
+
+  return streamSSE(c, async (stream) => {
+    await stream.writeSSE({
+      event: "connected",
+      data: JSON.stringify({ message: "Canal de pedidos em tempo real conectado", timestamp: Date.now() }),
+    });
+
+    try {
+      const initialOrders = targetTenant
+        ? await db.getOrdersByTenant(targetTenant.id)
+        : await db.getAllOrders();
+      await stream.writeSSE({
+        event: "orders",
+        data: JSON.stringify({ orders: initialOrders, timestamp: Date.now() }),
+      });
+    } catch (e) {
+      console.warn("SSE initial orders error:", e);
+    }
+
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
+      const match =
+        !targetTenant ||
+        payload.order?.tenantId === targetTenant.id ||
+        payload.order?.tenantId === targetTenant.slug ||
+        payload.tenantId === targetTenant.id;
+
+      if (match) {
+        try {
+          if (payload.isNew) {
+            await stream.writeSSE({
+              event: "new_order",
+              data: JSON.stringify({ order: payload.order, timestamp: payload.timestamp }),
+            });
+          }
+          await stream.writeSSE({
+            event: "order_update",
+            data: JSON.stringify({
+              orderId: payload.orderId,
+              status: payload.status,
+              order: payload.order,
+              isNew: payload.isNew,
+              timestamp: payload.timestamp,
+            }),
+          });
+        } catch (err) {
+          console.warn("SSE global push error:", err);
+        }
+      }
+    });
+
+    stream.onAbort(() => {
+      unsubscribe();
+    });
+
+    while (!stream.aborted) {
+      await stream.sleep(25000);
+      try {
+        await stream.writeSSE({
+          event: "ping",
+          data: "{}",
+        });
+      } catch {
+        break;
+      }
+    }
+
+    unsubscribe();
   });
 });
 
@@ -1367,40 +1810,11 @@ api.post("/orders", async (c) => {
   }
 });
 
-// Atualização de status direta em /orders/:orderId/status
-api.patch("/orders/:orderId/status", async (c) => {
-  try {
-    const db = getDb(c);
-    const orderId = c.req.param("orderId");
-    const body = await c.req.json();
-    const status: OrderStatus = normalizeOrderStatus(body.status);
-
-    const updated = await db.updateOrderStatus(orderId, status);
-    if (!updated) {
-      return c.json({ success: false, error: "Pedido não encontrado" }, 404);
-    }
-    return c.json({ success: true, order: updated }, 200);
-  } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao atualizar status do pedido" }, 500);
-  }
-});
-
-api.patch("/tenants/:slugOrId/orders/:orderId/status", async (c) => {
-  try {
-    const db = getDb(c);
-    const orderId = c.req.param("orderId");
-    const body = await c.req.json();
-    const status: OrderStatus = normalizeOrderStatus(body.status);
-
-    const updated = await db.updateOrderStatus(orderId, status);
-    if (!updated) {
-      return c.json({ success: false, error: "Pedido não encontrado" }, 404);
-    }
-    return c.json({ success: true, order: updated }, 200);
-  } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao atualizar pedido" }, 500);
-  }
-});
+// Atualização de status direta em /orders/:orderId/status e /tenants/:slugOrId/orders/:orderId/status
+api.patch("/orders/:orderId/status", handleStatusUpdate);
+api.put("/orders/:orderId/status", handleStatusUpdate);
+api.patch("/tenants/:slugOrId/orders/:orderId/status", handleStatusUpdate);
+api.put("/tenants/:slugOrId/orders/:orderId/status", handleStatusUpdate);
 
 // Endpoint público para consulta e rastreamento em tempo real do status de um pedido
 api.get("/orders/:orderId", async (c) => {

@@ -11,6 +11,23 @@ import type {
 
 const BASE_URL = "/api";
 
+export function getStoredAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return (
+    sessionStorage.getItem("topfood_auth_token") ||
+    localStorage.getItem("topfood_auth_token") ||
+    null
+  );
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const token = getStoredAuthToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
+
 export async function loginApi(
   email: string,
   password: string,
@@ -243,7 +260,10 @@ export async function createTenantOrderApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify(orderData),
     });
     return await res.json();
@@ -263,7 +283,10 @@ export async function updateOrderStatusApi(
       : `${BASE_URL}/orders/${encodeURIComponent(orderId)}/status`;
     const res = await fetch(url, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ status }),
     });
     return await res.json();
@@ -372,10 +395,32 @@ export async function fetchOrderDetailsApi(
     const url = slugOrId
       ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${cleanId}`
       : `${BASE_URL}/orders/${cleanId}`;
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message || "Erro ao consultar status do pedido" };
+  }
+}
+
+export async function fetchOrderStatusQuickApi(
+  orderId: string
+): Promise<{ success: boolean; status?: OrderStatus; order?: Order; error?: string }> {
+  try {
+    const cleanId = encodeURIComponent(orderId.replace(/^#/, ""));
+    const res = await fetch(`${BASE_URL}/orders/${cleanId}/status`, {
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }
 

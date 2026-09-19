@@ -49,30 +49,44 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     }
   }, []);
 
-  // Carga pontual inicial na montagem (uma única requisição, sem repetição)
+  // Sincronização em tempo real entre redes (4G/5G, Wi-Fi) via Cloudflare API + SSE + BroadcastChannel
   useEffect(() => {
     let isMounted = true;
-    fetchOrderDetailsApi(initialOrder.id, config.slug)
-      .then((res) => {
+    const cleanId = initialOrder.id.replace(/^#/, "");
+
+    // Consulta de status diretamente na API do Cloudflare Workers (D1/KV)
+    const syncFromCloud = async () => {
+      // Se já finalizado ou cancelado, interrompe a consulta periódica
+      if (statusRef.current === "done" || statusRef.current === "cancelled") {
+        return;
+      }
+      try {
+        const res = await fetchOrderDetailsApi(cleanId, config.slug);
         if (isMounted && res.success && res.order) {
           applyStatus(res.order.status, res.order);
         }
-      })
-      .catch((err) => {
-        console.warn("Fetch order details error:", err);
-      });
-
-    return () => {
-      isMounted = false;
+      } catch (err) {
+        console.warn("Sync from cloud warning:", err);
+      }
     };
-  }, [initialOrder.id, config.slug, applyStatus]);
 
-  // Transmissão por Eventos (SSE + BroadcastChannel + CustomEvent)
-  useEffect(() => {
-    const cleanId = initialOrder.id.replace(/^#/, "");
+    // Consulta imediata na montagem
+    syncFromCloud();
+
+    // Intervalo adaptativo de verificação a cada 3 segundos enquanto na tela de rastreamento
+    const interval = setInterval(syncFromCloud, 3000);
+
+    // Consulta imediata ao focar ou retornar para a aba do navegador no celular
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        syncFromCloud();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleVisibility);
+
+    // Conexão Server-Sent Events (SSE) para entrega instantânea
     let eventSource: EventSource | null = null;
-    let bc: BroadcastChannel | null = null;
-
     try {
       const sseUrl = `/api/orders/${encodeURIComponent(cleanId)}/stream`;
       eventSource = new EventSource(sseUrl);
@@ -87,10 +101,16 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
           console.warn("Erro ao ler evento SSE em OrderTracking:", err);
         }
       });
+
+      eventSource.onerror = () => {
+        // SSE pode desconectar em redes móveis 4G/5G; o timer periódico garante a sincronização contínua
+      };
     } catch (err) {
       console.warn("EventSource SSE não disponível:", err);
     }
 
+    // Sincronização local entre abas abertas no mesmo navegador
+    let bc: BroadcastChannel | null = null;
     if (typeof window !== "undefined" && "BroadcastChannel" in window) {
       try {
         bc = new BroadcastChannel("topfood_order_events");
@@ -125,6 +145,10 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     window.addEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
 
     return () => {
+      isMounted = false;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleVisibility);
       if (eventSource) {
         eventSource.close();
       }
@@ -133,7 +157,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       }
       window.removeEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
     };
-  }, [initialOrder.id, applyStatus]);
+  }, [initialOrder.id, config.slug, applyStatus]);
 
   const currentIndex = statusSteps.findIndex((s) => s.status === order.status);
   const isCancelled = order.status === "cancelled";

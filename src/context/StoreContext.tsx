@@ -25,6 +25,11 @@ import {
 } from "@/services/api";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { playNewOrderChime } from "@/utils/audio";
+import {
+  broadcastNewOrder,
+  broadcastOrderUpdate,
+  subscribeOrderBroadcast,
+} from "@/utils/ordersChannel";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
 import type { ToastMessage } from "@/components/common/Toast";
 
@@ -789,6 +794,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // ignore storage issues
         }
 
+        // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
+        broadcastNewOrder(finalOrder);
+
         showToast("Pedido confirmado com sucesso!", "success");
         return finalOrder;
       } catch (err: any) {
@@ -796,6 +804,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // Fallback local seguro
         setOrders((prev) => [order, ...prev]);
         setNewOrderIds((prev) => [order.id, ...prev]);
+        broadcastNewOrder(order);
         showToast("Pedido registrado localmente (sincronizando...)", "info");
         return order;
       }
@@ -808,6 +817,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
 
       // 1. Atualização otimista imediata na interface React (sem travamento)
+      let targetOrder: Order | null = null;
       setOrders((prev) =>
         prev.map((o) => {
           if (
@@ -815,11 +825,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             o.id === `#${orderId}` ||
             o.id.replace(/^#/, "") === orderId.replace(/^#/, "")
           ) {
-            return {
+            const updated: Order = {
               ...o,
               status,
               statusHistory: [...(o.statusHistory || []), { status, timestamp: Date.now() }],
             };
+            targetOrder = updated;
+            return updated;
           }
           return o;
         })
@@ -827,6 +839,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       // 2. Notifica abas locais e cliente via BroadcastChannel e CustomEvent
       try {
+        if (targetOrder) {
+          broadcastOrderUpdate(targetOrder);
+        }
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("topfood-active-order-updated", {
@@ -891,7 +906,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setNewOrderIds((prev) => prev.filter((id) => id !== orderId));
   }, []);
 
-  // ---------------- ESCUTA DE PEDIDOS EM TEMPO REAL (D1/KV + POLLING A CADA 3s + SSE) ----------------
+  // ---------------- ESCUTA DE PEDIDOS EM TEMPO REAL (EVENTOS SSE + BROADCASTCHANNEL - ZERO POLLING) ----------------
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -905,84 +920,173 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!tenantParam) return;
     let isMounted = true;
 
-    // Polling contínuo e automático a cada 3 segundos (GET /api/orders?tenantId=...)
-    const syncOrders = async () => {
+    // Função de inserção imediata de novo pedido na tela com toque de som instantâneo
+    const handleIncomingNewOrder = (incomingOrder: Order) => {
+      if (!incomingOrder || !incomingOrder.id || !isMounted) return;
+
+      const orderCleanId = incomingOrder.id.replace(/^#/, "");
+      const isAlreadyKnown =
+        knownOrderIdsRef.current.has(incomingOrder.id) ||
+        knownOrderIdsRef.current.has(`#${orderCleanId}`) ||
+        knownOrderIdsRef.current.has(orderCleanId);
+
+      // Atualiza ref de IDs conhecidos
+      knownOrderIdsRef.current.add(incomingOrder.id);
+      knownOrderIdsRef.current.add(orderCleanId);
+
+      // 1. Insere o pedido na tela imediatamente
+      setOrders((prev) => {
+        const index = prev.findIndex(
+          (o) =>
+            o.id === incomingOrder.id ||
+            o.id.replace(/^#/, "") === orderCleanId
+        );
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], ...incomingOrder };
+          return updated;
+        }
+        return [incomingOrder, ...prev];
+      });
+
+      // Se é um pedido verdadeiramente novo ou recém-chegado, dispara alerta sonoro e badge visual
+      if (!isAlreadyKnown) {
+        setNewOrderIds((prev) => Array.from(new Set([incomingOrder.id, ...prev])));
+
+        // 2. Toque o alerta sonoro imediatamente na hora em que chegar
+        if (soundEnabled) {
+          playNewOrderChime();
+        }
+
+        // 3. Notifica a aplicação/janela via CustomEvent
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("new-delivery-order-received", {
+              detail: { orders: [incomingOrder], order: incomingOrder },
+            })
+          );
+        }
+      }
+    };
+
+    // Função de atualização em tempo real de status do pedido
+    const handleIncomingOrderUpdate = (updatedOrder: Order) => {
+      if (!updatedOrder || !updatedOrder.id || !isMounted) return;
+      const cleanId = updatedOrder.id.replace(/^#/, "");
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === updatedOrder.id || o.id.replace(/^#/, "") === cleanId ? { ...o, ...updatedOrder } : o
+        )
+      );
+
+      // Sincroniza pedido ativo no rastreamento do cliente
+      try {
+        const activeId = localStorage.getItem("topfood_active_order_id");
+        if (
+          activeId &&
+          (activeId === updatedOrder.id || activeId.replace(/^#/, "") === cleanId)
+        ) {
+          localStorage.setItem("topfood_active_order_status", updatedOrder.status);
+          localStorage.setItem("topfood_active_order_data", JSON.stringify(updatedOrder));
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("topfood-active-order-updated", {
+                detail: { orderId: updatedOrder.id, status: updatedOrder.status, order: updatedOrder },
+              })
+            );
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    // 1. Carga inicial de pedidos uma única vez ao montar (sem qualquer repetição periódica/polling)
+    const loadInitialOrders = async () => {
       try {
         const res = await fetchOrdersApi(tenantParam);
         if (!isMounted) return;
 
         if (res.success && res.orders) {
           const incoming: Order[] = res.orders;
-          const prevIds = knownOrderIdsRef.current;
-
-          // Se já conhecíamos pedidos anteriores e novos foram recebidos (ex: cliente fez pedido na vitrine)
-          if (prevIds.size > 0) {
-            const newlyArrived = incoming.filter((o) => !prevIds.has(o.id));
-            if (newlyArrived.length > 0) {
-              if (soundEnabled) {
-                playNewOrderChime();
-              }
-              const freshIds = newlyArrived.map((o) => o.id);
-              setNewOrderIds((prev) => Array.from(new Set([...freshIds, ...prev])));
-
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(
-                  new CustomEvent("new-delivery-order-received", {
-                    detail: { orders: newlyArrived },
-                  })
-                );
-              }
-            }
-          }
-
-          // Atualiza o estado global dos pedidos no React
           setOrders(incoming);
-          knownOrderIdsRef.current = new Set(incoming.map((o) => o.id));
-
-          // Sincroniza pedido ativo no localStorage caso seu status tenha mudado
-          try {
-            const activeId = localStorage.getItem("topfood_active_order_id");
-            if (activeId) {
-              const matched = incoming.find(
-                (o) =>
-                  o.id === activeId ||
-                  o.id === `#${activeId}` ||
-                  o.id.replace(/^#/, "") === activeId.replace(/^#/, "")
-              );
-              if (matched) {
-                const prevStatus = localStorage.getItem("topfood_active_order_status");
-                if (prevStatus !== matched.status) {
-                  localStorage.setItem("topfood_active_order_status", matched.status);
-                  localStorage.setItem("topfood_active_order_data", JSON.stringify(matched));
-                  if (typeof window !== "undefined") {
-                    window.dispatchEvent(
-                      new CustomEvent("topfood-active-order-updated", {
-                        detail: { orderId: matched.id, status: matched.status, order: matched },
-                      })
-                    );
-                  }
-                }
-              }
-            }
-          } catch {
-            // ignore
-          }
+          knownOrderIdsRef.current = new Set([
+            ...incoming.map((o) => o.id),
+            ...incoming.map((o) => o.id.replace(/^#/, "")),
+          ]);
         }
       } catch (err) {
-        console.warn("Aviso no polling de pedidos (a cada 3s):", err);
+        console.warn("Aviso ao carregar pedidos iniciais:", err);
       }
     };
 
-    // Executa uma sincronização inicial de pedidos na montagem
-    syncOrders();
-    // Removido o polling contínuo de 3s para evitar requisições de rede em segundo plano;
-    // a atualização em tempo real é mantida via Server-Sent Events (SSE) abaixo.
+    loadInitialOrders();
 
-    // Canal Server-Sent Events (SSE) para atualização push quando suportado
+    // 2. Escutador de Evento em Tempo Real via BroadcastChannel (comunicação instantânea cliente -> lojista)
+    const unsubscribeBroadcast = subscribeOrderBroadcast((message) => {
+      if (!isMounted) return;
+      const targetTenantId = currentTenant?.id || currentTenant?.slug || currentSlug;
+      const msgTenant = message.tenantId || message.order?.tenantId;
+
+      // Se a mensagem pertence a esta loja (ou se ambos identificadores forem vazios/compatíveis)
+      const isForThisTenant =
+        !targetTenantId ||
+        !msgTenant ||
+        msgTenant === targetTenantId ||
+        msgTenant === currentTenant?.id ||
+        msgTenant === currentTenant?.slug;
+
+      if (isForThisTenant && message.order) {
+        if (message.type === "NEW_ORDER") {
+          handleIncomingNewOrder(message.order);
+        } else if (message.type === "ORDER_UPDATE") {
+          handleIncomingOrderUpdate(message.order);
+        }
+      }
+    });
+
+    // 3. Escutador de Evento em Tempo Real via Server-Sent Events (SSE) (servidor -> lojista)
     let eventSource: EventSource | null = null;
-    if (typeof EventSource !== "undefined" && currentTenant?.id) {
+    if (typeof EventSource !== "undefined") {
       try {
-        eventSource = new EventSource(`/api/tenants/${currentTenant.id}/orders/stream`);
+        const streamUrl = currentTenant?.id
+          ? `/api/tenants/${currentTenant.id}/orders/stream`
+          : `/api/orders/stream?tenantId=${encodeURIComponent(tenantParam)}`;
+
+        eventSource = new EventSource(streamUrl);
+
+        // Novo pedido disparado pelo backend via SSE
+        eventSource.addEventListener("new_order", (e) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(e.data);
+            if (data?.order) {
+              handleIncomingNewOrder(data.order);
+            }
+          } catch (err) {
+            console.warn("SSE new_order parse error:", err);
+          }
+        });
+
+        // Atualização de pedido disparada pelo backend via SSE
+        eventSource.addEventListener("order_update", (e) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(e.data);
+            if (data?.order) {
+              if (data.isNew) {
+                handleIncomingNewOrder(data.order);
+              } else {
+                handleIncomingOrderUpdate(data.order);
+              }
+            }
+          } catch (err) {
+            console.warn("SSE order_update parse error:", err);
+          }
+        });
+
+        // Carga/Sincronização de lista de pedidos via SSE
         eventSource.addEventListener("orders", (e) => {
           if (!isMounted) return;
           try {
@@ -990,21 +1094,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (data?.orders && Array.isArray(data.orders)) {
               const incoming: Order[] = data.orders;
               const prevIds = knownOrderIdsRef.current;
+
               if (prevIds.size > 0) {
-                const newlyArrived = incoming.filter((o) => !prevIds.has(o.id));
+                const newlyArrived = incoming.filter(
+                  (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, ""))
+                );
                 if (newlyArrived.length > 0) {
-                  if (soundEnabled) {
-                    playNewOrderChime();
-                  }
-                  const freshIds = newlyArrived.map((o) => o.id);
-                  setNewOrderIds((prev) => Array.from(new Set([...freshIds, ...prev])));
+                  newlyArrived.forEach((o) => handleIncomingNewOrder(o));
                 }
+              } else {
+                setOrders(incoming);
+                knownOrderIdsRef.current = new Set([
+                  ...incoming.map((o) => o.id),
+                  ...incoming.map((o) => o.id.replace(/^#/, "")),
+                ]);
               }
-              setOrders(incoming);
-              knownOrderIdsRef.current = new Set(incoming.map((o) => o.id));
             }
           } catch (err) {
-            console.warn("SSE parse error:", err);
+            console.warn("SSE orders parse error:", err);
           }
         });
       } catch (err) {
@@ -1012,8 +1119,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // 4. Sincronização ativa entre redes e dispositivos (4G/5G e Wi-Fi) diretamente no Cloudflare D1/KV
+    const syncOrdersWithCloud = async () => {
+      try {
+        const res = await fetchOrdersApi(tenantParam);
+        if (!isMounted || !res.success || !res.orders) return;
+
+        const incoming: Order[] = res.orders;
+        const prevIds = knownOrderIdsRef.current;
+
+        if (prevIds.size > 0) {
+          const newlyArrived = incoming.filter(
+            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, ""))
+          );
+          if (newlyArrived.length > 0) {
+            newlyArrived.forEach((o) => handleIncomingNewOrder(o));
+          }
+        } else {
+          setOrders(incoming);
+          incoming.forEach((o) => {
+            knownOrderIdsRef.current.add(o.id);
+            knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+          });
+        }
+
+        // Atualiza status de pedidos caso alterados em outro dispositivo conectado ao D1
+        setOrders((prev) => {
+          let hasDiff = false;
+          const merged = prev.map((curr) => {
+            const fresh = incoming.find(
+              (inc) => inc.id === curr.id || inc.id.replace(/^#/, "") === curr.id.replace(/^#/, "")
+            );
+            if (fresh && fresh.status !== curr.status) {
+              hasDiff = true;
+              return { ...curr, ...fresh };
+            }
+            return curr;
+          });
+          return hasDiff ? merged : prev;
+        });
+      } catch {
+        // ignora erros de rede móvel temporários
+      }
+    };
+
+    const cloudSyncInterval = setInterval(syncOrdersWithCloud, 3000);
+
+    const handleWindowFocus = () => {
+      if (document.visibilityState === "visible") {
+        syncOrdersWithCloud();
+      }
+    };
+    document.addEventListener("visibilitychange", handleWindowFocus);
+    window.addEventListener("focus", handleWindowFocus);
+
     return () => {
       isMounted = false;
+      clearInterval(cloudSyncInterval);
+      document.removeEventListener("visibilitychange", handleWindowFocus);
+      window.removeEventListener("focus", handleWindowFocus);
+      unsubscribeBroadcast();
       if (eventSource) {
         eventSource.close();
       }

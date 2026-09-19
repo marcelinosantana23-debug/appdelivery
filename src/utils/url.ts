@@ -54,6 +54,8 @@ export function getPreviewStoreUrl(slug?: string | null): string {
   return getOfficialStoreUrl(clean);
 }
 
+export const getStoreUrl = getPublicStoreUrl;
+
 /**
  * Copy text to clipboard with reliable fallback for older browsers or iframes
  */

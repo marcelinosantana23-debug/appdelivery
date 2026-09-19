@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice, generateOrderId, getWhatsAppUrl } from "@/utils/order";
+import { broadcastNewOrder } from "@/utils/ordersChannel";
 import {
   saveActiveOrder,
   saveCustomerProfile,
@@ -169,6 +170,9 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     try {
       const placedOrder = await addOrder(order);
       const finalOrder = placedOrder || order;
+
+      // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
+      broadcastNewOrder(finalOrder);
 
       // 2. Salva o ID do pedido no localStorage do navegador para rastreamento
       saveActiveOrder(finalOrder.id, config.slug, {

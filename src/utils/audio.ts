@@ -38,11 +38,19 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
+let lastNewOrderChimeTime = 0;
+
 /**
  * Plays a clear 3-tone ascending melodic chime (A5 -> C#6 -> E6)
  * Indicates a new customer order has arrived in real-time.
  */
 export function playNewOrderChime(): void {
+  const nowMs = Date.now();
+  if (nowMs - lastNewOrderChimeTime < 400) {
+    return;
+  }
+  lastNewOrderChimeTime = nowMs;
+
   try {
     const ctx = getAudioContext();
     if (!ctx) return;

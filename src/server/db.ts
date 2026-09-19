@@ -915,6 +915,9 @@ export class Database {
     address?: string;
     primaryColor?: string;
     bannerImage?: string;
+    logo?: string;
+    tagline?: string;
+    description?: string;
   }): Promise<Tenant> {
     const slug = data.slug
       ? globalStore.slugify(data.slug)
@@ -940,8 +943,8 @@ export class Database {
       deliveryFee: data.deliveryFee ?? 5.0,
       address: data.address?.trim() || "Endereço da Loja",
       hours: "18:00 - 23:30",
-      tagline: `Cardápio Online - ${data.name}`,
-      logo: "🏪",
+      tagline: data.tagline || data.description || `Cardápio Online - ${data.name}`,
+      logo: data.logo || "🍔",
       bannerImage: data.bannerImage || "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
       primaryColor: data.primaryColor || "#E63946",
       primaryDark: "#C1121F",
@@ -1837,6 +1840,13 @@ export class Database {
       } catch (e) {
         console.warn("KV put order error:", e);
       }
+    }
+
+    // Emite evento em tempo real para os lojistas conectados instantaneamente
+    try {
+      orderEvents.emit(newOrder, true);
+    } catch (e) {
+      console.warn("Error emitting new order event:", e);
     }
 
     return newOrder;

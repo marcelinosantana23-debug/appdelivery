@@ -1,0 +1,236 @@
+import { GoogleGenAI } from "@google/genai";
+
+export interface ExtractedMenuData {
+  nome_loja: string;
+  descricao: string;
+  telefone: string;
+  primary_color?: string;
+  has_logo: boolean;
+  logo_bounding_box?: {
+    ymin: number;
+    xmin: number;
+    ymax: number;
+    xmax: number;
+  };
+  logo_svg?: string;
+  logo_url?: string;
+  categorias: Array<{
+    nome: string;
+    produtos: Array<{
+      nome: string;
+      descricao: string;
+      preco: number;
+      opcionais?: Array<{
+        nome: string;
+        preco: number;
+      }>;
+    }>;
+  }>;
+}
+
+/**
+ * Instancia o cliente GoogleGenAI usando process.env.GEMINI_API_KEY
+ */
+export function getGeminiClient(): GoogleGenAI | null {
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    (typeof process !== "undefined" ? process.env.VITE_GEMINI_API_KEY : undefined);
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
+/**
+ * Cria um SVG moderno padrão de alta resolução caso a IA não retorne SVG
+ */
+export function generateDefaultFoodLogoSvg(storeName: string, primaryColor = "#E63946"): string {
+  const safeName = storeName.replace(/[<>&"]/g, "").trim() || "Top Food";
+  const initials = safeName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || "")
+    .join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${primaryColor}"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <!-- Background Badge -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <!-- Inner Ring -->
+  <circle cx="256" cy="256" r="220" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="4" stroke-dasharray="12 12"/>
+  <!-- Food Icon Graphic (Burger & Star) -->
+  <g filter="url(#shadow)">
+    <!-- Top Bun -->
+    <path d="M156 220 C156 150, 356 150, 356 220 Z" fill="#F59E0B"/>
+    <ellipse cx="210" cy="185" rx="5" ry="3" fill="#FEF3C7"/>
+    <ellipse cx="256" cy="175" rx="5" ry="3" fill="#FEF3C7"/>
+    <ellipse cx="302" cy="185" rx="5" ry="3" fill="#FEF3C7"/>
+    <!-- Cheese -->
+    <polygon points="150,230 362,230 340,250 256,260 170,250" fill="#FBBF24"/>
+    <!-- Patty -->
+    <rect x="146" y="246" width="220" height="24" rx="12" fill="#78350F"/>
+    <!-- Lettuce -->
+    <path d="M140 270 Q170 282 200 270 Q230 282 260 270 Q290 282 320 270 Q350 282 372 270 L368 280 Q340 292 315 280 Q285 292 256 280 Q225 292 195 280 Q165 292 144 280 Z" fill="#10B981"/>
+    <!-- Bottom Bun -->
+    <path d="M156 288 C156 318, 356 318, 356 288 Z" fill="#D97706"/>
+  </g>
+  <!-- Store Initials or Name Badge -->
+  <rect x="106" y="340" width="300" height="74" rx="37" fill="#ffffff" fill-opacity="0.95" filter="url(#shadow)"/>
+  <text x="256" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="900" fill="#0F172A" text-anchor="middle" letter-spacing="1.5">${initials || "FOOD"}</text>
+</svg>`;
+}
+
+/**
+ * Converte string SVG pura em data URL seguro
+ */
+export function svgToDataUrl(svgString: string): string {
+  if (!svgString) return "";
+  const cleaned = svgString
+    .replace(/```xml/g, "")
+    .replace(/```svg/g, "")
+    .replace(/```/g, "")
+    .trim();
+  const encoded = encodeURIComponent(cleaned)
+    .replace(/'/g, "%27")
+    .replace(/"/g, "%22");
+  return `data:image/svg+xml;utf8,${encoded}`;
+}
+
+/**
+ * Envia o cardápio (imagem ou PDF em base64) para a API multimodal do Gemini
+ */
+export async function analyzeMenuWithGemini(
+  fileBase64: string,
+  mimeType: string
+): Promise<ExtractedMenuData> {
+  const ai = getGeminiClient();
+  if (!ai) {
+    throw new Error(
+      "A chave GEMINI_API_KEY não foi configurada no servidor. Por favor, configure a variável no painel de configurações para habilitar o processamento por IA."
+    );
+  }
+
+  // Limpa prefixo data URL se houver (ex: data:image/png;base64,)
+  const cleanBase64 = fileBase64.replace(/^data:[^;]+;base64,/, "");
+
+  const prompt = `Você é um especialista em cardápios de restaurantes e gastronomia, e também um designer gráfico de identidade visual de marcas de food delivery.
+Analise detalhadamente a imagem ou documento PDF deste cardápio comercial e extraia todos os dados de forma estruturada.
+
+Retorne EXCLUSIVAMENTE um objeto JSON válido (sem texto adicional fora do JSON) com a seguinte estrutura:
+{
+  "nome_loja": "Nome do restaurante/lanchonete indicado com destaque no cardápio",
+  "descricao": "Resumo breve e atraente do estabelecimento (ex: 'Lanches artesanais, porções crocantes e bebidas geladas')",
+  "telefone": "WhatsApp ou telefone de pedidos encontrado no cardápio (apenas números com DDD, ex: 11999998888)",
+  "primary_color": "Cor de destaque predominante do cardápio em hexadecimal (ex: #E63946, #D97706, #16A34A)",
+  "has_logo": true ou false (se há um logotipo ou símbolo de marca claramente identificável na imagem),
+  "logo_bounding_box": { "ymin": 0, "xmin": 0, "ymax": 1000, "xmax": 1000 } (coordenadas normalizadas de 0 a 1000 onde o logotipo está localizado, caso has_logo seja true),
+  "logo_svg": "<svg xmlns=\\"http://www.w3.org/2000/svg\\" viewBox=\\"0 0 512 512\\" width=\\"512\\" height=\\"512\\">...</svg>",
+  "categorias": [
+    {
+      "nome": "Nome da categoria (ex: Lanches Tradicionais, Hambúrgueres Artesanais, Porções, Pizzas, Bebidas)",
+      "produtos": [
+        {
+          "nome": "Nome do item do cardápio",
+          "descricao": "Descrição dos ingredientes encontrados ou breve descrição",
+          "preco": 24.50,
+          "opcionais": [
+            { "nome": "Adicional (ex: Bacon Extra)", "preco": 4.00 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Instruções fundamentais para o logo_svg:
+1. Gere OBRIGATORIAMENTE um SVG COMPLETO, moderno, vetorial, estilo flat design de aplicativo de comida/delivery, com viewBox="0 0 512 512".
+2. Deve conter um fundo elegante quadrado com cantos arredondados (rx="112") usando a cor primária ou gradiente rico.
+3. Deve conter um ícone ilustrado de comida em destaque de altíssima qualidade (hambúrguer estilizado, fatia de pizza apetitosa, hot dog, espeto, etc.), adequado aos produtos do cardápio, e/ou as iniciais estilizadas da loja.
+4. O SVG será utilizado diretamente como ícone de aplicativo PWA (192x192 e 512x512) para os clientes instalarem na tela inicial do celular.
+
+Instruções para categorias e produtos:
+- Extraia o maior número possível de produtos visíveis com seus respectivos preços reais em reais (float).
+- Preços devem ser números puros (ex: 29.9, não "R$ 29,90").
+- Se houver adicionais listados, adicione-os no array opcionais.
+`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType || "image/jpeg",
+                data: cleanBase64,
+              },
+            },
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const responseText = response.text || "";
+    let parsed: any;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      // Se vier envolvido em blocos ```json ... ```
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        parsed = JSON.parse(jsonMatch[1]);
+      } else {
+        throw new Error("A IA não retornou um formato JSON válido.");
+      }
+    }
+
+    const storeName = parsed.nome_loja?.trim() || "Nova Lanchonete";
+    const primaryColor = parsed.primary_color || "#E63946";
+
+    // Garante que logo_svg existe
+    let finalSvg = parsed.logo_svg;
+    if (!finalSvg || typeof finalSvg !== "string" || !finalSvg.includes("<svg")) {
+      finalSvg = generateDefaultFoodLogoSvg(storeName, primaryColor);
+    }
+
+    const logoUrl = svgToDataUrl(finalSvg);
+
+    return {
+      nome_loja: storeName,
+      descricao: parsed.descricao || `Cardápio Online de ${storeName}`,
+      telefone: parsed.telefone?.replace(/\D/g, "") || "11999999999",
+      primary_color: primaryColor,
+      has_logo: Boolean(parsed.has_logo),
+      logo_bounding_box: parsed.logo_bounding_box,
+      logo_svg: finalSvg,
+      logo_url: logoUrl,
+      categorias: Array.isArray(parsed.categorias) ? parsed.categorias : [],
+    };
+  } catch (error: any) {
+    console.error("Erro ao analisar cardápio com Gemini:", error);
+    throw new Error(
+      error.message || "Falha ao processar o cardápio com a inteligência artificial."
+    );
+  }
+}

@@ -37,6 +37,7 @@ import type { Tenant, TenantStatus } from "@/types";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
+import { AiMenuImportModal } from "./AiMenuImportModal";
 
 interface SuperAdminPanelProps {
   onManageStore: (tenant: Tenant) => void;
@@ -61,6 +62,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [viewMode, setViewMode] = useState<"cards" | "credentials">("cards");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAiImportModalOpen, setIsAiImportModalOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // State for show/hide passwords on cards or table
@@ -561,6 +563,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               <span className="sm:hidden">Credenciais</span>
             </button>
             <button
+              onClick={() => setIsAiImportModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 via-purple-600 to-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-purple-600/30 transition hover:brightness-110 active:scale-[0.98] sm:text-sm sm:px-4 sm:py-2"
+              title="Cadastro Inteligente por IA (foto ou PDF do cardápio)"
+            >
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-200 shrink-0 animate-pulse" />
+              <span className="hidden sm:inline">Criar Loja por IA</span>
+              <span className="sm:hidden">IA Cardápio</span>
+            </button>
+            <button
               onClick={() => {
                 setIsModalOpen(true);
                 setCreatedSuccess(null);
@@ -673,6 +684,33 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               </span>
             </div>
           </div>
+        </section>
+
+        {/* Banner de Cadastro Inteligente por IA */}
+        <section className="mt-6 rounded-3xl border border-violet-500/40 bg-gradient-to-r from-violet-950/60 via-purple-950/40 to-slate-900 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-purple-950/25">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 via-purple-600 to-amber-500 text-white shadow-md shadow-purple-600/30">
+              <Sparkles className="h-6 w-6 text-amber-200" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-white">Cadastro Automático de Lanchonete por IA</h3>
+                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30">
+                  NOVO
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Envie uma foto ou PDF do cardápio físico. A IA do Gemini cadastra todos os produtos, gera/extrai a logo exclusiva da lanchonete e publica a vitrine com PWA dinâmico!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsAiImportModalOpen(true)}
+            className="shrink-0 flex items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-amber-500 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-purple-600/30 hover:brightness-110 active:scale-95 transition"
+          >
+            <Sparkles className="h-4 w-4 text-amber-200" />
+            <span>Importar Cardápio por IA</span>
+          </button>
         </section>
 
         {/* Filter and Store List Header */}
@@ -2684,6 +2722,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
           </div>
         </div>
       )}
+
+      {/* Modal de Importação de Cardápio e Criação de Loja por IA */}
+      <AiMenuImportModal
+        isOpen={isAiImportModalOpen}
+        onClose={() => setIsAiImportModalOpen(false)}
+        onSuccess={() => {
+          refreshTenants();
+        }}
+      />
     </div>
   );
 }

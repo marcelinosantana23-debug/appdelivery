@@ -5,6 +5,7 @@ main = "src/worker.ts"
 [vars]
 PLATFORM_NAME = "Top Food Multi-tenant"
 ENVIRONMENT = "production"
+JWT_SECRET = "topfood-jwt-secret-cloudflare-production-2026"
 
 # Cloudflare D1 Database Binding
 [[d1_databases]]
