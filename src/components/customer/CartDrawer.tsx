@@ -1,6 +1,7 @@
 import { Minus, Plus, Trash2, X, ShoppingBag, ArrowRight } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice } from "@/utils/order";
+import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 
 interface CartDrawerProps {
   open: boolean;
@@ -48,9 +49,10 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
                     className="flex gap-3 rounded-2xl border border-gray-100 p-3"
                   >
                     <img
-                      src={item.product.image}
+                      src={normalizeProductImage(item.product.image, item.product.category, item.product.name)}
                       alt={item.product.name}
-                      className="h-16 w-16 shrink-0 rounded-xl object-cover"
+                      onError={(e) => handleImageError(e, item.product.category, item.product.name)}
+                      className="h-16 w-16 shrink-0 rounded-xl object-cover bg-gray-100"
                     />
                     <div className="flex flex-1 flex-col">
                       <div className="flex items-start justify-between">

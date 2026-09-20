@@ -4,6 +4,7 @@ import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName } from "@/utils/storeFormat";
+import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 
 interface MenuListProps {
   products: Product[];
@@ -144,9 +145,10 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
               >
                 <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100 dark:bg-slate-700">
                   <img
-                    src={product.image}
+                    src={normalizeProductImage(product.image, product.category, product.name)}
                     alt={product.name}
                     referrerPolicy="no-referrer"
+                    onError={(e) => handleImageError(e, product.category, product.name)}
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                   />
                   <div className="absolute top-2 left-2 rounded-full bg-red-600/90 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm backdrop-blur-xs flex items-center gap-0.5">
@@ -224,9 +226,10 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
                 >
                   <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100 dark:bg-slate-700">
                     <img
-                      src={product.image}
+                      src={normalizeProductImage(product.image, product.category, product.name)}
                       alt={product.name}
                       referrerPolicy="no-referrer"
+                      onError={(e) => handleImageError(e, product.category, product.name)}
                       className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                     />
                     {!product.available && (

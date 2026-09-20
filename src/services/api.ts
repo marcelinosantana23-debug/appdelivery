@@ -79,7 +79,14 @@ export async function verifyAuthSessionApi(
 
 export async function fetchTenantsApi(): Promise<{ success: boolean; tenants: (Tenant & { productCount: number; orderCount: number; revenue: number })[]; error?: string }> {
   try {
-    const res = await fetch(`${BASE_URL}/tenants`);
+    const timestamp = Date.now();
+    const res = await fetch(`${BASE_URL}/tenants?_t=${timestamp}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+      },
+    });
     return await res.json();
   } catch (err: any) {
     return { success: false, tenants: [], error: err.message };
@@ -88,7 +95,14 @@ export async function fetchTenantsApi(): Promise<{ success: boolean; tenants: (T
 
 export async function fetchTenantDetailsApi(slugOrId: string): Promise<{ success: boolean; tenant?: Tenant; error?: string }> {
   try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}`);
+    const timestamp = Date.now();
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}?_t=${timestamp}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+      },
+    });
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };

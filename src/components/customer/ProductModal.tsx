@@ -3,6 +3,7 @@ import { Minus, Plus, X, ShoppingBag } from "lucide-react";
 import type { Product, ProductOption } from "@/types";
 import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
+import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 
 interface ProductModalProps {
   product: Product;
@@ -37,10 +38,11 @@ export function ProductModal({ product, onClose, onAdded }: ProductModalProps) {
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={onClose} />
       <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl bg-white animate-slide-up sm:rounded-3xl">
-        <div className="relative">
+        <div className="relative bg-gray-100">
           <img
-            src={product.image}
+            src={normalizeProductImage(product.image, product.category, product.name)}
             alt={product.name}
+            onError={(e) => handleImageError(e, product.category, product.name)}
             className="h-56 w-full object-cover rounded-t-3xl"
           />
           <button

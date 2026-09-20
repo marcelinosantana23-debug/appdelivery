@@ -11,10 +11,16 @@ import {
   CheckCircle2,
   Sparkles,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { categories } from "@/data/mockData";
 import { formatPrice } from "@/utils/order";
+import {
+  normalizeProductImage,
+  getCategoryFallbackImage,
+  handleImageError,
+} from "@/utils/imageUtils";
 import type { Product, ProductOption } from "@/types";
 
 export function AdminMenu() {
@@ -80,9 +86,10 @@ export function AdminMenu() {
         >
           <div className="flex items-center gap-3 w-full sm:w-auto min-w-0 flex-1">
             <img
-              src={product.image}
+              src={normalizeProductImage(product.image, product.category, product.name)}
               alt={product.name}
-              className="h-14 w-14 rounded-lg object-cover shrink-0"
+              onError={(e) => handleImageError(e, product.category, product.name)}
+              className="h-14 w-14 rounded-lg object-cover shrink-0 bg-gray-100"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -149,7 +156,11 @@ function ProductForm({
   const [name, setName] = useState(product?.name || "");
   const [description, setDescription] = useState(product?.description || "");
   const [price, setPrice] = useState(product?.price.toString() || "");
-  const [image, setImage] = useState(product?.image || "");
+  const [image, setImage] = useState(
+    product?.image
+      ? normalizeProductImage(product.image, product.category, product.name)
+      : ""
+  );
   const [category, setCategory] = useState(product?.category || "lanches");
   const [available, setAvailable] = useState(product?.available ?? true);
   const [options, setOptions] = useState<ProductOption[]>(product?.options || []);
@@ -157,6 +168,8 @@ function ProductForm({
   const [newOptPrice, setNewOptPrice] = useState("");
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [isGeneratingAiImage, setIsGeneratingAiImage] = useState(false);
+  const [isImageLoading, setIsImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { config, showToast } = useStore();
 
@@ -167,6 +180,9 @@ function ProductForm({
     }
 
     setIsGeneratingAiImage(true);
+    setImageError(false);
+    setIsImageLoading(true);
+
     try {
       const savedKey =
         (typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "") ||
@@ -188,14 +204,21 @@ function ProductForm({
       });
 
       const data = await res.json();
-      if (data.success && data.imageUrl) {
-        setImage(data.imageUrl);
-        showToast("Foto do produto gerada com sucesso pela IA!", "success");
+      const rawUrl = data.imageUrl || data.photoUrl || data.image;
+
+      if (data.success && rawUrl) {
+        const cleanUrl = normalizeProductImage(rawUrl, category, name);
+        setImage(cleanUrl);
+        setIsImageLoading(true);
+        setImageError(false);
+        showToast("Foto vinculada ao produto!", "success");
       } else {
+        setIsImageLoading(false);
         showToast(data.error || "Não foi possível gerar a foto com IA.", "error");
       }
     } catch (err: any) {
-      console.error("Erro ao gerar foto com IA:", err);
+      console.error("[AdminMenu] Erro ao gerar foto com IA:", err);
+      setIsImageLoading(false);
       showToast("Erro na comunicação ao gerar foto com IA.", "error");
     } finally {
       setIsGeneratingAiImage(false);
@@ -207,11 +230,15 @@ function ProductForm({
     if (!file) return;
 
     setIsProcessingImage(true);
+    setIsImageLoading(true);
+    setImageError(false);
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
       if (!result) {
         setIsProcessingImage(false);
+        setIsImageLoading(false);
         return;
       }
 
@@ -238,21 +265,25 @@ function ProductForm({
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
           setImage(dataUrl);
         } else {
-          setImage(result);
+          setImage(normalizeProductImage(result, category, name));
         }
         setIsProcessingImage(false);
+        setIsImageLoading(false);
+        setImageError(false);
       };
       img.onerror = () => {
-        setImage(result);
+        setImage(normalizeProductImage(result, category, name));
         setIsProcessingImage(false);
+        setIsImageLoading(false);
       };
       img.src = result;
     };
     reader.onerror = () => {
       setIsProcessingImage(false);
+      setIsImageLoading(false);
     };
     reader.readAsDataURL(file);
   };
@@ -277,12 +308,16 @@ function ProductForm({
 
   const handleSave = () => {
     if (!name.trim() || !price.trim()) return;
+    const finalImage = image.trim()
+      ? normalizeProductImage(image.trim(), category, name)
+      : getCategoryFallbackImage(category, name);
+
     onSave({
       id: product?.id || `p-${Date.now()}`,
       name: name.trim(),
       description: description.trim(),
       price: parseFloat(price),
-      image: image.trim() || "https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=600",
+      image: finalImage,
       category,
       available,
       options,
@@ -397,50 +432,127 @@ function ProductForm({
               onChange={handleImageChange}
             />
 
-            {/* Prévia da foto escolhida */}
-            {image && (
-              <div className="mt-2.5 flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-2.5">
-                <img
-                  src={image}
-                  alt="Prévia do produto"
-                  className="h-16 w-16 shrink-0 rounded-xl object-cover border border-gray-200 bg-white shadow-sm"
-                />
+            {/* Estado de Carregamento Ativo (Skeleton / Spinner) enquanto a IA gera */}
+            {isGeneratingAiImage && (
+              <div className="mt-2.5 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 animate-pulse">
+                <div className="h-16 w-16 shrink-0 rounded-xl bg-amber-200/80 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-amber-700" />
+                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                    <span>Foto vinculada ao produto</span>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-600 animate-spin" />
+                    <span>Gerando foto realista com IA...</span>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-gray-500 truncate">
-                    {image.includes("pollinations.ai")
-                      ? "Foto realista gerada por IA"
-                      : image.startsWith("data:")
-                      ? "Foto enviada da galeria"
-                      : "Foto do produto ativa"}
+                  <p className="mt-0.5 text-[11px] text-amber-700">
+                    Otimizando apresentação gastronômica, texturas e cores.
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleGenerateAiPhoto}
-                    disabled={isGeneratingAiImage}
-                    className="flex h-8 px-2 items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition border border-amber-200"
-                    title="Gerar outra opção com IA"
-                  >
-                    <Sparkles className="h-3 w-3 text-amber-600" />
-                    <span>Outra</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImage("");
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition"
-                    title="Remover foto"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+              </div>
+            )}
+
+            {/* Prévia da foto escolhida */}
+            {!isGeneratingAiImage && image && (
+              <div className="mt-2.5 flex flex-col gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-2.5">
+                <div className="flex items-center gap-3">
+                  {/* Container da Imagem com Skeleton / Spinner durante download */}
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 flex items-center justify-center">
+                    {isImageLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gray-100/90 z-10">
+                        <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+                      </div>
+                    )}
+                    <img
+                      key={image}
+                      src={image}
+                      alt="Prévia do produto"
+                      onLoad={() => {
+                        setIsImageLoading(false);
+                        setImageError(false);
+                      }}
+                      onError={(e) => {
+                        console.error("[AdminMenu] Falha ao carregar imagem do produto:", image, e);
+                        setIsImageLoading(false);
+                        setImageError(true);
+                      }}
+                      className={`h-full w-full object-cover transition-opacity duration-200 ${
+                        isImageLoading ? "opacity-0" : "opacity-100"
+                      }`}
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    {imageError ? (
+                      <div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-amber-700">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                          <span>Falha ao carregar imagem</span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-gray-500 truncate">
+                          A URL não pôde ser renderizada no navegador.
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                          <span>Foto vinculada ao produto</span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-gray-500 truncate">
+                          {image.includes("pollinations.ai")
+                            ? "Foto realista gerada por IA"
+                            : image.startsWith("data:")
+                            ? "Foto enviada da galeria"
+                            : "Foto do produto ativa"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleGenerateAiPhoto}
+                      disabled={isGeneratingAiImage}
+                      className="flex h-8 px-2 items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition border border-amber-200"
+                      title="Gerar outra opção com IA"
+                    >
+                      <Sparkles className="h-3 w-3 text-amber-600" />
+                      <span>Outra</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImage("");
+                        setImageError(false);
+                        setIsImageLoading(false);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition"
+                      title="Remover foto"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
+
+                {/* Opção de recuperação caso a URL falhe */}
+                {imageError && (
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <span className="text-[11px] text-gray-500">Usar foto profissional da categoria:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fallback = getCategoryFallbackImage(category, name);
+                        setImage(fallback);
+                        setImageError(false);
+                        setIsImageLoading(true);
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition"
+                    >
+                      Aplicar foto reserva
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

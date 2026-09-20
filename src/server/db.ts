@@ -201,7 +201,7 @@ const initialProducts: Product[] = [
     name: "Batata Frita Crocante Rústica",
     description: "Porção de batatas selecionadas com tempero secreto da casa e alecrim, servidas com maionese artesanal.",
     price: 18.0,
-    image: "https://images.unsplash.com/photo-1576107232684-1279f3908594?auto=format&fit=crop&w=600&q=80",
+    image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=600&q=80",
     category: "porções",
     available: true,
     options: [
@@ -729,85 +729,276 @@ export class Database {
   private async ensureTables(): Promise<void> {
     if (Database.tablesInitialized || !this.env?.DB) return;
     try {
-      if (this.env.DB.batch) {
-        await this.env.DB.batch([
-        this.env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS tenants (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            slug TEXT NOT NULL UNIQUE,
-            logo TEXT,
-            banner TEXT,
-            primary_color TEXT,
-            secondary_color TEXT,
-            delivery_fee REAL,
-            min_order REAL,
-            estimated_time TEXT,
-            whatsapp TEXT,
-            phone TEXT,
-            instagram TEXT,
-            address TEXT,
-            status TEXT DEFAULT 'active',
-            is_open INTEGER DEFAULT 1,
-            created_at INTEGER
-          )
-        `),
-        this.env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS products (
-            id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            description TEXT,
-            price REAL NOT NULL,
-            category TEXT NOT NULL,
-            image TEXT,
-            available INTEGER DEFAULT 1,
-            options_json TEXT,
-            created_at INTEGER
-          )
-        `),
-        this.env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS orders (
-            id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
-            customer_name TEXT NOT NULL,
-            customer_phone TEXT NOT NULL,
-            order_type TEXT NOT NULL,
-            payment_method TEXT NOT NULL,
-            address_json TEXT,
-            change_for TEXT,
-            subtotal REAL NOT NULL,
-            delivery_fee REAL NOT NULL,
-            total REAL NOT NULL,
-            status TEXT NOT NULL,
-            items_json TEXT NOT NULL,
-            status_history_json TEXT NOT NULL,
-            created_at INTEGER NOT NULL
-          )
-        `),
-        this.env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS customers (
-            id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            address_street TEXT,
-            address_number TEXT,
-            address_district TEXT,
-            address_complement TEXT,
-            address_reference TEXT,
-            total_orders INTEGER DEFAULT 1,
-            total_spent REAL DEFAULT 0,
-            last_order_at INTEGER NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-          )
-        `),
-      ]);
+      const db = this.env.DB;
+
+      // 1. Criação das tabelas principais com todos os campos necessários
+      const tableQueries = [
+        `CREATE TABLE IF NOT EXISTS tenants (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          slug TEXT NOT NULL UNIQUE,
+          email TEXT NOT NULL DEFAULT '',
+          phone TEXT DEFAULT '',
+          whatsapp TEXT NOT NULL DEFAULT '',
+          pix_key TEXT DEFAULT '',
+          pix_key_type TEXT DEFAULT 'email',
+          delivery_fee REAL DEFAULT 5.0,
+          min_order REAL DEFAULT 0,
+          estimated_time TEXT DEFAULT '30-45 min',
+          address TEXT DEFAULT 'Centro',
+          hours TEXT DEFAULT '18:00 - 23:30',
+          tagline TEXT DEFAULT '',
+          announcement TEXT DEFAULT '',
+          logo TEXT DEFAULT '🍔',
+          banner TEXT DEFAULT '',
+          banner_image TEXT DEFAULT '',
+          primary_color TEXT DEFAULT '#E63946',
+          secondary_color TEXT DEFAULT '#1E293B',
+          primary_dark TEXT DEFAULT '#C1121F',
+          primary_light TEXT DEFAULT '#F77F00',
+          accent_color TEXT DEFAULT '#FCBF49',
+          status TEXT DEFAULT 'active',
+          is_open INTEGER DEFAULT 1,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          name TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'tenant_admin',
+          tenant_id TEXT,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS products (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          price REAL NOT NULL,
+          category TEXT NOT NULL DEFAULT 'lanches',
+          image TEXT NOT NULL DEFAULT '',
+          available INTEGER NOT NULL DEFAULT 1,
+          options_json TEXT DEFAULT '[]',
+          created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS orders (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          customer_name TEXT NOT NULL,
+          customer_phone TEXT NOT NULL,
+          order_type TEXT NOT NULL DEFAULT 'delivery',
+          payment_method TEXT NOT NULL DEFAULT 'pix',
+          address_json TEXT DEFAULT '{}',
+          change_for TEXT,
+          subtotal REAL NOT NULL,
+          delivery_fee REAL NOT NULL,
+          total REAL NOT NULL,
+          status TEXT NOT NULL DEFAULT 'received',
+          items_json TEXT NOT NULL DEFAULT '[]',
+          status_history_json TEXT NOT NULL DEFAULT '[]',
+          created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS customers (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          phone TEXT NOT NULL,
+          address_street TEXT,
+          address_number TEXT,
+          address_district TEXT,
+          address_complement TEXT,
+          address_reference TEXT,
+          total_orders INTEGER DEFAULT 1,
+          total_spent REAL DEFAULT 0,
+          last_order_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`
+      ];
+
+      for (const query of tableQueries) {
+        try {
+          await db.prepare(query).run();
+        } catch (e) {
+          console.warn("D1 create table warning:", e);
+        }
       }
+
+      // 2. Migração segura de colunas para tabelas já existentes no D1 (evita erro de coluna ausente)
+      const alterQueries = [
+        "ALTER TABLE tenants ADD COLUMN email TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN phone TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN whatsapp TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN pix_key TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN pix_key_type TEXT DEFAULT 'email'",
+        "ALTER TABLE tenants ADD COLUMN delivery_fee REAL DEFAULT 5.0",
+        "ALTER TABLE tenants ADD COLUMN min_order REAL DEFAULT 0",
+        "ALTER TABLE tenants ADD COLUMN estimated_time TEXT DEFAULT '30-45 min'",
+        "ALTER TABLE tenants ADD COLUMN address TEXT DEFAULT 'Centro'",
+        "ALTER TABLE tenants ADD COLUMN hours TEXT DEFAULT '18:00 - 23:30'",
+        "ALTER TABLE tenants ADD COLUMN tagline TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN announcement TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN logo TEXT DEFAULT '🍔'",
+        "ALTER TABLE tenants ADD COLUMN banner TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN banner_image TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN primary_color TEXT DEFAULT '#E63946'",
+        "ALTER TABLE tenants ADD COLUMN secondary_color TEXT DEFAULT '#1E293B'",
+        "ALTER TABLE tenants ADD COLUMN primary_dark TEXT DEFAULT '#C1121F'",
+        "ALTER TABLE tenants ADD COLUMN primary_light TEXT DEFAULT '#F77F00'",
+        "ALTER TABLE tenants ADD COLUMN accent_color TEXT DEFAULT '#FCBF49'",
+        "ALTER TABLE tenants ADD COLUMN status TEXT DEFAULT 'active'",
+        "ALTER TABLE tenants ADD COLUMN is_open INTEGER DEFAULT 1",
+        "ALTER TABLE tenants ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE tenants ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN options_json TEXT DEFAULT '[]'",
+        "ALTER TABLE products ADD COLUMN available INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE users ADD COLUMN tenant_id TEXT",
+        "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+      ];
+
+      for (const alter of alterQueries) {
+        try {
+          await db.prepare(alter).run();
+        } catch {
+          // Coluna já existe no D1, ignorar
+        }
+      }
+
+      // 3. Índices de performance
+      const indexQueries = [
+        "CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug)",
+        "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+        "CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id)"
+      ];
+
+      for (const idx of indexQueries) {
+        try {
+          await db.prepare(idx).run();
+        } catch {
+          // Ignorar se já existir
+        }
+      }
+
+      // 4. Se a tabela tenants do D1 estiver vazia, sincroniza dados de inicialização
+      try {
+        const countRes = await db.prepare("SELECT count(*) as total FROM tenants").first<{ total: number }>();
+        if (!countRes || Number(countRes.total) === 0) {
+          for (const t of initialTenants) {
+            await this.insertTenantRow(t);
+          }
+          for (const u of initialUsers) {
+            await this.insertUserRow(u);
+          }
+          for (const p of initialProducts) {
+            await this.insertProductRow(p);
+          }
+        }
+      } catch (e) {
+        console.warn("D1 seed initial check warning:", e);
+      }
+
       Database.tablesInitialized = true;
     } catch (e) {
       console.warn("D1 ensureTables warning:", e);
+    }
+  }
+
+  private async insertTenantRow(t: Tenant): Promise<void> {
+    if (!this.env?.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO tenants (
+          id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
+          delivery_fee, min_order, estimated_time, address, hours, tagline,
+          announcement, logo, banner, banner_image, primary_color, secondary_color,
+          primary_dark, primary_light, accent_color, status, is_open,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          t.id,
+          t.name,
+          t.slug,
+          t.email,
+          t.phone || "",
+          t.whatsapp,
+          t.pixKey,
+          t.pixKeyType,
+          t.deliveryFee,
+          0,
+          "30-45 min",
+          t.address,
+          t.hours,
+          t.tagline,
+          t.announcement || "",
+          t.logo,
+          t.bannerImage || "",
+          t.bannerImage || "",
+          t.primaryColor,
+          t.secondaryColor || "#1E293B",
+          t.primaryDark,
+          t.primaryLight,
+          t.accentColor,
+          t.status,
+          t.isOpen ? 1 : 0,
+          t.createdAt,
+          t.updatedAt
+        )
+        .run();
+    } catch {
+      // ignore
+    }
+  }
+
+  private async insertUserRow(u: User): Promise<void> {
+    if (!this.env?.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO users (id, email, password, name, role, tenant_id, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          u.id,
+          u.email,
+          u.password || "123456",
+          u.name,
+          u.role,
+          u.tenantId || null,
+          u.status,
+          u.createdAt
+        )
+        .run();
+    } catch {
+      // ignore
+    }
+  }
+
+  private async insertProductRow(p: Product): Promise<void> {
+    if (!this.env?.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO products (id, tenant_id, name, description, price, category, image, available, options_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          p.id,
+          p.tenantId,
+          p.name,
+          p.description || "",
+          p.price,
+          p.category,
+          p.image || "",
+          p.available ? 1 : 0,
+          JSON.stringify(p.options || []),
+          p.createdAt
+        )
+        .run();
+    } catch {
+      // ignore
     }
   }
 
@@ -818,13 +1009,24 @@ export class Database {
   // ===================== TENANTS =====================
 
   async getTenants(): Promise<Tenant[]> {
+    await this.ensureTables();
     if (this.env?.DB) {
       try {
         const res = await this.env.DB.prepare(
           "SELECT * FROM tenants ORDER BY created_at DESC"
         ).all<any>();
         if (res.results && res.results.length > 0) {
-          return res.results.map((r: any) => this.mapTenantRow(r));
+          const d1Tenants = res.results.map((r: any) => this.mapTenantRow(r));
+          // Sincroniza store em memória para manter consistência
+          for (const dt of d1Tenants) {
+            const idx = globalStore.tenants.findIndex((t) => t.id === dt.id || t.slug === dt.slug);
+            if (idx >= 0) {
+              globalStore.tenants[idx] = dt;
+            } else {
+              globalStore.tenants.push(dt);
+            }
+          }
+          return d1Tenants;
         }
       } catch (e) {
         console.warn("D1 query failed, using memory store:", e);
@@ -923,11 +1125,28 @@ export class Database {
       ? globalStore.slugify(data.slug)
       : globalStore.slugify(data.name);
 
-    // Ensure unique slug
+    // Ensure unique slug in memory and in Cloudflare D1
     let finalSlug = slug;
     let counter = 1;
     while (globalStore.tenants.some((t) => t.slug === finalSlug)) {
       finalSlug = `${slug}-${counter++}`;
+    }
+
+    await this.ensureTables();
+
+    if (this.env?.DB) {
+      try {
+        const existingInD1 = await this.env.DB.prepare(
+          "SELECT id FROM tenants WHERE LOWER(slug) = ? LIMIT 1"
+        )
+          .bind(finalSlug.toLowerCase())
+          .first<any>();
+        if (existingInD1) {
+          finalSlug = `${finalSlug}-${Date.now().toString(36).slice(-4)}`;
+        }
+      } catch {
+        // ignore
+      }
     }
 
     const tenantId = `tenant-${finalSlug}`;
@@ -956,17 +1175,17 @@ export class Database {
       updatedAt: Date.now(),
     };
 
-    await this.ensureTables();
-
+    // GRAVAÇÃO OBRIGATÓRIA E DIRETA NO CLOUDFLARE D1
     if (this.env?.DB) {
       try {
         await this.env.DB.prepare(
           `INSERT INTO tenants (
             id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
-            delivery_fee, address, hours, tagline, logo, primary_color,
+            delivery_fee, min_order, estimated_time, address, hours, tagline,
+            announcement, logo, banner, banner_image, primary_color, secondary_color,
             primary_dark, primary_light, accent_color, status, is_open,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newTenant.id,
@@ -978,11 +1197,17 @@ export class Database {
             newTenant.pixKey,
             newTenant.pixKeyType,
             newTenant.deliveryFee,
+            0,
+            "30-45 min",
             newTenant.address,
             newTenant.hours,
             newTenant.tagline,
+            newTenant.announcement || "",
             newTenant.logo,
+            newTenant.bannerImage || "",
+            newTenant.bannerImage || "",
             newTenant.primaryColor,
+            newTenant.secondaryColor || "#1E293B",
             newTenant.primaryDark,
             newTenant.primaryLight,
             newTenant.accentColor,
@@ -992,8 +1217,44 @@ export class Database {
             newTenant.updatedAt
           )
           .run();
-      } catch (e) {
-        console.warn("D1 createTenant error:", e);
+
+        console.log(`[D1 SUCCESS] Tenant ${newTenant.id} (${newTenant.name}) gravado diretamente no Cloudflare D1!`);
+      } catch (err: any) {
+        console.error("[CRITICAL D1 ERROR] Falha no insert completo do tenant no D1:", err);
+        // Fallback resiliente com colunas essenciais
+        try {
+          await this.env.DB.prepare(
+            `INSERT OR REPLACE INTO tenants (
+              id, name, slug, email, phone, whatsapp, pix_key,
+              delivery_fee, address, hours, tagline, logo,
+              primary_color, status, is_open, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+            .bind(
+              newTenant.id,
+              newTenant.name,
+              newTenant.slug,
+              newTenant.email,
+              newTenant.phone || "",
+              newTenant.whatsapp,
+              newTenant.pixKey,
+              newTenant.deliveryFee,
+              newTenant.address,
+              newTenant.hours,
+              newTenant.tagline,
+              newTenant.logo,
+              newTenant.primaryColor,
+              newTenant.status,
+              newTenant.isOpen ? 1 : 0,
+              newTenant.createdAt,
+              newTenant.updatedAt
+            )
+            .run();
+          console.log(`[D1 FALLBACK SUCCESS] Tenant ${newTenant.id} gravado no D1 via fallback.`);
+        } catch (err2: any) {
+          console.error("[FATAL D1 INSERT ERROR]:", err2);
+          throw new Error(`Falha crítica de persistência no Cloudflare D1: ${err.message || err2.message}`);
+        }
       }
     }
 
@@ -1115,6 +1376,9 @@ export class Database {
     if (this.env?.DB) {
       try {
         await this.env.DB.prepare("DELETE FROM tenants WHERE id = ?").bind(tenant.id).run();
+        await this.env.DB.prepare("DELETE FROM products WHERE tenant_id = ?").bind(tenant.id).run();
+        await this.env.DB.prepare("DELETE FROM orders WHERE tenant_id = ?").bind(tenant.id).run();
+        await this.env.DB.prepare("DELETE FROM users WHERE tenant_id = ?").bind(tenant.id).run();
       } catch (e) {
         console.warn("D1 deleteTenant error:", e);
       }
@@ -2216,32 +2480,32 @@ export class Database {
   private mapTenantRow(row: any): Tenant {
     return {
       id: row.id,
-      name: row.name,
-      slug: row.slug,
-      email: row.email,
+      name: row.name || "Estabelecimento",
+      slug: row.slug || row.id,
+      email: row.email || "",
       phone: row.phone || "",
-      whatsapp: row.whatsapp,
-      pixKey: row.pix_key,
+      whatsapp: row.whatsapp || "5511999999999",
+      pixKey: row.pix_key || row.email || "",
       pixKeyType: row.pix_key_type || "email",
       deliveryFee: Number(row.delivery_fee) || 0,
-      address: row.address,
-      hours: row.hours,
-      tagline: row.tagline,
+      address: row.address || "Centro",
+      hours: row.hours || "18:00 - 23:30",
+      tagline: row.tagline || "",
       announcement: row.announcement || "",
-      logo: row.logo,
-      bannerImage: row.banner_image || row.cover_image || "",
-      primaryColor: row.primary_color,
+      logo: row.logo || "🍔",
+      bannerImage: row.banner_image || row.cover_image || row.banner || "",
+      primaryColor: row.primary_color || "#E63946",
       secondaryColor: row.secondary_color || row.primary_dark || "#1E293B",
-      primaryDark: row.primary_dark,
-      primaryLight: row.primary_light,
-      accentColor: row.accent_color,
+      primaryDark: row.primary_dark || "#C1121F",
+      primaryLight: row.primary_light || "#F77F00",
+      accentColor: row.accent_color || "#FCBF49",
       themeMode: row.theme_mode === "dark" ? "dark" : "light",
       menuLayout: row.menu_layout === "grid" ? "grid" : "list",
       showFeaturedCarousel: row.show_featured_carousel !== undefined ? Boolean(row.show_featured_carousel) : true,
-      status: row.status as TenantStatus,
-      isOpen: Boolean(row.is_open),
-      createdAt: Number(row.created_at),
-      updatedAt: Number(row.updated_at),
+      status: (row.status === "inactive" ? "inactive" : "active") as TenantStatus,
+      isOpen: Boolean(row.is_open !== undefined ? row.is_open : 1),
+      createdAt: Number(row.created_at) || Date.now(),
+      updatedAt: Number(row.updated_at) || Date.now(),
     };
   }
 

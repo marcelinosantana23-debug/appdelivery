@@ -6,6 +6,7 @@ import { useStore } from "@/context/StoreContext";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
 import { playOrderStatusUpdateChime } from "@/utils/audio";
+import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 
 interface OrderTrackingProps {
   order: Order;
@@ -255,9 +256,10 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
             {order.items.map((item) => (
               <div key={item.id} className="flex gap-3">
                 <img
-                  src={item.product.image}
+                  src={normalizeProductImage(item.product.image, item.product.category, item.product.name)}
                   alt={item.product.name}
-                  className="h-14 w-14 rounded-lg object-cover"
+                  onError={(e) => handleImageError(e, item.product.category, item.product.name)}
+                  className="h-14 w-14 rounded-lg object-cover bg-gray-100"
                 />
                 <div className="flex-1">
                   <p className="text-sm font-bold text-gray-800">

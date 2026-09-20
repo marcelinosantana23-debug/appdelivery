@@ -169,13 +169,13 @@ export function generateProductImageUrl(name: string, category: string = "", des
     return "https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80";
   }
   if (text.includes("agua") || text.includes("água") || text.includes("mineral")) {
-    return "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80";
+    return "https://images.unsplash.com/photo-1559839914-17aae19cec71?auto=format&fit=crop&w=600&q=80";
   }
 
   // 2. Comidas, lanches, pizzas e porções -> Pollinations AI
   const englishFood = translateDishToEnglish(name, category, description);
   const prompt = encodeURIComponent(`professional photo of ${englishFood} food`);
-  return `https://pollinations.ai/p/${prompt}&width=600&height=600&nologo=true`;
+  return `https://image.pollinations.ai/prompt/${prompt}?width=600&height=600&nologo=true`;
 }
 
 /**
@@ -183,7 +183,11 @@ export function generateProductImageUrl(name: string, category: string = "", des
  * sem referenciar process.env, tornando-o totalmente compatível com Cloudflare Workers.
  */
 export function getGeminiClient(explicitApiKey?: string): GoogleGenAI | null {
-  const apiKey = explicitApiKey;
+  const apiKey =
+    explicitApiKey ||
+    (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
+      ? process.env.GEMINI_API_KEY
+      : undefined);
   if (!apiKey) return null;
   return new GoogleGenAI({
     apiKey,
@@ -358,18 +362,18 @@ Para CADA produto extraído, você DEVE preencher OBRIGATORIAMENTE o campo 'imag
      * Sprite / Soda: https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80
      * Schweppes: https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80
      * Cerveja / Chopp: https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&q=80
-     * Água Mineral: https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80
+     * Água Mineral: https://images.unsplash.com/photo-1559839914-17aae19cec71?auto=format&fit=crop&w=600&q=80
      * Energéticos: https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80
 2. Para pratos, lanches, hambúrgueres, pizzas, porções, pastéis, sucos naturais, açaí e sobremesas:
    - Gere a URL dinâmica do Pollinations AI com a descrição do prato em inglês gastronômico apetitoso:
-     https://pollinations.ai/p/\${encodeURIComponent("professional photo of " + nomeEmIngles + " food")}&width=600&height=600&nologo=true
+     https://image.pollinations.ai/prompt/\${encodeURIComponent("professional photo of " + nomeEmIngles + " food")}?width=600&height=600&nologo=true
      Exemplos:
-     * Hambúrguer com queijo e bacon: https://pollinations.ai/p/professional%20photo%20of%20gourmet%20bacon%20cheeseburger%20burger%20food&width=600&height=600&nologo=true
-     * Batata Frita: https://pollinations.ai/p/professional%20photo%20of%20crispy%20golden%20french%20fries%20food&width=600&height=600&nologo=true
-     * Pizza: https://pollinations.ai/p/professional%20photo%20of%20hot%20freshly%20baked%20pizza%20food&width=600&height=600&nologo=true
-     * Açaí na Tigela: https://pollinations.ai/p/professional%20photo%20of%20brazilian%20acai%20bowl%20with%20fruits%20granola%20food&width=600&height=600&nologo=true
-     * Pastel: https://pollinations.ai/p/professional%20photo%20of%20crispy%20golden%20brazilian%20pastel%20pastry%20food&width=600&height=600&nologo=true
-     * Suco Natural: https://pollinations.ai/p/professional%20photo%20of%20fresh%20fruit%20juice%20drink%20food&width=600&height=600&nologo=true
+     * Hambúrguer com queijo e bacon: https://image.pollinations.ai/prompt/professional%20photo%20of%20gourmet%20bacon%20cheeseburger%20burger%20food?width=600&height=600&nologo=true
+     * Batata Frita: https://image.pollinations.ai/prompt/professional%20photo%20of%20crispy%20golden%20french%20fries%20food?width=600&height=600&nologo=true
+     * Pizza: https://image.pollinations.ai/prompt/professional%20photo%20of%20hot%20freshly%20baked%20pizza%20food?width=600&height=600&nologo=true
+     * Açaí na Tigela: https://image.pollinations.ai/prompt/professional%20photo%20of%20brazilian%20acai%20bowl%20with%20fruits%20granola%20food?width=600&height=600&nologo=true
+     * Pastel: https://image.pollinations.ai/prompt/professional%20photo%20of%20crispy%20golden%20brazilian%20pastel%20pastry%20food?width=600&height=600&nologo=true
+     * Suco Natural: https://image.pollinations.ai/prompt/professional%20photo%20of%20fresh%20fruit%20juice%20drink%20food?width=600&height=600&nologo=true
    - Ou utilize URLs correspondentes e apetitosas do Unsplash Food.
 Nenhum produto pode ficar sem o campo 'image' preenchido!
 

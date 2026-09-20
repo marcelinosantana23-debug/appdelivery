@@ -266,7 +266,7 @@ function _getFoodPlaceholderImage(category: string, name: string): string {
     return "https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&w=800&q=80";
   }
   if (c.includes("batata") || c.includes("frita") || c.includes("porcao") || c.includes("porção") || c.includes("petisco") || c.includes("mandioca") || c.includes("calabresa") || c.includes("frango a passarinho")) {
-    return "https://images.unsplash.com/photo-1576107232684-1279f3908594?auto=format&fit=crop&w=800&q=80";
+    return "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=800&q=80";
   }
   if (c.includes("refrigerante") || c.includes("coca") || c.includes("suco") || c.includes("cerveja") || c.includes("bebida") || c.includes("agua") || c.includes("água") || c.includes("drink")) {
     return "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80";
@@ -563,7 +563,7 @@ Diretrizes estritas:
    - Defina "isBebidaMarca": false.
    - Crie uma descrição detalhada e apetitosa em inglês em termos de fotografia gastronômica de restaurante (ex: 'gourmet artisan bacon cheeseburger with melted cheddar and crispy fries', 'crispy golden french fries in basket', 'hot pepperoni pizza with melted cheese', 'brazilian acai bowl topped with banana strawberries and granola').
    - Monte a URL dinâmica do Pollinations AI:
-     https://pollinations.ai/p/\${encodeURIComponent("professional photo of " + termoIngles + " food")}&width=600&height=600&nologo=true
+     https://image.pollinations.ai/prompt/\${encodeURIComponent("professional photo of " + termoIngles + " food")}?width=600&height=600&nologo=true
    - Ou utilize uma foto correspondente do Unsplash Food.`;
 
           const candidateModels = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"];
@@ -578,10 +578,25 @@ Diretrizes estritas:
               });
               if (res?.text) {
                 const parsed = JSON.parse(res.text);
-                if (parsed.imageUrl && typeof parsed.imageUrl === "string" && parsed.imageUrl.startsWith("http")) {
-                  generatedImageUrl = parsed.imageUrl;
-                  promptUsed = parsed.termoIngles || "";
-                  break;
+                const rawUrl = parsed.imageUrl || parsed.photoUrl || parsed.image || "";
+                if (rawUrl && typeof rawUrl === "string") {
+                  let cleanedUrl = rawUrl.trim();
+                  if (cleanedUrl.includes("pollinations.ai/p/")) {
+                    cleanedUrl = cleanedUrl
+                      .replace("https://pollinations.ai/p/", "https://image.pollinations.ai/prompt/")
+                      .replace("http://pollinations.ai/p/", "https://image.pollinations.ai/prompt/")
+                      .replace("&width=", "?width=");
+                  } else if (cleanedUrl.includes("image.pollinations.ai/prompt/") && cleanedUrl.includes("&width=") && !cleanedUrl.includes("?width=")) {
+                    cleanedUrl = cleanedUrl.replace("&width=", "?width=");
+                  } else if (cleanedUrl.startsWith("/9j/") || cleanedUrl.startsWith("iVBOR")) {
+                    const mime = cleanedUrl.startsWith("iVBOR") ? "image/png" : "image/jpeg";
+                    cleanedUrl = `data:${mime};base64,${cleanedUrl}`;
+                  }
+                  if (cleanedUrl.startsWith("http") || cleanedUrl.startsWith("data:image/")) {
+                    generatedImageUrl = cleanedUrl;
+                    promptUsed = parsed.termoIngles || "";
+                    break;
+                  }
                 }
               }
             } catch (mErr) {
@@ -602,6 +617,7 @@ Diretrizes estritas:
     return c.json({
       success: true,
       imageUrl: generatedImageUrl,
+      photoUrl: generatedImageUrl,
       name: prodName,
       prompt: promptUsed,
       source: apiKey ? "gemini" : "smart-generator",
@@ -695,6 +711,9 @@ api.get("/manifest/:slug", handleDynamicManifest);
 // GET /api/lojas - Lista todas as lojas cadastradas
 api.get("/lojas", async (c) => {
   try {
+    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    c.header("Pragma", "no-cache");
+    c.header("Expires", "0");
     const db = getDb(c);
     const lojas = await db.getTenants();
 
@@ -1469,6 +1488,9 @@ api.get("/superadmin/tenant-credentials", async (c) => {
 });
 
 api.get("/tenants", async (c) => {
+  c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  c.header("Pragma", "no-cache");
+  c.header("Expires", "0");
   const db = getDb(c);
   const tenants = await db.getTenants();
   const enriched = await Promise.all(

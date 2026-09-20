@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Store,
   Plus,
@@ -64,6 +64,38 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAiImportModalOpen, setIsAiImportModalOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshTenants();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  // Sincronização direta com Cloudflare D1 ao montar, no foco da janela e polling periódico
+  useEffect(() => {
+    // 1. Atualização imediata ao entrar no Super Admin
+    refreshTenants();
+
+    // 2. Atualização ao retornar para a aba (window focus)
+    const handleFocus = () => {
+      refreshTenants();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // 3. Polling em segundo plano a cada 20 segundos para sincronização entre múltiplos dispositivos
+    const timer = setInterval(() => {
+      refreshTenants();
+    }, 20000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(timer);
+    };
+  }, [refreshTenants]);
 
   // State for show/hide passwords on cards or table
   const [showCardPasswords, setShowCardPasswords] = useState<Record<string, boolean>>({});
@@ -553,6 +585,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-sm transition hover:bg-slate-700 hover:text-white active:scale-[0.98] sm:text-sm sm:px-3.5 sm:py-2"
+              title="Sincronizar lojas diretamente do Cloudflare D1 em tempo real"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400 shrink-0 ${isRefreshing ? "animate-spin text-amber-400" : ""}`} />
+              <span className="hidden sm:inline">Atualizar</span>
+            </button>
             <button
               onClick={openCredentialsModal}
               className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs font-semibold text-amber-300 shadow-sm transition hover:bg-amber-500/25 active:scale-[0.98] sm:text-sm sm:px-3.5 sm:py-2"
@@ -2726,7 +2767,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       {/* Modal de Importação de Cardápio e Criação de Loja por IA */}
       <AiMenuImportModal
         isOpen={isAiImportModalOpen}
-        onClose={() => setIsAiImportModalOpen(false)}
+        onClose={() => {
+          setIsAiImportModalOpen(false);
+          refreshTenants();
+        }}
         onSuccess={() => {
           refreshTenants();
         }}
