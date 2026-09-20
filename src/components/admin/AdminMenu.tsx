@@ -9,6 +9,8 @@ import {
   Search,
   Upload,
   CheckCircle2,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { categories } from "@/data/mockData";
@@ -154,8 +156,51 @@ function ProductForm({
   const [newOptName, setNewOptName] = useState("");
   const [newOptPrice, setNewOptPrice] = useState("");
   const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [isGeneratingAiImage, setIsGeneratingAiImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { config } = useStore();
+  const { config, showToast } = useStore();
+
+  const handleGenerateAiPhoto = async () => {
+    if (!name.trim()) {
+      showToast("Digite o nome do produto primeiro para gerar a foto com IA.", "warning");
+      return;
+    }
+
+    setIsGeneratingAiImage(true);
+    try {
+      const savedKey =
+        (typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "") ||
+        config.geminiApiKey ||
+        "";
+
+      const res = await fetch("/api/produtos/gerar-foto-ia", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(savedKey ? { "x-gemini-api-key": savedKey } : {}),
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          category,
+          description: description.trim(),
+          apiKey: savedKey,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.imageUrl) {
+        setImage(data.imageUrl);
+        showToast("Foto do produto gerada com sucesso pela IA!", "success");
+      } else {
+        showToast(data.error || "Não foi possível gerar a foto com IA.", "error");
+      }
+    } catch (err: any) {
+      console.error("Erro ao gerar foto com IA:", err);
+      showToast("Erro na comunicação ao gerar foto com IA.", "error");
+    } finally {
+      setIsGeneratingAiImage(false);
+    }
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -301,9 +346,49 @@ function ProductForm({
             </Field>
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-500">
-              Foto do produto
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-gray-700">
+                Foto do produto
+              </label>
+              <span className="text-[11px] text-gray-400">
+                Gere com IA ou selecione da galeria
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Botão Gerar Foto com IA */}
+              <button
+                type="button"
+                onClick={handleGenerateAiPhoto}
+                disabled={isGeneratingAiImage || isProcessingImage}
+                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-3 px-3.5 text-xs font-bold text-white shadow-sm transition hover:from-amber-600 hover:to-orange-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                title="Gera foto realista e profissional para o item baseado no nome via Gemini"
+              >
+                {isGeneratingAiImage ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
+                    <span>Gerando Foto com IA...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 text-amber-200 animate-pulse" />
+                    <span>Gerar Foto com IA</span>
+                  </>
+                )}
+              </button>
+
+              {/* Botão Selecionar da Galeria */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessingImage || isGeneratingAiImage}
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-3 px-3.5 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-100 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+              >
+                <Upload className="h-4 w-4 text-gray-500" />
+                <span>{isProcessingImage ? "Processando..." : "Selecionar da galeria"}</span>
+              </button>
+            </div>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -311,19 +396,10 @@ function ProductForm({
               className="hidden"
               onChange={handleImageChange}
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessingImage}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 py-3.5 px-4 text-sm font-semibold text-gray-700 transition hover:border-primary hover:bg-orange-50/50 hover:text-primary active:scale-[0.99] disabled:opacity-50"
-            >
-              <Upload className="h-4 w-4 text-primary" />
-              <span>{isProcessingImage ? "Processando foto..." : "Selecionar foto da galeria"}</span>
-            </button>
 
             {/* Prévia da foto escolhida */}
             {image && (
-              <div className="mt-3 flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-2.5">
+              <div className="mt-2.5 flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-2.5">
                 <img
                   src={image}
                   alt="Prévia do produto"
@@ -332,23 +408,39 @@ function ProductForm({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                    <span>Foto carregada com sucesso</span>
+                    <span>Foto vinculada ao produto</span>
                   </div>
                   <p className="mt-0.5 text-[11px] text-gray-500 truncate">
-                    {image.startsWith("data:") ? "Foto selecionada da galeria" : "Imagem cadastrada"}
+                    {image.includes("pollinations.ai")
+                      ? "Foto realista gerada por IA"
+                      : image.startsWith("data:")
+                      ? "Foto enviada da galeria"
+                      : "Foto do produto ativa"}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImage("");
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition"
-                  title="Remover foto"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleGenerateAiPhoto}
+                    disabled={isGeneratingAiImage}
+                    className="flex h-8 px-2 items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition border border-amber-200"
+                    title="Gerar outra opção com IA"
+                  >
+                    <Sparkles className="h-3 w-3 text-amber-600" />
+                    <span>Outra</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImage("");
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition"
+                    title="Remover foto"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

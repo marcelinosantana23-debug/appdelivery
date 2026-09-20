@@ -20,6 +20,7 @@ export interface ExtractedMenuData {
       nome: string;
       descricao: string;
       preco: number;
+      image: string;
       opcionais?: Array<{
         nome: string;
         preco: number;
@@ -32,6 +33,149 @@ export interface MenuFileInput {
   data: string;
   mimeType?: string;
   fileName?: string;
+}
+
+/**
+ * Traduz e refina o nome e categoria de um prato para uma descrição apetitosa em inglês gastronômico,
+ * gerando imagens realistas através da API Pollinations AI.
+ */
+export function translateDishToEnglish(name: string, category: string = "", description: string = ""): string {
+  const t = `${name} ${category} ${description}`.toLowerCase();
+
+  if (t.includes("bacon") && (t.includes("burg") || t.includes("lanche"))) {
+    return "gourmet bacon cheeseburger with crispy smoked bacon and melted cheddar cheese";
+  }
+  if (t.includes("smash")) {
+    return "crispy double smash burger with melted american cheese and special sauce";
+  }
+  if (t.includes("burg") || t.includes("hamburg") || t.includes("artesanal") || t.includes("cheeseburg")) {
+    return "artisan gourmet cheeseburger on brioche bun with lettuce tomato and melted cheese";
+  }
+  if (t.includes("hot dog") || t.includes("cachorro quente") || t.includes("dogão") || t.includes("dogao")) {
+    return "gourmet loaded hot dog with mustard ketchup melted cheese and potato sticks";
+  }
+  if (t.includes("batata") && (t.includes("cheddar") || t.includes("bacon"))) {
+    return "loaded crispy french fries topped with melted cheddar cheese sauce and crispy bacon bits";
+  }
+  if (t.includes("batata") || t.includes("fritas") || t.includes("french fries")) {
+    return "crispy golden french fries in a basket with dip sauce";
+  }
+  if (t.includes("anel de cebola") || t.includes("aneis de cebola") || t.includes("onion ring")) {
+    return "crispy deep-fried golden onion rings with dipping sauce";
+  }
+  if (t.includes("pizza") && (t.includes("calabresa") || t.includes("pepperoni"))) {
+    return "hot baked pepperoni calabresa pizza with melted mozzarella cheese";
+  }
+  if (t.includes("pizza") && (t.includes("frango") || t.includes("catupiry"))) {
+    return "brazilian chicken with catupiry cream cheese pizza freshly baked";
+  }
+  if (t.includes("pizza") && (t.includes("quatro queijos") || t.includes("4 queijos"))) {
+    return "four cheese italian gourmet pizza with mozzarella gorgonzola parmesan";
+  }
+  if (t.includes("pizza") && (t.includes("chocolate") || t.includes("doce") || t.includes("banana") || t.includes("nutella"))) {
+    return "sweet dessert pizza topped with melted chocolate and strawberries";
+  }
+  if (t.includes("pizza") || t.includes("calzone")) {
+    return "delicious freshly baked artisan italian pizza with melted mozzarella and fresh basil";
+  }
+  if (t.includes("pastel") || t.includes("pasteis") || t.includes("pastéis")) {
+    return "crispy golden deep-fried brazilian pastel pastry filled and flaky";
+  }
+  if (t.includes("coxinha") || t.includes("kibe") || t.includes("salgado") || t.includes("empada")) {
+    return "brazilian party snacks coxinha golden fried chicken croquette";
+  }
+  if (t.includes("acai") || t.includes("açaí")) {
+    return "fresh brazilian acai bowl topped with sliced bananas strawberries granola and condensed milk";
+  }
+  if (t.includes("milk shake") || t.includes("milkshake") || t.includes("shake")) {
+    return "thick creamy gourmet milkshake in a glass with whipped cream and drizzle";
+  }
+  if (t.includes("sorvete") || t.includes("ice cream") || t.includes("gelato")) {
+    return "delicious scoops of gourmet ice cream in a bowl with toppings";
+  }
+  if (t.includes("suco") || t.includes("vitamina") || t.includes("smoothie")) {
+    return "fresh natural cold fruit juice in a clear tall glass with ice and fruit garnish";
+  }
+  if (t.includes("frango a passarinho") || t.includes("frango frito") || t.includes("crispy chicken")) {
+    return "crispy fried garlic chicken bites served with lemon wedges";
+  }
+  if (t.includes("calabresa") && (t.includes("porcao") || t.includes("porção") || t.includes("petisco"))) {
+    return "sautéed sliced brazilian smoked sausage calabresa with caramelized onions";
+  }
+  if (t.includes("picanha") || t.includes("churrasco") || t.includes("carne") || t.includes("espeto") || t.includes("bife")) {
+    return "tender juicy grilled steak slices bbq with coarse salt";
+  }
+  if (t.includes("massa") || t.includes("macarrao") || t.includes("macarrão") || t.includes("lasanha") || t.includes("espaguete")) {
+    return "delicious homemade pasta dish with rich tomato sauce and parmesan cheese";
+  }
+  if (t.includes("salada") || t.includes("salad")) {
+    return "fresh healthy garden salad with crisp greens cherry tomatoes and olive oil dressing";
+  }
+  if (t.includes("pudim") || t.includes("brownie") || t.includes("torta") || t.includes("bolo") || t.includes("sobremesa") || t.includes("doce")) {
+    return "decadent gourmet restaurant dessert plate sweet and beautifully plated";
+  }
+
+  const cleanName = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .trim();
+  return `${cleanName || "delicious gourmet"} appetizing restaurant dish`;
+}
+
+/**
+ * Atribui automaticamente uma URL de imagem profissional e realista ao produto:
+ * - Para bebidas industriais de marcas conhecidas: foto oficial da lata/garrafa.
+ * - Para pratos, lanches, porções, pizzas e sucos: URL do Pollinations AI baseada em nome em inglês.
+ */
+export function generateProductImageUrl(name: string, category: string = "", description: string = ""): string {
+  const text = `${name} ${category} ${description}`.toLowerCase();
+
+  // 1. Bebidas industriais de marcas conhecidas (fotos oficiais de lata/garrafa)
+  if (text.includes("coca") && (text.includes("zero") || text.includes("sem acucar") || text.includes("sem açúcar"))) {
+    return "https://images.unsplash.com/photo-1554866585-cd94860890b7?auto=format&fit=crop&w=600&q=80";
+  }
+  if (text.includes("coca") || text.includes("coca-cola") || text.includes("cocacola")) {
+    return "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&q=80";
+  }
+  if (text.includes("guarana") || text.includes("guaraná") || text.includes("kuat") || text.includes("antartica") || text.includes("antárctica")) {
+    return "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80";
+  }
+  if (text.includes("fanta")) {
+    return "https://images.unsplash.com/photo-1624517452488-04869289c4ca?auto=format&fit=crop&w=600&q=80";
+  }
+  if (text.includes("sprite") || text.includes("soda limonada") || text.includes("seven up") || text.includes("7up")) {
+    return "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80";
+  }
+  if (text.includes("schweppes") || text.includes("tonica") || text.includes("tônica") || text.includes("citrus")) {
+    return "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80";
+  }
+  if (
+    text.includes("heineken") ||
+    text.includes("stella") ||
+    text.includes("budweiser") ||
+    text.includes("corona") ||
+    text.includes("brahma") ||
+    text.includes("skol") ||
+    text.includes("amstel") ||
+    text.includes("cerveja") ||
+    text.includes("chopp") ||
+    text.includes("chope") ||
+    text.includes("beer")
+  ) {
+    return "https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&q=80";
+  }
+  if (text.includes("red bull") || text.includes("redbull") || text.includes("monster") || text.includes("energetico") || text.includes("energético")) {
+    return "https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80";
+  }
+  if (text.includes("agua") || text.includes("água") || text.includes("mineral")) {
+    return "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80";
+  }
+
+  // 2. Comidas, lanches, pizzas e porções -> Pollinations AI
+  const englishFood = translateDishToEnglish(name, category, description);
+  const prompt = encodeURIComponent(`professional photo of ${englishFood} food`);
+  return `https://pollinations.ai/p/${prompt}&width=600&height=600&nologo=true`;
 }
 
 /**
@@ -193,6 +337,7 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido (sem texto adicional fora do JSON)
           "nome": "Nome do item do cardápio",
           "descricao": "Descrição dos ingredientes encontrados ou breve descrição",
           "preco": 24.50,
+          "image": "URL de foto profissional e realista do produto (OBRIGATÓRIO)",
           "opcionais": [
             { "nome": "Adicional (ex: Bacon Extra)", "preco": 4.00 }
           ]
@@ -201,6 +346,32 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido (sem texto adicional fora do JSON)
     }
   ]
 }
+
+### REGRA MANDATÓRIA: ATRIBUIÇÃO AUTOMÁTICA DE FOTOS ('image' É OBRIGATÓRIO EM CADA ITEM):
+Para CADA produto extraído, você DEVE preencher OBRIGATORIAMENTE o campo 'image' com uma URL direta, realista e de alta resolução:
+1. Para bebidas de marcas industriais conhecidas (ex: Coca-Cola, Coca-Cola Zero, Guaraná Antarctica, Fanta, Sprite, Schweppes, Cerveja Heineken, Stella Artois, Água Mineral, Red Bull, etc.):
+   - Retorne a foto oficial da embalagem, lata ou garrafa. Exemplos recomendados:
+     * Coca-Cola: https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&q=80
+     * Coca-Cola Zero: https://images.unsplash.com/photo-1554866585-cd94860890b7?auto=format&fit=crop&w=600&q=80
+     * Guaraná Antarctica / Kuat: https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80
+     * Fanta: https://images.unsplash.com/photo-1624517452488-04869289c4ca?auto=format&fit=crop&w=600&q=80
+     * Sprite / Soda: https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80
+     * Schweppes: https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80
+     * Cerveja / Chopp: https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&q=80
+     * Água Mineral: https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80
+     * Energéticos: https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80
+2. Para pratos, lanches, hambúrgueres, pizzas, porções, pastéis, sucos naturais, açaí e sobremesas:
+   - Gere a URL dinâmica do Pollinations AI com a descrição do prato em inglês gastronômico apetitoso:
+     https://pollinations.ai/p/\${encodeURIComponent("professional photo of " + nomeEmIngles + " food")}&width=600&height=600&nologo=true
+     Exemplos:
+     * Hambúrguer com queijo e bacon: https://pollinations.ai/p/professional%20photo%20of%20gourmet%20bacon%20cheeseburger%20burger%20food&width=600&height=600&nologo=true
+     * Batata Frita: https://pollinations.ai/p/professional%20photo%20of%20crispy%20golden%20french%20fries%20food&width=600&height=600&nologo=true
+     * Pizza: https://pollinations.ai/p/professional%20photo%20of%20hot%20freshly%20baked%20pizza%20food&width=600&height=600&nologo=true
+     * Açaí na Tigela: https://pollinations.ai/p/professional%20photo%20of%20brazilian%20acai%20bowl%20with%20fruits%20granola%20food&width=600&height=600&nologo=true
+     * Pastel: https://pollinations.ai/p/professional%20photo%20of%20crispy%20golden%20brazilian%20pastel%20pastry%20food&width=600&height=600&nologo=true
+     * Suco Natural: https://pollinations.ai/p/professional%20photo%20of%20fresh%20fruit%20juice%20drink%20food&width=600&height=600&nologo=true
+   - Ou utilize URLs correspondentes e apetitosas do Unsplash Food.
+Nenhum produto pode ficar sem o campo 'image' preenchido!
 
 Instruções fundamentais para o logo_svg:
 1. Gere OBRIGATORIAMENTE um SVG COMPLETO, moderno, vetorial, estilo flat design de aplicativo de comida/delivery, com viewBox="0 0 512 512".
@@ -219,11 +390,11 @@ Instruções para categorias e produtos:
     prompt += `\n\n### INSTRUÇÕES ADICIONAIS ESPECIAIS DO USUÁRIO:\n${customPrompt.trim()}\n(Siga rigorosamente as instruções acima com prioridade máxima ao extrair itens, filtrar páginas ou ajustar preços/categorias).\n`;
   }
 
-  // Lista de modelos recomendados (em ordem de prioridade)
+  // Lista de modelos modernos do Gemini (em ordem de prioridade)
   const candidateModels = [
+    "gemini-3.8-flash",
     "gemini-2.5-flash",
-    "gemini-1.5-flash",
-    "gemini-3.6-flash",
+    "gemini-3.1-flash-lite",
   ];
 
   let lastError: any = null;
@@ -410,10 +581,13 @@ Instruções para categorias e produtos:
             nome: (opt.nome || opt.name || opt.item || "Adicional").trim(),
             preco: Number(opt.preco ?? opt.price ?? opt.valor ?? 0),
           }));
+          const rawImg = (p.image || p.imagem || p.foto || p.img || "").trim();
+          const prodImg = rawImg.startsWith("http") ? rawImg : generateProductImageUrl(prodName, catName, prodDesc);
           return {
             nome: prodName,
             descricao: prodDesc,
             preco: isNaN(prodPrice) ? 0 : prodPrice,
+            image: prodImg,
             opcionais: optsList,
           };
         });

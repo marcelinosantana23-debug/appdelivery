@@ -25,6 +25,7 @@ export interface StoreConfig {
   showFeaturedCarousel?: boolean;
   status?: "active" | "inactive";
   isOpen?: boolean;
+  geminiApiKey?: string;
 }
 
 export const defaultStoreConfig: StoreConfig = {
@@ -52,6 +53,7 @@ export const defaultStoreConfig: StoreConfig = {
   showFeaturedCarousel: true,
   status: "active",
   isOpen: true,
+  geminiApiKey: "",
 };
 
 export const SUPER_ADMIN_CREDENTIALS = {

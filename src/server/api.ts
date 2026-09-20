@@ -4,7 +4,12 @@ import { streamSSE } from "hono/streaming";
 import { sign, verify } from "hono/jwt";
 import { Database } from "./db";
 import { orderEvents } from "./events";
-import { analyzeMenuWithGemini, type MenuFileInput } from "./geminiMenu";
+import {
+  analyzeMenuWithGemini,
+  generateProductImageUrl,
+  getGeminiClient,
+  type MenuFileInput,
+} from "./geminiMenu";
 import type { Env, OrderStatus, TenantStatus, OrderItem } from "./types";
 
 export const api = new Hono<{ Bindings: Env }>();
@@ -249,7 +254,7 @@ function slugifyText(text: string): string {
     .replace(/--+/g, "-");
 }
 
-function getFoodPlaceholderImage(category: string, name: string): string {
+function _getFoodPlaceholderImage(category: string, name: string): string {
   const c = (category + " " + name).toLowerCase();
   if (c.includes("hamburg") || c.includes("burg") || c.includes("artesanal") || c.includes("cheeseburg") || c.includes("sanduich")) {
     return "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80";
@@ -417,8 +422,8 @@ const handleImportarCardapio = async (c: any) => {
         if (Array.isArray(cat.produtos)) {
           for (const prod of cat.produtos) {
             const prodImg =
-              (prod.imagem || prod.image || "").trim() ||
-              getFoodPlaceholderImage(catSlug, prod.nome);
+              (prod.image || prod.imagem || "").trim() ||
+              generateProductImageUrl(prod.nome, catSlug, prod.descricao);
 
             const novoProduto = await db.createProduct(novaLoja.id, {
               name: prod.nome?.trim() || "Item",
@@ -499,6 +504,119 @@ const handleImportarCardapio = async (c: any) => {
 
 api.post("/admin/lojas/importar-cardapio", handleImportarCardapio);
 api.post("/lojas/importar-cardapio", handleImportarCardapio);
+
+// -----------------------------------------------------------------------------
+// GERAÇÃO DE FOTO DE PRODUTO COM IA (GEMINI + POLLINATIONS AI / BRAND PHOTOS)
+// POST /api/produtos/gerar-foto-ia & POST /api/admin/produtos/gerar-foto-ia
+// -----------------------------------------------------------------------------
+const handleGerarFotoIa = async (c: any) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { name, category, description, apiKey: bodyApiKey, geminiApiKey } = body;
+    const prodName = (name || "").trim();
+    if (!prodName) {
+      return c.json({ success: false, error: "Nome do produto não informado." }, 400);
+    }
+    const catName = (category || "").trim();
+    const desc = (description || "").trim();
+
+    // Prioridade da chave da API do Gemini:
+    // 1. Chave enviada no corpo da requisição (body.apiKey ou body.geminiApiKey)
+    // 2. Header HTTP 'x-gemini-api-key'
+    // 3. Variável de ambiente c.env.GEMINI_API_KEY (Cloudflare)
+    // 4. process.env.GEMINI_API_KEY (Node/Dev)
+    const apiKey =
+      (typeof bodyApiKey === "string" && bodyApiKey.trim()) ||
+      (typeof geminiApiKey === "string" && geminiApiKey.trim()) ||
+      c.req.header("x-gemini-api-key")?.trim() ||
+      c.env?.GEMINI_API_KEY ||
+      (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
+        ? process.env.GEMINI_API_KEY
+        : undefined);
+
+    let generatedImageUrl = "";
+    let promptUsed = "";
+
+    // 1. Tentar gerar com Gemini se houver API key configurada
+    if (apiKey) {
+      const ai = getGeminiClient(apiKey);
+      if (ai) {
+        try {
+          const prompt = `Você é um diretor de arte culinário e fotógrafo profissional de cardápios de delivery de comida.
+Analise com atenção o produto alimentício a seguir:
+- Nome: "${prodName}"
+- Categoria: "${catName || "Geral"}"
+- Descrição: "${desc || "Item de restaurante"}"
+
+Retorne EXCLUSIVAMENTE um objeto JSON válido (sem texto fora do JSON) com a estrutura:
+{
+  "imageUrl": "URL direta da imagem profissional e realista",
+  "isBebidaMarca": true ou false,
+  "termoIngles": "termo descritivo em inglês para a foto"
+}
+
+Diretrizes estritas:
+1. Bebidas Industriais de Marca Conhecida (ex: Coca-Cola, Coca Zero, Guaraná Antarctica, Fanta, Sprite, Schweppes, Heineken, Stella Artois, Cervejas, Água Mineral, Red Bull, etc.):
+   - Defina "isBebidaMarca": true.
+   - Retorne a foto oficial da embalagem/lata/garrafa em alta resolução (ex: https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&q=80 para Coca-Cola).
+2. Pratos, Hambúrgueres, Lanches, Pastéis, Pizzas, Porções, Salgados, Carnes, Sucos, Açaí e Sobremesas:
+   - Defina "isBebidaMarca": false.
+   - Crie uma descrição detalhada e apetitosa em inglês em termos de fotografia gastronômica de restaurante (ex: 'gourmet artisan bacon cheeseburger with melted cheddar and crispy fries', 'crispy golden french fries in basket', 'hot pepperoni pizza with melted cheese', 'brazilian acai bowl topped with banana strawberries and granola').
+   - Monte a URL dinâmica do Pollinations AI:
+     https://pollinations.ai/p/\${encodeURIComponent("professional photo of " + termoIngles + " food")}&width=600&height=600&nologo=true
+   - Ou utilize uma foto correspondente do Unsplash Food.`;
+
+          const candidateModels = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"];
+          for (const model of candidateModels) {
+            try {
+              const res = await ai.models.generateContent({
+                model,
+                contents: prompt,
+                config: {
+                  responseMimeType: "application/json",
+                },
+              });
+              if (res?.text) {
+                const parsed = JSON.parse(res.text);
+                if (parsed.imageUrl && typeof parsed.imageUrl === "string" && parsed.imageUrl.startsWith("http")) {
+                  generatedImageUrl = parsed.imageUrl;
+                  promptUsed = parsed.termoIngles || "";
+                  break;
+                }
+              }
+            } catch (mErr) {
+              console.warn(`[Foto IA] Tentativa com modelo ${model} falhou:`, mErr);
+            }
+          }
+        } catch (aiErr) {
+          console.warn("[Foto IA] Erro ao consultar Gemini para foto:", aiErr);
+        }
+      }
+    }
+
+    // 2. Se a IA gerou a URL válida, utiliza ela. Senão, ativa o gerador local inteligente
+    if (!generatedImageUrl) {
+      generatedImageUrl = generateProductImageUrl(prodName, catName, desc);
+    }
+
+    return c.json({
+      success: true,
+      imageUrl: generatedImageUrl,
+      name: prodName,
+      prompt: promptUsed,
+      source: apiKey ? "gemini" : "smart-generator",
+    });
+  } catch (error: any) {
+    console.error("[Foto IA] Erro ao processar requisição:", error);
+    return c.json({
+      success: false,
+      error: error?.message || "Erro interno ao gerar foto do produto com IA.",
+    }, 500);
+  }
+};
+
+api.post("/produtos/gerar-foto-ia", handleGerarFotoIa);
+api.post("/admin/produtos/gerar-foto-ia", handleGerarFotoIa);
 
 // -----------------------------------------------------------------------------
 // REQUISITO 2: PWA E MANIFEST DINÂMICO DA VITRINE
