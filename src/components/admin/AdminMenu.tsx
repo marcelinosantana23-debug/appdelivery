@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   Plus,
   Pencil,
@@ -28,10 +28,29 @@ export function AdminMenu() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Categorias presentes nos produtos para exibição organizada
+  const categoryList = useMemo(() => {
+    const presentCategoryIds = new Set(products.map((p) => p.category));
+    return categories.filter((c) => presentCategoryIds.has(c.id));
+  }, [products]);
+
+  const filtered = useMemo(() => {
+    return products.filter((p) => {
+      const q = search.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        p.category.toLowerCase().includes(q);
+
+      const matchesCat =
+        selectedCategory === "all" || p.category === selectedCategory;
+
+      return matchesSearch && matchesCat;
+    });
+  }, [products, search, selectedCategory]);
 
   const handleSave = async (product: Product) => {
     const isExisting = products.some((p) => p.id === product.id);
@@ -57,81 +76,192 @@ export function AdminMenu() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex flex-col max-w-full overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full max-w-full overflow-x-hidden">
+    <div className="mx-auto w-full max-w-4xl p-3 sm:p-6 space-y-4 flex flex-col flex-1 pb-16">
+      {/* Barra de busca e botão de novo produto */}
+      <div className="flex items-center gap-2 sm:gap-3 w-full">
         <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar produto..."
-            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none focus:border-primary"
+            placeholder="Buscar por nome, descrição ou categoria..."
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-9 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-xs"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+              title="Limpar busca"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <button
+          type="button"
           onClick={() => { setEditing(null); setShowForm(true); }}
-          className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white transition hover:bg-primary-dark shrink-0"
+          className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-[0.98] px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-950 transition shadow-sm shrink-0 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
-          Novo
+          <span>Novo</span>
         </button>
       </div>
 
-      {filtered.map((product) => (
-        <div
-          key={product.id}
-          className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm w-full max-w-full overflow-x-hidden ${
-            !product.available ? "opacity-60" : ""
-          }`}
-        >
-          <div className="flex items-center gap-3 w-full sm:w-auto min-w-0 flex-1">
-            <img
-              src={normalizeProductImage(product.image, product.category, product.name)}
-              alt={product.name}
-              onError={(e) => handleImageError(e, product.category, product.name)}
-              className="h-14 w-14 rounded-lg object-cover shrink-0 bg-gray-100"
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-gray-800 text-sm truncate">{product.name}</h3>
+      {/* Filtros de Categoria (rolagem horizontal suave no cabeçalho dos filtros) */}
+      {categoryList.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory("all")}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 border ${
+              selectedCategory === "all"
+                ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Todos ({products.length})
+          </button>
+          {categoryList.map((cat) => {
+            const count = products.filter((p) => p.category === cat.id).length;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`rounded-full px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 border flex items-center gap-1.5 ${
+                  selectedCategory === cat.id
+                    ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <span>{cat.icon || "🍽️"}</span>
+                <span>{cat.name}</span>
+                <span className="text-[10px] opacity-75 font-semibold">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Lista de Produtos: Cards expansíveis com altura adequada sem scroll interno */}
+      <div className="space-y-2.5 sm:space-y-3 w-full">
+        {filtered.map((product) => {
+          const cat = categories.find((c) => c.id === product.category);
+          return (
+            <div
+              key={product.id}
+              className={`flex items-center justify-between p-3 sm:p-4 gap-2.5 sm:gap-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-sm min-h-[72px] sm:min-h-[80px] h-auto w-full transition-all shrink-0 ${
+                !product.available ? "opacity-60 bg-slate-50/90 border-dashed border-slate-300" : ""
+              }`}
+            >
+              {/* Foto do Produto à Esquerda */}
+              <div className="relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/60 flex items-center justify-center">
+                <img
+                  src={normalizeProductImage(product.image, product.category, product.name)}
+                  alt={product.name}
+                  onError={(e) => handleImageError(e, product.category, product.name)}
+                  className="h-full w-full object-cover"
+                />
                 {!product.available && (
-                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-600 shrink-0">
-                    Pausado
-                  </span>
+                  <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center">
+                    <span className="rounded bg-red-600 px-1 py-0.5 text-[9px] font-extrabold text-white uppercase tracking-wider">
+                      Pausado
+                    </span>
+                  </div>
                 )}
               </div>
-              <p className="text-xs text-gray-400 truncate">
-                {categories.find((c) => c.id === product.category)?.name} · {formatPrice(product.price, config)}
-              </p>
+
+              {/* Informações no Centro: Nome, Categoria/Descrição e Preço */}
+              <div className="flex-1 min-w-0 pr-1 flex flex-col justify-center">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate">
+                    {product.name}
+                  </h3>
+                  {!product.available && (
+                    <span className="rounded-md bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600 shrink-0">
+                      Pausado
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                  {product.description || (cat ? `${cat.icon || ""} ${cat.name}` : "Sem descrição")}
+                </p>
+
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                    {formatPrice(product.price, config)}
+                  </span>
+                  <span className="text-[10px] sm:text-xs font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                    {cat?.name || product.category}
+                  </span>
+                </div>
+              </div>
+
+              {/* Ações à Direita: Pausar, Editar e Excluir */}
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                {/* Pausar / Reativar */}
+                <button
+                  type="button"
+                  onClick={() => toggleAvailable(product.id)}
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+                    product.available
+                      ? "bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95"
+                      : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 active:scale-95"
+                  }`}
+                  title={product.available ? "Pausar vendas deste produto" : "Reativar produto no cardápio"}
+                >
+                  {product.available ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </button>
+
+                {/* Editar */}
+                <button
+                  type="button"
+                  onClick={() => { setEditing(product); setShowForm(true); }}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-700 active:scale-95"
+                  title="Editar produto"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+
+                {/* Excluir */}
+                <button
+                  type="button"
+                  onClick={() => handleDelete(product.id)}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 hover:text-red-700 active:scale-95"
+                  title="Excluir produto do cardápio"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1 self-end sm:self-center shrink-0">
+          );
+        })}
+      </div>
+
+      {/* Estado vazio quando não encontrar produtos */}
+      {filtered.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-xs">
+          <p className="text-sm font-semibold text-slate-700">Nenhum produto encontrado</p>
+          <p className="text-xs text-slate-400 mt-1">
+            {search
+              ? `Nenhum resultado para "${search}".`
+              : selectedCategory !== "all"
+              ? "Nenhum produto nesta categoria."
+              : "Clique em 'Novo' para cadastrar produtos no cardápio."}
+          </p>
+          {(search || selectedCategory !== "all") && (
             <button
-              onClick={() => toggleAvailable(product.id)}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
-                product.available
-                  ? "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                  : "bg-green-100 text-green-600 hover:bg-green-200"
-              }`}
-              title={product.available ? "Pausar" : "Reativar"}
+              type="button"
+              onClick={() => { setSearch(""); setSelectedCategory("all"); }}
+              className="mt-3 text-xs font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
             >
-              {product.available ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              Limpar filtros
             </button>
-            <button
-              onClick={() => { setEditing(product); setShowForm(true); }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600 transition hover:bg-blue-200"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(product.id)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 text-red-600 transition hover:bg-red-200"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
+          )}
         </div>
-      ))}
+      )}
 
       {showForm && (
         <ProductForm
