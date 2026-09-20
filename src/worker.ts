@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import api from "./server/api";
 import type { Env } from "./server/types";
 import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT } from "./server/pwaAssets";
+import { injectStorePwaMetaTags } from "./server/pwaMeta";
 
 // Main Cloudflare Workers application
 const app = new Hono<{ Bindings: Env }>();
@@ -106,7 +107,8 @@ app.get("/manifest/:slug", (c) => {
 
 // 4.2. Injeção de metatags PWA dinâmicas na rota de vitrine /loja/:slug
 app.get("/loja/:slug*", async (c, next) => {
-  const slug = c.req.param("slug");
+  const rawSlug = c.req.param("slug") || "";
+  const slug = rawSlug.includes("/") ? rawSlug.split("/")[0] : rawSlug;
   const assets = c.env?.ASSETS;
 
   if (assets && typeof assets.fetch === "function" && slug) {
@@ -120,44 +122,8 @@ app.get("/loja/:slug*", async (c, next) => {
         const indexRes = await assets.fetch(new Request(indexUrl.toString(), c.req.raw));
 
         if (indexRes.status === 200) {
-          let html = await indexRes.text();
-          const storeName = loja.name || "Top Food";
-          const logoUrl = loja.logo && loja.logo.trim() ? loja.logo : "/icon-512.png";
-          const manifestUrl = `/api/manifest/${loja.slug}.json`;
-
-          html = html.replace(/<title>.*?<\/title>/i, `<title>${storeName}</title>`);
-
-          if (html.includes('name="apple-mobile-web-app-title"')) {
-            html = html.replace(
-              /<meta\s+name="apple-mobile-web-app-title"\s+content=".*?"\s*\/?>/i,
-              `<meta name="apple-mobile-web-app-title" content="${storeName}" />`
-            );
-          } else {
-            html = html.replace("</head>", `  <meta name="apple-mobile-web-app-title" content="${storeName}" />\n</head>`);
-          }
-
-          if (html.includes('rel="manifest"')) {
-            html = html.replace(
-              /<link\s+rel="manifest"\s+href=".*?"\s*\/?>/i,
-              `<link rel="manifest" href="${manifestUrl}" />`
-            );
-          } else {
-            html = html.replace("</head>", `  <link rel="manifest" href="${manifestUrl}" />\n</head>`);
-          }
-
-          if (html.includes('rel="apple-touch-icon"')) {
-            html = html.replace(
-              /<link\s+rel="apple-touch-icon"[^>]*\/?>/i,
-              `<link rel="apple-touch-icon" href="${logoUrl}" />`
-            );
-          } else {
-            html = html.replace("</head>", `  <link rel="apple-touch-icon" href="${logoUrl}" />\n</head>`);
-          }
-
-          html = html.replace(
-            /<link\s+rel="icon"\s+type="image\/svg\+xml"[^>]*\/?>/i,
-            `<link rel="icon" href="${logoUrl}" />`
-          );
+          const rawHtml = await indexRes.text();
+          const html = injectStorePwaMetaTags(rawHtml, loja);
 
           const headers = new Headers(indexRes.headers);
           headers.set("Content-Type", "text/html; charset=utf-8");

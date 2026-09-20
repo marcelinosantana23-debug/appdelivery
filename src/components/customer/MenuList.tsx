@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Plus, MessageCircle, Clock, Bike, MapPin, Flame, LayoutGrid, List, Sparkles } from "lucide-react";
+import { Plus, MessageCircle, Clock, Bike, MapPin, Flame, Sparkles } from "lucide-react";
 import type { Product } from "@/types";
 import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
@@ -26,9 +25,23 @@ const defaultCategoryNames: Record<string, string> = {
   adicionais: "Adicionais & Molhos",
 };
 
+const defaultCategoryIcons: Record<string, string> = {
+  lanches: "🍔",
+  combos: "🍟",
+  porcoes: "🍗",
+  bebidas: "🥤",
+  sobremesas: "🍰",
+  pizzas: "🍕",
+  pasteis: "🥟",
+  acai: "🍧",
+  doces: "🍩",
+  salgados: "🥐",
+  pratos: "🍽️",
+  adicionais: "🧀",
+};
+
 export function MenuList({ products, onProductClick }: MenuListProps) {
   const { config } = useStore();
-  const [viewMode, setViewMode] = useState<"list" | "grid">(config.menuLayout || "list");
 
   if (!products || products.length === 0) {
     const cleanWhatsapp = config.whatsapp?.replace(/\D/g, "") || "";
@@ -122,17 +135,18 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
             </span>
           </div>
 
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none snap-x -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2 scrollbar-none snap-x overscroll-x-contain -mx-4 px-4 sm:mx-0 sm:px-0">
             {featuredProducts.map((product, idx) => (
               <button
                 key={`featured-${product.id}`}
                 onClick={() => onProductClick(product)}
-                className="group relative flex w-40 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 text-left shadow-sm transition hover:shadow-md hover:border-primary active:scale-[0.98] snap-start"
+                className="group relative flex w-40 sm:w-44 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 text-left shadow-sm transition hover:shadow-md hover:border-primary active:scale-[0.98] snap-start"
               >
                 <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100 dark:bg-slate-700">
                   <img
                     src={product.image}
                     alt={product.name}
+                    referrerPolicy="no-referrer"
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                   />
                   <div className="absolute top-2 left-2 rounded-full bg-red-600/90 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm backdrop-blur-xs flex items-center gap-0.5">
@@ -140,9 +154,9 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
                   </div>
                 </div>
 
-                <div className="flex flex-1 flex-col justify-between p-2.5">
+                <div className="flex flex-1 flex-col justify-between p-2.5 sm:p-3">
                   <div>
-                    <h3 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-1 leading-tight group-hover:text-primary transition-colors">
+                    <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white line-clamp-1 leading-tight group-hover:text-primary transition-colors">
                       {product.name}
                     </h3>
                     <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-400 line-clamp-1">
@@ -150,12 +164,12 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
                     </p>
                   </div>
 
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-primary-dark dark:text-primary-light">
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <span className="text-xs sm:text-sm font-extrabold text-primary-dark dark:text-primary-light">
                       {formatPrice(product.price, config)}
                     </span>
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-sm transition group-active:scale-90">
-                      <Plus className="h-3.5 w-3.5" />
+                    <span className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-primary text-white shadow-sm transition group-active:scale-90">
+                      <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </span>
                   </div>
                 </div>
@@ -165,162 +179,89 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
         </section>
       )}
 
-      {/* Control bar: Title & Layout Switcher (List vs Grid) */}
-      <div className="flex items-center justify-between border-t border-gray-100 dark:border-slate-800/80 pt-4 px-0.5">
+      {/* Divisor do Cardápio Completo */}
+      <div className="flex items-center gap-2 border-t border-gray-100 dark:border-slate-800/80 pt-4 px-0.5">
         <span className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500">
           Cardápio Completo
         </span>
-
-        {/* View Toggle */}
-        <div className="flex items-center gap-1 rounded-xl bg-gray-100 dark:bg-slate-800 p-1 border border-gray-200/60 dark:border-slate-700/60">
-          <button
-            type="button"
-            onClick={() => setViewMode("list")}
-            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-              viewMode === "list"
-                ? "bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-xs"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-900"
-            }`}
-            title="Exibir em Lista Detalhada"
-          >
-            <List className="h-3.5 w-3.5" />
-            <span className="hidden xs:inline text-[11px]">Lista</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("grid")}
-            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-              viewMode === "grid"
-                ? "bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-xs"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-900"
-            }`}
-            title="Exibir em Grade de Cards"
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-            <span className="hidden xs:inline text-[11px]">Grade</span>
-          </button>
-        </div>
+        <div className="h-px flex-1 bg-gray-100 dark:bg-slate-800/80" />
       </div>
 
-      {/* Product Categories */}
+      {/* 2. TODAS AS CATEGORIAS DO CARDÁPIO EM CARROSSÉIS HORIZONTAIS COMPACTOS */}
       {Object.entries(grouped).map(([catId, items]) => {
         const displayName =
           defaultCategoryNames[catId] ||
           catId.charAt(0).toUpperCase() + catId.slice(1);
+        const icon = defaultCategoryIcons[catId] || "🍽️";
 
         return (
-          <section key={catId} id={`cat-${catId}`} className="scroll-mt-20">
-            <h2 className="mb-3 text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              {displayName}
-              <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
-                ({items.length})
-              </span>
-            </h2>
+          <section key={catId} id={`cat-${catId}`} className="scroll-mt-20 sm:scroll-mt-24">
+            {/* Título da Categoria com contagem de itens */}
+            <div className="flex items-center justify-between mb-2.5 px-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-base">{icon}</span>
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight">
+                  {displayName}
+                </h2>
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">
+                  ({items.length})
+                </span>
+              </div>
+            </div>
 
-            {/* Render items according to viewMode */}
-            {viewMode === "grid" ? (
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                {items.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => product.available && onProductClick(product)}
-                    disabled={!product.available}
-                    className={`group flex flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 text-left shadow-sm transition-all ${
-                      product.available
-                        ? "hover:shadow-md hover:border-primary/50 active:scale-[0.99] cursor-pointer"
-                        : "opacity-55 cursor-not-allowed"
-                    }`}
-                  >
-                    <div className="relative aspect-square w-full overflow-hidden bg-gray-100 dark:bg-slate-700">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                      />
-                      {!product.available && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/55 backdrop-blur-xs">
-                          <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
-                            Esgotado
-                          </span>
-                        </div>
+            {/* Carrossel Horizontal: Exatamente o mesmo layout de cards do "Mais Pedidos da Semana" */}
+            <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2 scrollbar-none snap-x overscroll-x-contain -mx-4 px-4 sm:mx-0 sm:px-0">
+              {items.map((product) => (
+                <button
+                  key={product.id}
+                  onClick={() => product.available && onProductClick(product)}
+                  disabled={!product.available}
+                  className={`group relative flex w-40 sm:w-44 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 text-left shadow-sm transition hover:shadow-md hover:border-primary active:scale-[0.98] snap-start ${
+                    product.available
+                      ? "cursor-pointer"
+                      : "opacity-60 cursor-not-allowed"
+                  }`}
+                >
+                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100 dark:bg-slate-700">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      referrerPolicy="no-referrer"
+                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    />
+                    {!product.available && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-xs">
+                        <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                          Esgotado
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-1 flex-col justify-between p-2.5 sm:p-3">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white line-clamp-1 leading-tight group-hover:text-primary transition-colors">
+                        {product.name}
+                      </h3>
+                      <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1">
+                        {product.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-2.5 flex items-center justify-between">
+                      <span className="text-xs sm:text-sm font-extrabold text-primary-dark dark:text-primary-light">
+                        {formatPrice(product.price, config)}
+                      </span>
+                      {product.available && (
+                        <span className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-primary text-white shadow-sm transition group-active:scale-90">
+                          <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        </span>
                       )}
                     </div>
-
-                    <div className="flex flex-1 flex-col justify-between p-3">
-                      <div>
-                        <h3 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white leading-tight line-clamp-2">
-                          {product.name}
-                        </h3>
-                        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">
-                          {product.description}
-                        </p>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-between pt-1">
-                        <span className="font-extrabold text-xs sm:text-sm text-primary-dark dark:text-primary-light">
-                          {formatPrice(product.price, config)}
-                        </span>
-                        {product.available && (
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white transition-transform group-active:scale-90 shadow-xs">
-                            <Plus className="h-4 w-4" />
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {items.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => product.available && onProductClick(product)}
-                    disabled={!product.available}
-                    className={`flex w-full gap-3.5 sm:gap-4 rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-white dark:bg-slate-800/90 p-3 text-left shadow-sm transition-all ${
-                      product.available
-                        ? "hover:shadow-md hover:border-primary/50 active:scale-[0.99] cursor-pointer"
-                        : "opacity-55 cursor-not-allowed"
-                    }`}
-                  >
-                    <div className="relative h-24 w-24 sm:h-28 sm:w-28 shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-slate-700">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="h-full w-full object-cover"
-                      />
-                      {!product.available && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/55 backdrop-blur-xs">
-                          <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
-                            Esgotado
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-1 flex-col justify-between py-0.5 min-w-0">
-                      <div>
-                        <h3 className="font-bold text-sm text-gray-900 dark:text-white leading-tight">
-                          {product.name}
-                        </h3>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
-                          {product.description}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between pt-2">
-                        <span className="font-extrabold text-sm text-primary-dark dark:text-primary-light">
-                          {formatPrice(product.price, config)}
-                        </span>
-                        {product.available && (
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white transition-transform active:scale-90 shadow-xs">
-                            <Plus className="h-4 w-4" />
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+                  </div>
+                </button>
+              ))}
+            </div>
           </section>
         );
       })}

@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import type { Product } from "@/types";
 
 interface CategoryNavProps {
@@ -52,6 +52,25 @@ export function CategoryNav({ activeCategory, onCategoryClick, products = [] }: 
     return list;
   }, [products]);
 
+  // Mantém a pílula da categoria ativa centralizada horizontalmente no menu SEM afetar o scroll da janela
+  useEffect(() => {
+    if (activeCategory && scrollRef.current) {
+      const container = scrollRef.current;
+      const activeBtn = container.querySelector<HTMLElement>(`[data-category="${activeCategory}"]`);
+      if (activeBtn) {
+        const btnOffsetLeft = activeBtn.offsetLeft;
+        const btnWidth = activeBtn.offsetWidth;
+        const containerWidth = container.offsetWidth;
+        const targetScrollLeft = btnOffsetLeft - (containerWidth / 2) + (btnWidth / 2);
+        
+        container.scrollTo({
+          left: Math.max(0, targetScrollLeft),
+          behavior: "smooth",
+        });
+      }
+    }
+  }, [activeCategory]);
+
   if (categories.length === 0) {
     return null;
   }
@@ -60,13 +79,15 @@ export function CategoryNav({ activeCategory, onCategoryClick, products = [] }: 
     <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm border-b border-transparent dark:border-slate-800 transition-colors">
       <div
         ref={scrollRef}
-        className="no-scrollbar mx-auto flex max-w-2xl gap-2 overflow-x-auto px-4 py-3"
+        className="no-scrollbar mx-auto flex max-w-2xl gap-2 overflow-x-auto px-4 py-3 scrollbar-none"
       >
         {categories.map((cat) => (
           <button
             key={cat.id}
+            id={`cat-nav-btn-${cat.id}`}
+            data-category={cat.id}
             onClick={() => onCategoryClick(cat.id)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all cursor-pointer ${
               activeCategory === cat.id
                 ? "bg-primary text-white shadow-md"
                 : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700"

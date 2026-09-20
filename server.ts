@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import workerApp from "./src/worker";
 import { Database } from "./src/server/db";
+import { injectStorePwaMetaTags } from "./src/server/pwaMeta";
 
 async function startServer() {
   const app = express();
@@ -168,49 +169,6 @@ async function startServer() {
 
   const db = new Database();
 
-  // Helper para injetar metatags dinâmicas do PWA por vitrine/loja no HTML
-  function injectStorePwaMetaTags(html: string, loja: any): string {
-    const storeName = loja.name || "Top Food";
-    const logoUrl = loja.logo && loja.logo.trim() ? loja.logo : "/icon-512.png";
-    const manifestUrl = `/api/manifest/${loja.slug}.json`;
-
-    let updated = html.replace(/<title>.*?<\/title>/i, `<title>${storeName}</title>`);
-
-    if (updated.includes('name="apple-mobile-web-app-title"')) {
-      updated = updated.replace(
-        /<meta\s+name="apple-mobile-web-app-title"\s+content=".*?"\s*\/?>/i,
-        `<meta name="apple-mobile-web-app-title" content="${storeName}" />`
-      );
-    } else {
-      updated = updated.replace("</head>", `  <meta name="apple-mobile-web-app-title" content="${storeName}" />\n</head>`);
-    }
-
-    if (updated.includes('rel="manifest"')) {
-      updated = updated.replace(
-        /<link\s+rel="manifest"\s+href=".*?"\s*\/?>/i,
-        `<link rel="manifest" href="${manifestUrl}" />`
-      );
-    } else {
-      updated = updated.replace("</head>", `  <link rel="manifest" href="${manifestUrl}" />\n</head>`);
-    }
-
-    if (updated.includes('rel="apple-touch-icon"')) {
-      updated = updated.replace(
-        /<link\s+rel="apple-touch-icon"[^>]*\/?>/i,
-        `<link rel="apple-touch-icon" href="${logoUrl}" />`
-      );
-    } else {
-      updated = updated.replace("</head>", `  <link rel="apple-touch-icon" href="${logoUrl}" />\n</head>`);
-    }
-
-    updated = updated.replace(
-      /<link\s+rel="icon"\s+type="image\/svg\+xml"[^>]*\/?>/i,
-      `<link rel="icon" href="${logoUrl}" />`
-    );
-
-    return updated;
-  }
-
   // Vite middleware for development
   let viteDevServer: any = null;
   if (process.env.NODE_ENV !== "production") {
@@ -223,7 +181,8 @@ async function startServer() {
     // Injeta metatags PWA ao acessar diretamente a URL da vitrine /loja/:slug em desenvolvimento
     app.get(["/loja/:slug", "/loja/:slug/*splat"], async (req, res, next) => {
       try {
-        const slug = req.params.slug;
+        const rawSlug = req.params.slug || "";
+        const slug = rawSlug.includes("/") ? rawSlug.split("/")[0] : rawSlug;
         if (!slug) return next();
         const loja = await db.getTenantByIdOrSlug(slug);
         if (!loja) return next();
@@ -249,7 +208,8 @@ async function startServer() {
     // Injeta metatags PWA ao acessar diretamente a URL da vitrine /loja/:slug em produção
     app.get(["/loja/:slug", "/loja/:slug/*splat"], async (req, res, next) => {
       try {
-        const slug = req.params.slug;
+        const rawSlug = req.params.slug || "";
+        const slug = rawSlug.includes("/") ? rawSlug.split("/")[0] : rawSlug;
         if (!slug) return next();
         const loja = await db.getTenantByIdOrSlug(slug);
         if (!loja) return next();

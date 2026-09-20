@@ -42,6 +42,8 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
   const [customerView, setCustomerView] = useState<"menu" | "checkout" | "tracking">("menu");
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const isManualScrollRef = useRef(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sincroniza categoria ativa com as categorias disponíveis da loja
   useEffect(() => {
@@ -53,12 +55,17 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
     }
   }, [products, activeCategory]);
 
-  // Sincroniza metatags dinâmicas do PWA (título, apple-mobile-web-app-title, manifest e ícones da loja)
+  // Sincroniza metatags dinâmicas do PWA (título, apple-mobile-web-app-title, description, manifest e ícones da loja)
   useEffect(() => {
     if (!config?.name) return;
 
+    const storeName = config.name.trim();
+    const title = `${storeName} - Delivery`;
+    const description = `Peça os melhores lanches em ${storeName}. Delivery rápido e prático.`;
+    const logoUrl = config.logo && config.logo.trim() ? config.logo.trim() : "/icon-512.png";
+
     // 1. Atualiza title
-    document.title = config.name;
+    document.title = title;
 
     // 2. Atualiza apple-mobile-web-app-title para salvar na tela inicial com o nome da loja
     let metaAppleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
@@ -67,11 +74,20 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
       metaAppleTitle.setAttribute("name", "apple-mobile-web-app-title");
       document.head.appendChild(metaAppleTitle);
     }
-    metaAppleTitle.setAttribute("content", config.name);
+    metaAppleTitle.setAttribute("content", storeName);
 
-    // 3. Atualiza link do manifest dinâmico exclusivo da loja
+    // 3. Atualiza meta description
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement("meta");
+      metaDesc.setAttribute("name", "description");
+      document.head.appendChild(metaDesc);
+    }
+    metaDesc.setAttribute("content", description);
+
+    // 4. Atualiza link do manifest dinâmico exclusivo da loja
     if (config.slug) {
-      const manifestUrl = `/api/manifest/${config.slug}.json`;
+      const manifestUrl = `/api/pwa/manifest.json?slug=${encodeURIComponent(config.slug)}`;
       let linkManifest = document.querySelector('link[rel="manifest"]');
       if (!linkManifest) {
         linkManifest = document.createElement("link");
@@ -81,43 +97,75 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
       linkManifest.setAttribute("href", manifestUrl);
     }
 
-    // 4. Atualiza favicons e apple-touch-icon com a logo da lanchonete
-    if (config.logo && config.logo.trim()) {
-      const linkIcon = document.querySelector('link[rel="icon"]');
-      if (linkIcon) {
-        linkIcon.setAttribute("href", config.logo);
-      }
-      const linkAppleIcon = document.querySelector('link[rel="apple-touch-icon"]');
-      if (linkAppleIcon) {
-        linkAppleIcon.setAttribute("href", config.logo);
-      }
+    // 5. Atualiza favicons e apple-touch-icon com a logo da lanchonete
+    const linkIcon = document.querySelector('link[rel="icon"]');
+    if (linkIcon) {
+      linkIcon.setAttribute("href", logoUrl);
     }
+    let linkAppleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+    if (!linkAppleIcon) {
+      linkAppleIcon = document.createElement("link");
+      linkAppleIcon.setAttribute("rel", "apple-touch-icon");
+      document.head.appendChild(linkAppleIcon);
+    }
+    linkAppleIcon.setAttribute("href", logoUrl);
   }, [config?.name, config?.slug, config?.logo]);
 
   useEffect(() => {
     observerRef.current?.disconnect();
+
+    const uniqueCategoryIds = Array.from(new Set(products.map((p) => p.category)));
+
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const catId = entry.target.id.replace("cat-", "");
-            setActiveCategory(catId);
+        // Ignora atualizações do observer se o usuário acabou de clicar em uma aba de categoria
+        if (isManualScrollRef.current) return;
+
+        const visibleEntries = entries.filter((entry) => entry.isIntersecting);
+        if (visibleEntries.length === 0) return;
+
+        // Dentre as seções visíveis, seleciona a mais próxima do topo de leitura
+        let closest = visibleEntries[0];
+        let minDistance = Infinity;
+
+        for (const entry of visibleEntries) {
+          const distance = Math.abs(entry.boundingClientRect.top - 80);
+          if (distance < minDistance) {
+            minDistance = distance;
+            closest = entry;
           }
-        });
+        }
+
+        const catId = closest.target.id.replace("cat-", "");
+        if (catId) {
+          setActiveCategory((prev) => (prev !== catId ? catId : prev));
+        }
       },
-      { rootMargin: "-80px 0px -70% 0px" }
+      {
+        rootMargin: "-70px 0px -40% 0px",
+        threshold: [0.1, 0.3],
+      }
     );
 
-    products.forEach((p) => {
-      const el = document.getElementById(`cat-${p.category}`);
+    uniqueCategoryIds.forEach((catId) => {
+      const el = document.getElementById(`cat-${catId}`);
       if (el) observerRef.current?.observe(el);
     });
 
-    return () => observerRef.current?.disconnect();
+    return () => {
+      observerRef.current?.disconnect();
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
   }, [products]);
 
   const handleCategoryClick = (id: string) => {
     setActiveCategory(id);
+    isManualScrollRef.current = true;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isManualScrollRef.current = false;
+    }, 850);
+
     const el = document.getElementById(`cat-${id}`);
     if (el) {
       const y = el.getBoundingClientRect().top + window.scrollY - 70;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Check,
   X,
@@ -36,40 +36,100 @@ const nextStatusMap: Record<string, OrderStatus> = {
 export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const { orders, updateOrderStatus, clearNewOrderFlag } = useStore();
   const [filter, setFilter] = useState<"active" | "all">("active");
+  const topAnchorRef = useRef<HTMLDivElement>(null);
+
+  const activeOrdersCount = orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length;
+  const allOrdersCount = orders.length;
 
   const filtered = filter === "active"
     ? orders.filter((o) => o.status !== "done" && o.status !== "cancelled")
     : orders;
 
+  const handleFilterChange = (newFilter: "active" | "all") => {
+    setFilter(newFilter);
+    topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex flex-col max-w-full overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row gap-2 w-full max-w-full overflow-x-hidden">
-        <FilterButton active={filter === "active"} onClick={() => setFilter("active")}>
-          Ativos ({orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length})
-        </FilterButton>
-        <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
-          Todos ({orders.length})
-        </FilterButton>
+    <div className="flex flex-col w-full min-h-full">
+      <div ref={topAnchorRef} />
+      
+      {/* Barra de Filtros FIXA / STICKY no topo da tela de pedidos */}
+      <div className="sticky top-0 z-20 border-b border-gray-200/90 bg-gray-50/95 backdrop-blur-md px-3 sm:px-4 py-2.5 shadow-xs">
+        <div className="mx-auto flex max-w-4xl items-center gap-2">
+          <button
+            id="admin-orders-tab-active"
+            type="button"
+            onClick={() => handleFilterChange("active")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer ${
+              filter === "active"
+                ? "bg-slate-900 text-white ring-1 ring-slate-800"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <span>Ativos</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-black ${
+                filter === "active"
+                  ? "bg-emerald-500 text-slate-950"
+                  : "bg-slate-100 text-slate-600 border border-slate-200"
+              }`}
+            >
+              {activeOrdersCount}
+            </span>
+          </button>
+
+          <button
+            id="admin-orders-tab-all"
+            type="button"
+            onClick={() => handleFilterChange("all")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer ${
+              filter === "all"
+                ? "bg-slate-900 text-white ring-1 ring-slate-800"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <span>Todos</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-black ${
+                filter === "all"
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-100 text-slate-600 border border-slate-200"
+              }`}
+            >
+              {allOrdersCount}
+            </span>
+          </button>
+        </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 py-20 text-gray-400">
-          <Package className="h-16 w-16" strokeWidth={1} />
-          <p className="font-medium">Nenhum pedido {filter === "active" ? "ativo" : ""} no momento</p>
-          <p className="text-sm">Os novos pedidos aparecerão aqui em tempo real</p>
-        </div>
-      ) : (
-        filtered.map((order) => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            isNew={newOrderIds.includes(order.id)}
-            onView={() => clearNewOrderFlag(order.id)}
-            onAdvance={(id) => updateOrderStatus(id, nextStatusMap[order.status])}
-            onCancel={(id) => updateOrderStatus(id, "cancelled")}
-          />
-        ))
-      )}
+      {/* Lista de Pedidos */}
+      <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex-1">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-gray-400">
+            <Package className="h-16 w-16" strokeWidth={1} />
+            <p className="font-medium text-base text-gray-600">
+              Nenhum pedido {filter === "active" ? "ativo" : ""} no momento
+            </p>
+            <p className="text-sm text-gray-400">
+              {filter === "active"
+                ? "Os novos pedidos aparecerão aqui em tempo real"
+                : "O histórico completo de pedidos aparecerá aqui"}
+            </p>
+          </div>
+        ) : (
+          filtered.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              isNew={newOrderIds.includes(order.id)}
+              onView={() => clearNewOrderFlag(order.id)}
+              onAdvance={(id) => updateOrderStatus(id, nextStatusMap[order.status])}
+              onCancel={(id) => updateOrderStatus(id, "cancelled")}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -337,23 +397,3 @@ function OrderCard({
   );
 }
 
-function FilterButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-lg px-3 py-2 text-sm font-semibold transition text-center w-full sm:w-auto ${
-        active ? "bg-primary text-white" : "bg-white text-gray-500 shadow-sm hover:bg-gray-50"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}

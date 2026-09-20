@@ -502,33 +502,43 @@ api.post("/lojas/importar-cardapio", handleImportarCardapio);
 
 // -----------------------------------------------------------------------------
 // REQUISITO 2: PWA E MANIFEST DINÂMICO DA VITRINE
-// GET /api/manifest/:slug.json
+// GET /api/pwa/manifest.json?slug=SLUG_DA_LOJA ou GET /api/manifest/:slug.json
 // -----------------------------------------------------------------------------
 const handleDynamicManifest = async (c: any) => {
   try {
     const db = getDb(c);
-    const rawSlug = c.req.param("slug") || "";
-    const slug = rawSlug.replace(/\.json$/i, "");
+    const querySlug = c.req.query("slug");
+    const paramSlug = c.req.param("slug");
+    const rawSlug = querySlug || paramSlug || "";
+    const slug = rawSlug.replace(/\.json$/i, "").trim();
+
+    if (!slug) {
+      return c.json({ error: "Slug da loja não informado." }, 400);
+    }
+
     const loja = await db.getTenantByIdOrSlug(slug);
 
     if (!loja) {
       return c.json({ error: "Loja não encontrada." }, 404);
     }
 
-    const logoUrl = loja.logo && loja.logo.trim() ? loja.logo : "/icon-512.png";
+    const storeName = (loja.name || "Nova Lanchonete").trim();
+    const shortName = storeName.length > 12 ? storeName.slice(0, 12).trim() : storeName;
+    const logoUrl = loja.logo && loja.logo.trim() ? loja.logo.trim() : "/icon-512.png";
     const isSvg = logoUrl.includes("image/svg+xml") || logoUrl.endsWith(".svg");
     const iconType = isSvg ? "image/svg+xml" : "image/png";
 
     const manifest = {
-      name: loja.name,
-      short_name: loja.name.length > 15 ? loja.name.slice(0, 15).trim() : loja.name,
+      id: `/loja/${loja.slug}`,
+      name: storeName,
+      short_name: shortName,
       start_url: `/loja/${loja.slug}`,
       scope: `/loja/${loja.slug}`,
       display: "standalone",
       orientation: "portrait",
       background_color: "#ffffff",
-      theme_color: loja.primaryColor || "#000000",
-      description: loja.tagline || `Faça seu pedido online no ${loja.name}!`,
+      theme_color: loja.primaryColor || "#dc2626",
+      description: `Peça os melhores lanches em ${storeName}. Delivery rápido e prático.`,
       icons: [
         {
           src: logoUrl,
@@ -560,6 +570,8 @@ const handleDynamicManifest = async (c: any) => {
   }
 };
 
+api.get("/pwa/manifest.json", handleDynamicManifest);
+api.get("/pwa/manifest", handleDynamicManifest);
 api.get("/manifest/:slug", handleDynamicManifest);
 
 // GET /api/lojas - Lista todas as lojas cadastradas
