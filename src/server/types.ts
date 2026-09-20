@@ -172,6 +172,7 @@ export interface Env {
   PLATFORM_NAME?: string;
   ENVIRONMENT?: string;
   JWT_SECRET?: string;
+  GEMINI_API_KEY?: string;
 }
 
 export interface FinancialMetrics {

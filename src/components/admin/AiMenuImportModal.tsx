@@ -20,6 +20,8 @@ import {
   Zap,
   Smartphone,
   Check,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import type { Tenant, Product } from "@/types";
 import { copyTextToClipboard, getStoreUrl } from "@/utils/url";
@@ -32,15 +34,21 @@ interface AiMenuImportModalProps {
 
 type ImportStep = "idle" | "uploading" | "analyzing" | "extracting_logo" | "creating_store" | "done";
 
+interface FileItem {
+  id: string;
+  file: File;
+  previewUrl: string | null;
+  isImage: boolean;
+  name: string;
+  size: number;
+}
+
 export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
 }) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [fileBase64, setFileBase64] = useState<string | null>(null);
-  const [mimeType, setMimeType] = useState<string>("image/jpeg");
+  const [fileItems, setFileItems] = useState<FileItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const [step, setStep] = useState<ImportStep>("idle");
@@ -70,8 +78,11 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleFileSelect = (selectedFile: File) => {
+  const handleFilesSelect = (selectedFiles: FileList | File[]) => {
     setErrorMessage("");
+    const incoming = Array.from(selectedFiles);
+    if (incoming.length === 0) return;
+
     const validTypes = [
       "image/jpeg",
       "image/png",
@@ -80,30 +91,64 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
       "application/pdf",
     ];
 
-    if (!validTypes.includes(selectedFile.type) && !selectedFile.name.match(/\.(jpg|jpeg|png|webp|pdf)$/i)) {
-      setErrorMessage("Por favor, selecione uma imagem (JPG, PNG, WEBP) ou documento PDF do cardápio.");
-      return;
-    }
+    const newItems: FileItem[] = [];
+    const errors: string[] = [];
 
-    if (selectedFile.size > 20 * 1024 * 1024) {
-      setErrorMessage("O arquivo é muito grande. O tamanho máximo permitido é de 20MB.");
-      return;
-    }
-
-    setFile(selectedFile);
-    setMimeType(selectedFile.type || "image/jpeg");
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      setFileBase64(dataUrl);
-      if (selectedFile.type.startsWith("image/")) {
-        setFilePreview(dataUrl);
-      } else {
-        setFilePreview(null);
+    for (const f of incoming) {
+      const isValid =
+        validTypes.includes(f.type) || f.name.match(/\.(jpg|jpeg|png|webp|pdf)$/i);
+      if (!isValid) {
+        errors.push(`"${f.name}": Formato inválido. Aceitos: JPG, PNG, WEBP ou PDF.`);
+        continue;
       }
-    };
-    reader.readAsDataURL(selectedFile);
+      if (f.size > 25 * 1024 * 1024) {
+        errors.push(`"${f.name}": Arquivo muito grande (máximo 25MB).`);
+        continue;
+      }
+
+      const isImg =
+        f.type.startsWith("image/") || f.name.match(/\.(jpg|jpeg|png|webp)$/i) !== null;
+      const previewUrl = isImg ? URL.createObjectURL(f) : null;
+
+      newItems.push({
+        id: `${f.name}-${f.size}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        file: f,
+        previewUrl,
+        isImage: isImg,
+        name: f.name,
+        size: f.size,
+      });
+    }
+
+    if (errors.length > 0) {
+      setErrorMessage(errors.join(" "));
+    }
+
+    if (newItems.length > 0) {
+      setFileItems((prev) => [...prev, ...newItems]);
+    }
+  };
+
+  const handleRemoveFile = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFileItems((prev) => {
+      const item = prev.find((i) => i.id === id);
+      if (item?.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      return prev.filter((i) => i.id !== id);
+    });
+  };
+
+  const handleClearFiles = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    fileItems.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+    setFileItems([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -118,30 +163,38 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesSelect(e.dataTransfer.files);
     }
   };
 
   const handleStartImport = async () => {
-    if (!fileBase64) {
-      setErrorMessage("Faça o upload de uma foto ou PDF do cardápio para continuar.");
+    if (fileItems.length === 0) {
+      setErrorMessage("Selecione pelo menos uma foto ou documento PDF do cardápio para continuar.");
       return;
     }
 
     setErrorMessage("");
     setStep("uploading");
-    setProgressMsg("Enviando arquivo do cardápio...");
+    setProgressMsg(
+      fileItems.length > 1
+        ? `Enviando ${fileItems.length} fotos do cardápio...`
+        : "Enviando arquivo do cardápio..."
+    );
 
     // Timer simulando feedback visual dos passos do pipeline
     const timer1 = setTimeout(() => {
       setStep("analyzing");
-      setProgressMsg("Analisando cardápio com Gemini 3 Multimodal...");
+      setProgressMsg(
+        fileItems.length > 1
+          ? `Analisando ${fileItems.length} fotos em conjunto com Gemini Multimodal...`
+          : "Analisando cardápio com Gemini Multimodal..."
+      );
     }, 1200);
 
     const timer2 = setTimeout(() => {
       setStep("extracting_logo");
-      setProgressMsg("Identificando itens e gerando/extraindo logotipo exclusivo...");
+      setProgressMsg("Unificando categorias e gerando/extraindo logotipo exclusivo...");
     }, 3800);
 
     const timer3 = setTimeout(() => {
@@ -150,14 +203,14 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
     }, 6500);
 
     try {
+      const formData = new FormData();
+      fileItems.forEach((item) => {
+        formData.append("files", item.file);
+      });
+
       const response = await fetch("/api/admin/lojas/importar-cardapio", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileBase64,
-          mimeType,
-          fileName: file?.name || "cardapio.jpg",
-        }),
+        body: formData,
       });
 
       const data = await response.json();
@@ -180,15 +233,13 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
       setStep("idle");
       setErrorMessage(
         err.message ||
-          "Erro ao processar o cardápio. Verifique se o arquivo está nítido e se a chave GEMINI_API_KEY está configurada."
+          "Erro ao processar o cardápio. Verifique se as fotos estão nítidas e se a chave GEMINI_API_KEY está configurada."
       );
     }
   };
 
   const resetForm = () => {
-    setFile(null);
-    setFilePreview(null);
-    setFileBase64(null);
+    handleClearFiles();
     setStep("idle");
     setProgressMsg("");
     setErrorMessage("");
@@ -213,7 +264,7 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
                   </span>
                 </h2>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Envie a foto ou PDF do cardápio físico para criar a loja, produtos e logo em segundos
+                  Envie uma ou mais fotos do cardápio físico (frente, verso, páginas) ou PDF para criar a loja por IA
                 </p>
               </div>
             </div>
@@ -241,73 +292,163 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
           {/* ESTADO 1: FORMULÁRIO DE UPLOAD */}
           {step === "idle" && (
             <div className="space-y-4">
-              {/* Dropzone */}
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-6 sm:p-8 cursor-pointer transition text-center ${
-                  isDragOver
-                    ? "border-violet-500 bg-violet-500/10 scale-[1.01]"
-                    : file
-                    ? "border-emerald-500/60 bg-emerald-950/20"
-                    : "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-800/40"
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      handleFileSelect(e.target.files[0]);
-                    }
-                  }}
-                />
+              {/* Dropzone & Preview list */}
+              {fileItems.length === 0 ? (
+                /* Dropzone inicial para seleção */
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-6 sm:p-8 cursor-pointer transition text-center ${
+                    isDragOver
+                      ? "border-violet-500 bg-violet-500/10 scale-[1.01]"
+                      : "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-800/40"
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleFilesSelect(e.target.files);
+                      }
+                    }}
+                  />
 
-                {file ? (
                   <div className="flex flex-col items-center gap-3">
-                    {filePreview ? (
-                      <div className="relative h-44 w-auto max-w-full rounded-2xl overflow-hidden border border-slate-700 shadow-md">
-                        <img
-                          src={filePreview}
-                          alt="Prévia do cardápio"
-                          className="h-full w-auto object-contain bg-slate-950"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30">
-                        <FileText className="h-10 w-10" />
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-bold text-white flex items-center justify-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                        {file.name}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {(file.size / (1024 * 1024)).toFixed(2)} MB • Clique ou arraste para substituir
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600/30 to-amber-500/30 text-amber-300 border border-amber-500/30">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600/30 to-amber-500/30 text-amber-300 border border-amber-500/30 shadow-md">
                       <Upload className="h-7 w-7" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-white">
-                        Arraste e solte o cardápio aqui ou clique para selecionar
+                        Arraste e solte fotos do cardápio aqui ou clique para selecionar
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Formatos aceitos: Imagens (JPG, PNG, WEBP) ou Documento PDF (até 20MB)
+                      <p className="text-xs text-amber-300/90 font-medium mt-1">
+                        📸 Selecione <span className="underline font-bold">múltiplas fotos</span> (Páginas 1, 2, 3...) de uma vez só!
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Formatos aceitos: Imagens (JPG, PNG, WEBP) ou Documento PDF (até 25MB cada)
                       </p>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                /* Lista e grid com miniaturas de todas as fotos selecionadas */
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/70 border border-slate-800 rounded-2xl px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 items-center px-2.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                        {fileItems.length} {fileItems.length === 1 ? "foto selecionada" : "fotos selecionadas"}
+                      </span>
+                      <span className="text-xs text-slate-400 hidden sm:inline">
+                        (A IA analisará todas as fotos em conjunto)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-1 text-xs font-semibold text-violet-300 hover:text-white bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 px-3 py-1.5 rounded-xl transition"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Adicionar mais fotos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearFiles}
+                        className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 p-1.5 rounded-lg hover:bg-slate-800 transition"
+                        title="Limpar todas as fotos"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleFilesSelect(e.target.files);
+                      }
+                    }}
+                  />
+
+                  {/* Grid de fotos selecionadas com miniaturas */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-64 overflow-y-auto p-1">
+                    {fileItems.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="group relative rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-md hover:border-slate-600 transition flex flex-col justify-between"
+                      >
+                        {/* Tag de Página */}
+                        <div className="absolute top-3 left-3 z-10 rounded-lg bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 backdrop-blur-sm border border-white/10">
+                          Pág. {index + 1}
+                        </div>
+
+                        {/* Botão Remover Foto */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleRemoveFile(item.id, e)}
+                          className="absolute top-3 right-3 z-10 rounded-full bg-red-600 hover:bg-red-500 p-1 text-white shadow-md transition"
+                          title="Remover esta foto"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Miniatura ou Ícone */}
+                        <div className="h-28 w-full rounded-xl overflow-hidden bg-slate-900 flex items-center justify-center border border-slate-800">
+                          {item.previewUrl ? (
+                            <img
+                              src={item.previewUrl}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center text-slate-400 gap-1">
+                              <FileText className="h-8 w-8 text-red-400" />
+                              <span className="text-[10px] uppercase font-bold text-slate-500">PDF</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Nome e Tamanho */}
+                        <div className="mt-2 text-left">
+                          <p className="text-[11px] font-medium text-slate-200 truncate" title={item.name}>
+                            {item.name}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            {(item.size / 1024).toFixed(0)} KB
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Botão de Adicionar Mais Fotos dentro do Grid */}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-36 sm:h-full min-h-[140px] rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/40 hover:bg-violet-500/10 transition flex flex-col items-center justify-center p-3 text-center gap-2 group"
+                    >
+                      <div className="h-9 w-9 rounded-xl bg-slate-800 group-hover:bg-violet-600/30 text-slate-400 group-hover:text-violet-300 flex items-center justify-center transition border border-slate-700">
+                        <Plus className="h-5 w-5" />
+                      </div>
+                      <span className="text-xs font-semibold text-slate-300 group-hover:text-white">
+                        + Foto
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Informações explicativas do recurso */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -317,7 +458,7 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
                     1. Cardápio Completo
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    A IA lê nomes, descrições, preços e adicionais de todos os itens do cardápio.
+                    A IA lê nomes, descrições, preços e adicionais de todas as páginas enviadas.
                   </p>
                 </div>
 
@@ -354,15 +495,15 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
                 <button
                   type="button"
                   onClick={handleStartImport}
-                  disabled={!fileBase64}
+                  disabled={fileItems.length === 0}
                   className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs sm:text-sm font-bold shadow-lg transition ${
-                    fileBase64
+                    fileItems.length > 0
                       ? "bg-gradient-to-r from-violet-600 via-purple-600 to-amber-500 text-white shadow-purple-600/30 hover:brightness-110 active:scale-95"
                       : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
                   }`}
                 >
                   <Sparkles className="h-4 w-4 text-amber-200" />
-                  Importar e Criar Loja por IA
+                  Importar e Criar Loja por IA {fileItems.length > 0 && `(${fileItems.length} ${fileItems.length === 1 ? "foto" : "fotos"})`}
                 </button>
               </div>
             </div>

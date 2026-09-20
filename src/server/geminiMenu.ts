@@ -28,13 +28,18 @@ export interface ExtractedMenuData {
   }>;
 }
 
+export interface MenuFileInput {
+  data: string;
+  mimeType?: string;
+  fileName?: string;
+}
+
 /**
- * Instancia o cliente GoogleGenAI usando process.env.GEMINI_API_KEY
+ * Instancia o cliente GoogleGenAI utilizando a chave apiKey fornecida via contexto c.env.GEMINI_API_KEY
+ * sem referenciar process.env, tornando-o totalmente compatível com Cloudflare Workers.
  */
-export function getGeminiClient(): GoogleGenAI | null {
-  const apiKey =
-    process.env.GEMINI_API_KEY ||
-    (typeof process !== "undefined" ? process.env.VITE_GEMINI_API_KEY : undefined);
+export function getGeminiClient(explicitApiKey?: string): GoogleGenAI | null {
+  const apiKey = explicitApiKey;
   if (!apiKey) return null;
   return new GoogleGenAI({
     apiKey,
@@ -110,24 +115,61 @@ export function svgToDataUrl(svgString: string): string {
 }
 
 /**
- * Envia o cardápio (imagem ou PDF em base64) para a API multimodal do Gemini
+ * Envia o cardápio (uma ou múltiplas imagens/PDF em base64) para a API multimodal do Gemini
  */
 export async function analyzeMenuWithGemini(
-  fileBase64: string,
-  mimeType: string
+  input: string | MenuFileInput[] | MenuFileInput,
+  mimeTypeOrApiKey?: string,
+  explicitApiKey?: string
 ): Promise<ExtractedMenuData> {
-  const ai = getGeminiClient();
+  let files: MenuFileInput[] = [];
+  let apiKey: string | undefined;
+
+  if (Array.isArray(input)) {
+    files = input;
+    apiKey = mimeTypeOrApiKey;
+  } else if (typeof input === "object" && input !== null && "data" in input) {
+    files = [input as MenuFileInput];
+    apiKey = mimeTypeOrApiKey;
+  } else if (typeof input === "string") {
+    files = [
+      {
+        data: input,
+        mimeType: mimeTypeOrApiKey || "image/jpeg",
+      },
+    ];
+    apiKey = explicitApiKey;
+  }
+
+  if (files.length === 0) {
+    throw new Error("Nenhum arquivo ou imagem do cardápio foi fornecido para análise.");
+  }
+
+  const ai = getGeminiClient(apiKey);
   if (!ai) {
     throw new Error(
-      "A chave GEMINI_API_KEY não foi configurada no servidor. Por favor, configure a variável no painel de configurações para habilitar o processamento por IA."
+      "A chave GEMINI_API_KEY não foi configurada no servidor. Por favor, configure a variável GEMINI_API_KEY no painel de configurações para habilitar o processamento por IA."
     );
   }
 
-  // Limpa prefixo data URL se houver (ex: data:image/png;base64,)
-  const cleanBase64 = fileBase64.replace(/^data:[^;]+;base64,/, "");
+  // Prepara as partes multimodais (todas as fotos / páginas enviadas)
+  const fileParts = files.map((f) => {
+    const cleanBase64 = (f.data || "").replace(/^data:[^;]+;base64,/, "");
+    return {
+      inlineData: {
+        mimeType: f.mimeType || "image/jpeg",
+        data: cleanBase64,
+      },
+    };
+  });
 
+  const isMultiple = files.length > 1;
   const prompt = `Você é um especialista em cardápios de restaurantes e gastronomia, e também um designer gráfico de identidade visual de marcas de food delivery.
-Analise detalhadamente a imagem ou documento PDF deste cardápio comercial e extraia todos os dados de forma estruturada.
+${
+  isMultiple
+    ? `Você está recebendo ${files.length} imagens/páginas pertencentes ao MESMO cardápio comercial. Analise detalhadamente todas as páginas em conjunto para extrair o cardápio completo, unificando categorias, combinando seções e evitando itens duplicados.`
+    : `Analise detalhadamente a imagem ou documento PDF deste cardápio comercial e extraia todos os dados de forma estruturada.`
+}
 
 Retorne EXCLUSIVAMENTE um objeto JSON válido (sem texto adicional fora do JSON) com a seguinte estrutura:
 {
@@ -165,6 +207,7 @@ Instruções para categorias e produtos:
 - Extraia o maior número possível de produtos visíveis com seus respectivos preços reais em reais (float).
 - Preços devem ser números puros (ex: 29.9, não "R$ 29,90").
 - Se houver adicionais listados, adicione-os no array opcionais.
+- Caso itens estejam distribuídos em diferentes imagens/páginas do cardápio, organize-os de maneira lógica na categoria correta.
 `;
 
   try {
@@ -174,12 +217,7 @@ Instruções para categorias e produtos:
         {
           role: "user",
           parts: [
-            {
-              inlineData: {
-                mimeType: mimeType || "image/jpeg",
-                data: cleanBase64,
-              },
-            },
+            ...fileParts,
             {
               text: prompt,
             },

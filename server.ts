@@ -32,6 +32,7 @@ async function startServer() {
   // Increase payload limit for Base64 image uploads (banners, logos, product photos)
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express.raw({ type: "multipart/form-data", limit: "50mb" }));
 
   // Handle entity too large errors gracefully
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -64,9 +65,16 @@ async function startServer() {
         }
       }
 
-      const body = ["GET", "HEAD"].includes(req.method)
-        ? undefined
-        : JSON.stringify(req.body);
+      let body: any;
+      if (["GET", "HEAD"].includes(req.method)) {
+        body = undefined;
+      } else if (Buffer.isBuffer(req.body)) {
+        body = req.body;
+      } else if (typeof req.body === "string") {
+        body = req.body;
+      } else {
+        body = JSON.stringify(req.body);
+      }
 
       if (body && !headers.has("content-type")) {
         headers.set("content-type", "application/json");
@@ -82,6 +90,8 @@ async function startServer() {
       const response = await workerApp.fetch(webRequest, {
         PLATFORM_NAME: "Top Food Multi-tenant",
         ENVIRONMENT: process.env.NODE_ENV || "development",
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+        JWT_SECRET: process.env.JWT_SECRET || "topfood-jwt-secret",
       });
 
       res.status(response.status);

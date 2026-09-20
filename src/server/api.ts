@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { sign, verify } from "hono/jwt";
 import { Database } from "./db";
 import { orderEvents } from "./events";
-import { analyzeMenuWithGemini } from "./geminiMenu";
+import { analyzeMenuWithGemini, type MenuFileInput } from "./geminiMenu";
 import type { Env, OrderStatus, TenantStatus, OrderItem } from "./types";
 
 export const api = new Hono<{ Bindings: Env }>();
@@ -249,24 +249,101 @@ function slugifyText(text: string): string {
     .replace(/--+/g, "-");
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(buffer).toString("base64");
+  }
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 const handleImportarCardapio = async (c: any) => {
   try {
     const db = getDb(c);
-    const body = await c.req.json();
-    const { fileBase64, mimeType, customLogoUrl } = body;
+    const apiKey =
+      c.env?.GEMINI_API_KEY ||
+      (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
+        ? process.env.GEMINI_API_KEY
+        : undefined);
 
-    if (!fileBase64 || typeof fileBase64 !== "string") {
+    if (!apiKey) {
       return c.json(
         {
           success: false,
-          error: "O arquivo do cardápio (imagem JPG/PNG ou PDF em base64) é obrigatório.",
+          error:
+            "A chave GEMINI_API_KEY não foi configurada no servidor. Configure a variável GEMINI_API_KEY no painel de configurações para habilitar a IA.",
         },
         400
       );
     }
 
-    // 1. Extração estruturada multimodal e geração/extração de logo via Gemini
-    const extracted = await analyzeMenuWithGemini(fileBase64, mimeType || "image/jpeg");
+    const contentType = c.req.header("content-type") || "";
+    const filesToProcess: MenuFileInput[] = [];
+    let customLogoUrl: string | undefined;
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await c.req.formData();
+      const filesFromForm = [
+        ...formData.getAll("files"),
+        ...formData.getAll("file"),
+        ...formData.getAll("images"),
+      ];
+      customLogoUrl = (formData.get("customLogoUrl") as string) || undefined;
+
+      for (const item of filesFromForm) {
+        if (item && typeof item === "object" && "arrayBuffer" in item) {
+          const fileObj = item as File;
+          const ab = await fileObj.arrayBuffer();
+          const base64 = arrayBufferToBase64(ab);
+          filesToProcess.push({
+            data: base64,
+            mimeType: fileObj.type || "image/jpeg",
+            fileName: fileObj.name,
+          });
+        }
+      }
+    } else {
+      const body = await c.req.json();
+      customLogoUrl = body.customLogoUrl;
+
+      if (Array.isArray(body.files) && body.files.length > 0) {
+        for (const item of body.files) {
+          const data = item.data || item.fileBase64;
+          if (data && typeof data === "string") {
+            filesToProcess.push({
+              data,
+              mimeType: item.mimeType || "image/jpeg",
+              fileName: item.fileName,
+            });
+          }
+        }
+      } else if (body.fileBase64 && typeof body.fileBase64 === "string") {
+        filesToProcess.push({
+          data: body.fileBase64,
+          mimeType: body.mimeType || "image/jpeg",
+          fileName: body.fileName,
+        });
+      }
+    }
+
+    if (filesToProcess.length === 0) {
+      return c.json(
+        {
+          success: false,
+          error:
+            "Nenhum arquivo ou foto do cardápio foi recebido. Selecione uma ou mais fotos (JPG/PNG) ou documento PDF do cardápio.",
+        },
+        400
+      );
+    }
+
+    // 1. Extração estruturada multimodal de todas as imagens em lote via Gemini 3
+    const extracted = await analyzeMenuWithGemini(filesToProcess, apiKey);
 
     const nomeLoja = extracted.nome_loja?.trim() || "Nova Lanchonete";
     const primaryColor = extracted.primary_color || "#E63946";
