@@ -214,7 +214,7 @@ Instruções para categorias e produtos:
   const candidateModels = [
     "gemini-2.5-flash",
     "gemini-1.5-flash",
-    "gemini-2.0-flash",
+    "gemini-3.6-flash",
   ];
 
   let lastError: any = null;
@@ -256,10 +256,15 @@ Instruções para categorias e produtos:
         status === 503 ||
         status === 429 ||
         status === 404 ||
+        status === 400 ||
+        status === 410 ||
         errMsg.includes("503") ||
         errMsg.includes("429") ||
         errMsg.includes("404") ||
+        errMsg.includes("400") ||
         errMsg.includes("not found") ||
+        errMsg.includes("no longer available") ||
+        errMsg.includes("deprecated") ||
         errMsg.includes("high demand") ||
         errMsg.includes("unavailable") ||
         errMsg.includes("resource_exhausted") ||
@@ -275,9 +280,16 @@ Instruções para categorias e produtos:
         console.log(
           `[Gemini] Ativando fallback automático para o próximo modelo: ${candidateModels[i + 1]}...`
         );
-        // Passa imediatamente se for 404 (modelo inexistente), ou aguarda 400ms se for 503/429
-        const isNotFound = status === 404 || errMsg.includes("404") || errMsg.includes("not found");
-        if (!isNotFound) {
+        // Passa imediatamente se for 404/400 (modelo inexistente ou descontinuado), ou aguarda 400ms se for 503/429
+        const isImmediate =
+          status === 404 ||
+          status === 400 ||
+          status === 410 ||
+          errMsg.includes("404") ||
+          errMsg.includes("not found") ||
+          errMsg.includes("no longer available") ||
+          errMsg.includes("deprecated");
+        if (!isImmediate) {
           await new Promise((resolve) => setTimeout(resolve, 400));
         }
       }
