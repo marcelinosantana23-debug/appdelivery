@@ -249,87 +249,17 @@ function slugifyText(text: string): string {
     .replace(/--+/g, "-");
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(buffer).toString("base64");
-  }
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 const handleImportarCardapio = async (c: any) => {
   try {
     const db = getDb(c);
-    const contentType = c.req.header("content-type") || "";
-    let requestApiKey: string | undefined = c.req.header("x-gemini-api-key")?.trim() || undefined;
+    const body = await c.req.json();
+    const { apiKey: bodyApiKey, images, customLogoUrl } = body;
 
-    const filesToProcess: MenuFileInput[] = [];
-    let customLogoUrl: string | undefined;
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await c.req.formData();
-      const formKey =
-        (formData.get("geminiApiKey") as string)?.trim() ||
-        (formData.get("apiKey") as string)?.trim();
-      if (formKey) {
-        requestApiKey = formKey;
-      }
-
-      const filesFromForm = [
-        ...formData.getAll("files"),
-        ...formData.getAll("file"),
-        ...formData.getAll("images"),
-      ];
-      customLogoUrl = (formData.get("customLogoUrl") as string) || undefined;
-
-      for (const item of filesFromForm) {
-        if (item && typeof item === "object" && "arrayBuffer" in item) {
-          const fileObj = item as File;
-          const ab = await fileObj.arrayBuffer();
-          const base64 = arrayBufferToBase64(ab);
-          filesToProcess.push({
-            data: base64,
-            mimeType: fileObj.type || "image/jpeg",
-            fileName: fileObj.name,
-          });
-        }
-      }
-    } else {
-      const body = await c.req.json();
-      const bodyKey = body.geminiApiKey?.trim() || body.apiKey?.trim();
-      if (bodyKey) {
-        requestApiKey = bodyKey;
-      }
-      customLogoUrl = body.customLogoUrl;
-
-      if (Array.isArray(body.files) && body.files.length > 0) {
-        for (const item of body.files) {
-          const data = item.data || item.fileBase64;
-          if (data && typeof data === "string") {
-            filesToProcess.push({
-              data,
-              mimeType: item.mimeType || "image/jpeg",
-              fileName: item.fileName,
-            });
-          }
-        }
-      } else if (body.fileBase64 && typeof body.fileBase64 === "string") {
-        filesToProcess.push({
-          data: body.fileBase64,
-          mimeType: body.mimeType || "image/jpeg",
-          fileName: body.fileName,
-        });
-      }
-    }
-
-    // Prioridade: 1) Chave informada na requisição (modal), 2) c.env.GEMINI_API_KEY, 3) process.env.GEMINI_API_KEY
+    // Prioridade da chave: body.apiKey -> body.geminiApiKey -> header x-gemini-api-key -> c.env.GEMINI_API_KEY -> process.env.GEMINI_API_KEY
     const apiKey =
-      requestApiKey ||
+      (typeof bodyApiKey === "string" && bodyApiKey.trim()) ||
+      (typeof body.geminiApiKey === "string" && body.geminiApiKey.trim()) ||
+      c.req.header("x-gemini-api-key")?.trim() ||
       c.env?.GEMINI_API_KEY ||
       (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
         ? process.env.GEMINI_API_KEY
@@ -346,6 +276,50 @@ const handleImportarCardapio = async (c: any) => {
       );
     }
 
+    const rawImages: any[] = Array.isArray(images)
+      ? images
+      : Array.isArray(body.files)
+      ? body.files
+      : body.fileBase64
+      ? [body.fileBase64]
+      : [];
+
+    const filesToProcess: MenuFileInput[] = [];
+
+    for (const img of rawImages) {
+      if (typeof img === "string") {
+        let mimeType = "image/jpeg";
+        let base64Data = img.trim();
+        const match = base64Data.match(/^data:([^;]+);base64,(.*)$/s);
+        if (match) {
+          mimeType = match[1];
+          base64Data = match[2];
+        }
+        if (base64Data) {
+          filesToProcess.push({
+            data: base64Data,
+            mimeType,
+          });
+        }
+      } else if (img && typeof img === "object") {
+        const rawData = (img.data || img.fileBase64 || "").trim();
+        let mimeType = img.mimeType || "image/jpeg";
+        let base64Data = rawData;
+        const match = rawData.match(/^data:([^;]+);base64,(.*)$/s);
+        if (match) {
+          mimeType = match[1];
+          base64Data = match[2];
+        }
+        if (base64Data) {
+          filesToProcess.push({
+            data: base64Data,
+            mimeType,
+            fileName: img.fileName,
+          });
+        }
+      }
+    }
+
     if (filesToProcess.length === 0) {
       return c.json(
         {
@@ -357,7 +331,7 @@ const handleImportarCardapio = async (c: any) => {
       );
     }
 
-    // 1. Extração estruturada multimodal de todas as imagens em lote via Gemini 3
+    // 1. Extração estruturada multimodal de todas as imagens em lote via Gemini
     const extracted = await analyzeMenuWithGemini(filesToProcess, apiKey);
 
     const nomeLoja = extracted.nome_loja?.trim() || "Nova Lanchonete";

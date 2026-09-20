@@ -32,7 +32,6 @@ async function startServer() {
   // Increase payload limit for Base64 image uploads (banners, logos, product photos)
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  app.use(express.raw({ type: "multipart/form-data", limit: "50mb" }));
 
   // Handle entity too large errors gracefully
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -231,26 +231,31 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
     }, 6500);
 
     try {
-      const formData = new FormData();
-      fileItems.forEach((item) => {
-        formData.append("files", item.file);
-      });
+      // Converte todas as fotos selecionadas para Base64 usando FileReader
+      const images = await Promise.all(
+        fileItems.map(
+          (item) =>
+            new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = (err) => reject(err);
+              reader.readAsDataURL(item.file);
+            })
+        )
+      );
 
       const trimmedKey = geminiApiKey.trim();
-      if (trimmedKey) {
-        formData.append("geminiApiKey", trimmedKey);
-        formData.append("apiKey", trimmedKey);
-      }
-
-      const headers: Record<string, string> = {};
-      if (trimmedKey) {
-        headers["x-gemini-api-key"] = trimmedKey;
-      }
 
       const response = await fetch("/api/admin/lojas/importar-cardapio", {
         method: "POST",
-        headers,
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+          ...(trimmedKey ? { "x-gemini-api-key": trimmedKey } : {}),
+        },
+        body: JSON.stringify({
+          apiKey: trimmedKey || undefined,
+          images,
+        }),
       });
 
       const data = await response.json();
