@@ -43,6 +43,16 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
+  // Sincroniza categoria ativa com as categorias disponíveis da loja
+  useEffect(() => {
+    if (products.length > 0) {
+      const hasActive = products.some((p) => p.category === activeCategory);
+      if (!hasActive && products[0]?.category) {
+        setActiveCategory(products[0].category);
+      }
+    }
+  }, [products, activeCategory]);
+
   // Sincroniza metatags dinâmicas do PWA (título, apple-mobile-web-app-title, manifest e ícones da loja)
   useEffect(() => {
     if (!config?.name) return;
@@ -179,7 +189,11 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
         onStoreAdminClick={onStoreAdminClick}
         onSuperAdminClick={onSuperAdminClick}
       />
-      <CategoryNav activeCategory={activeCategory} onCategoryClick={handleCategoryClick} />
+      <CategoryNav
+        activeCategory={activeCategory}
+        onCategoryClick={handleCategoryClick}
+        products={products}
+      />
 
       {!isStoreActive ? (
         <div className="mx-auto max-w-2xl px-4 pt-4">

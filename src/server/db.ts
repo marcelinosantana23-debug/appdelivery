@@ -956,6 +956,8 @@ export class Database {
       updatedAt: Date.now(),
     };
 
+    await this.ensureTables();
+
     if (this.env?.DB) {
       try {
         await this.env.DB.prepare(
@@ -1550,12 +1552,19 @@ export class Database {
   // ===================== PRODUCTS =====================
 
   async getProductsByTenant(tenantId: string): Promise<Product[]> {
+    await this.ensureTables();
+
+    // Resolver tenant para obter ID exato e slug correspondente
+    const tenant = await this.getTenantByIdOrSlug(tenantId);
+    const resolvedId = tenant ? tenant.id : tenantId;
+    const resolvedSlug = tenant ? tenant.slug : tenantId;
+
     if (this.env?.DB) {
       try {
         const res = await this.env.DB.prepare(
-          "SELECT * FROM products WHERE tenant_id = ? ORDER BY created_at DESC"
+          "SELECT * FROM products WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC"
         )
-          .bind(tenantId)
+          .bind(resolvedId, resolvedSlug)
           .all<any>();
         if (res.results && res.results.length > 0) {
           return res.results.map((r: any) => this.mapProductRow(r));
@@ -1565,14 +1574,22 @@ export class Database {
       }
     }
 
-    return globalStore.products.filter((p) => p.tenantId === tenantId);
+    const memTenant = globalStore.tenants.find((t) => t.id === tenantId || t.slug === tenantId);
+    const memId = memTenant ? memTenant.id : resolvedId;
+    const memSlug = memTenant ? memTenant.slug : resolvedSlug;
+
+    return globalStore.products.filter(
+      (p) => p.tenantId === memId || p.tenantId === memSlug
+    );
   }
 
   async createProduct(tenantId: string, product: Omit<Product, "id" | "tenantId">): Promise<Product> {
+    await this.ensureTables();
     const newProduct: Product = {
       ...product,
       id: `prod-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tenantId,
+      available: product.available !== undefined ? Boolean(product.available) : true,
       createdAt: Date.now(),
     };
 
@@ -1589,7 +1606,7 @@ export class Database {
             newProduct.description,
             newProduct.price,
             newProduct.category,
-            newProduct.image,
+            newProduct.image || "",
             newProduct.available ? 1 : 0,
             JSON.stringify(newProduct.options || []),
             newProduct.createdAt
@@ -2254,17 +2271,26 @@ export class Database {
   }
 
   private mapProductRow(row: any): Product {
+    const isAvail =
+      row.available !== undefined && row.available !== null
+        ? row.available === 1 ||
+          row.available === true ||
+          row.available === "1" ||
+          row.available === "true" ||
+          row.available === "active"
+        : true;
+
     return {
       id: row.id,
       tenantId: row.tenant_id,
       name: row.name,
-      description: row.description,
-      price: Number(row.price),
-      category: row.category,
-      image: row.image,
-      available: Boolean(row.available),
+      description: row.description || "",
+      price: Number(row.price) || 0,
+      category: row.category || "geral",
+      image: row.image || "",
+      available: isAvail,
       options: this.safeJsonParse(row.options_json, []),
-      createdAt: Number(row.created_at),
+      createdAt: Number(row.created_at) || Date.now(),
     };
   }
 

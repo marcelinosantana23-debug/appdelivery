@@ -36,10 +36,9 @@ export function getPublicStoreUrl(slug?: string | null, forceOfficial = false): 
   if (forceOfficial) {
     return `${OFFICIAL_WORKERS_BASE}/loja/${clean}`;
   }
-  if (typeof window !== "undefined" && window.location.hostname.includes("workers.dev")) {
+  if (typeof window !== "undefined" && window.location.origin) {
     return `${window.location.origin}/loja/${clean}`;
   }
-  // Default to official URL requested
   return `${OFFICIAL_WORKERS_BASE}/loja/${clean}`;
 }
 

@@ -249,11 +249,47 @@ function slugifyText(text: string): string {
     .replace(/--+/g, "-");
 }
 
+function getFoodPlaceholderImage(category: string, name: string): string {
+  const c = (category + " " + name).toLowerCase();
+  if (c.includes("hamburg") || c.includes("burg") || c.includes("artesanal") || c.includes("cheeseburg") || c.includes("sanduich")) {
+    return "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80";
+  }
+  if (c.includes("pizza") || c.includes("calzone")) {
+    return "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80";
+  }
+  if (c.includes("pastel") || c.includes("pasteis") || c.includes("salgado") || c.includes("coxinha") || c.includes("kibe") || c.includes("empada")) {
+    return "https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&w=800&q=80";
+  }
+  if (c.includes("batata") || c.includes("frita") || c.includes("porcao") || c.includes("porção") || c.includes("petisco") || c.includes("mandioca") || c.includes("calabresa") || c.includes("frango a passarinho")) {
+    return "https://images.unsplash.com/photo-1576107232684-1279f3908594?auto=format&fit=crop&w=800&q=80";
+  }
+  if (c.includes("refrigerante") || c.includes("coca") || c.includes("suco") || c.includes("cerveja") || c.includes("bebida") || c.includes("agua") || c.includes("água") || c.includes("drink")) {
+    return "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80";
+  }
+  if (c.includes("acai") || c.includes("açaí") || c.includes("sorvete") || c.includes("sobremesa") || c.includes("pudim") || c.includes("doce") || c.includes("brownie") || c.includes("torta")) {
+    return "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=800&q=80";
+  }
+  if (c.includes("hot dog") || c.includes("cachorro quente") || c.includes("dog")) {
+    return "https://images.unsplash.com/photo-1619740455993-9e612b1af08a?auto=format&fit=crop&w=800&q=80";
+  }
+  if (c.includes("massa") || c.includes("macarrao") || c.includes("macarrão") || c.includes("lasanha") || c.includes("espaguete")) {
+    return "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80";
+  }
+  return "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80";
+}
+
 const handleImportarCardapio = async (c: any) => {
   try {
     const db = getDb(c);
     const body = await c.req.json();
-    const { apiKey: bodyApiKey, images, customLogoUrl } = body;
+    const { apiKey: bodyApiKey, images, customLogoUrl, additionalPrompt, promptAdicional } = body;
+    const extraPrompt = (
+      typeof additionalPrompt === "string"
+        ? additionalPrompt
+        : typeof promptAdicional === "string"
+        ? promptAdicional
+        : ""
+    ).trim();
 
     // Prioridade da chave: body.apiKey -> body.geminiApiKey -> header x-gemini-api-key -> c.env.GEMINI_API_KEY -> process.env.GEMINI_API_KEY
     const apiKey =
@@ -332,7 +368,11 @@ const handleImportarCardapio = async (c: any) => {
     }
 
     // 1. Extração estruturada multimodal de todas as imagens em lote via Gemini
-    const extracted = await analyzeMenuWithGemini(filesToProcess, apiKey);
+    const extracted = await analyzeMenuWithGemini(
+      filesToProcess,
+      apiKey,
+      extraPrompt
+    );
 
     const nomeLoja = extracted.nome_loja?.trim() || "Nova Lanchonete";
     const primaryColor = extracted.primary_color || "#E63946";
@@ -373,13 +413,19 @@ const handleImportarCardapio = async (c: any) => {
     if (Array.isArray(extracted.categorias)) {
       for (const cat of extracted.categorias) {
         const catName = cat.nome?.trim() || "Geral";
+        const catSlug = catName.toLowerCase();
         if (Array.isArray(cat.produtos)) {
           for (const prod of cat.produtos) {
+            const prodImg =
+              (prod.imagem || prod.image || "").trim() ||
+              getFoodPlaceholderImage(catSlug, prod.nome);
+
             const novoProduto = await db.createProduct(novaLoja.id, {
               name: prod.nome?.trim() || "Item",
               description: prod.descricao?.trim() || "",
               price: Number(prod.preco) || 0,
-              category: catName.toLowerCase(),
+              category: catSlug,
+              image: prodImg,
               available: true,
               options: Array.isArray(prod.opcionais)
                 ? prod.opcionais.map((opt: any, idx: number) => ({
@@ -408,6 +454,7 @@ const handleImportarCardapio = async (c: any) => {
         categoriasCount: extracted.categorias?.length || 0,
         produtosCount: produtosCriados.length,
         produtos: produtosCriados,
+        products: produtosCriados,
         hasLogo: extracted.has_logo,
         logoBoundingBox: extracted.logo_bounding_box,
         logoUrl,
@@ -661,6 +708,7 @@ api.get("/lojas/:slug/produtos", async (c) => {
       success: true,
       loja: { id: loja.id, nome: loja.name, slug: loja.slug },
       produtos,
+      products: produtos,
     }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao listar produtos." }, 500);
@@ -1552,7 +1600,12 @@ api.get("/tenants/:slugOrId/products", async (c) => {
   }
 
   const products = await db.getProductsByTenant(tenant.id);
-  return c.json({ success: true, products }, 200);
+  return c.json({
+    success: true,
+    products,
+    produtos: products,
+    loja: { id: tenant.id, nome: tenant.name, slug: tenant.slug },
+  }, 200);
 });
 
 api.post("/tenants/:slugOrId/products", async (c) => {

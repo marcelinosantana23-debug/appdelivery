@@ -403,8 +403,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           fetchTenantOrdersApi(t.id),
         ]);
 
-        if (pRes.success && pRes.products) {
-          setProducts(pRes.products);
+        let loadedProducts = (pRes.success && pRes.products) ? pRes.products : [];
+        if (loadedProducts.length === 0 && t.slug && t.slug !== t.id) {
+          const fallbackRes = await fetchTenantProductsApi(t.slug);
+          if (fallbackRes.success && fallbackRes.products && fallbackRes.products.length > 0) {
+            loadedProducts = fallbackRes.products;
+          }
+        }
+
+        if (loadedProducts.length > 0) {
+          setProducts(loadedProducts);
         } else {
           setProducts([]);
         }

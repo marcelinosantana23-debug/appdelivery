@@ -119,26 +119,31 @@ export function svgToDataUrl(svgString: string): string {
  */
 export async function analyzeMenuWithGemini(
   input: string | MenuFileInput[] | MenuFileInput,
-  mimeTypeOrApiKey?: string,
-  explicitApiKey?: string
+  apiKeyOrMime?: string,
+  explicitApiKeyOrPrompt?: string,
+  promptExtra?: string
 ): Promise<ExtractedMenuData> {
   let files: MenuFileInput[] = [];
   let apiKey: string | undefined;
+  let customPrompt: string | undefined;
 
   if (Array.isArray(input)) {
     files = input;
-    apiKey = mimeTypeOrApiKey;
+    apiKey = apiKeyOrMime;
+    customPrompt = explicitApiKeyOrPrompt;
   } else if (typeof input === "object" && input !== null && "data" in input) {
     files = [input as MenuFileInput];
-    apiKey = mimeTypeOrApiKey;
+    apiKey = apiKeyOrMime;
+    customPrompt = explicitApiKeyOrPrompt;
   } else if (typeof input === "string") {
     files = [
       {
         data: input,
-        mimeType: mimeTypeOrApiKey || "image/jpeg",
+        mimeType: apiKeyOrMime || "image/jpeg",
       },
     ];
-    apiKey = explicitApiKey;
+    apiKey = explicitApiKeyOrPrompt;
+    customPrompt = promptExtra;
   }
 
   if (files.length === 0) {
@@ -164,7 +169,7 @@ export async function analyzeMenuWithGemini(
   });
 
   const isMultiple = files.length > 1;
-  const prompt = `Você é um especialista em cardápios de restaurantes e gastronomia, e também um designer gráfico de identidade visual de marcas de food delivery.
+  let prompt = `Você é um especialista em cardápios de restaurantes e gastronomia, e também um designer gráfico de identidade visual de marcas de food delivery.
 ${
   isMultiple
     ? `Você está recebendo ${files.length} imagens/páginas pertencentes ao MESMO cardápio comercial. Analise detalhadamente todas as páginas em conjunto para extrair o cardápio completo, unificando categorias, combinando seções e evitando itens duplicados.`
@@ -209,6 +214,10 @@ Instruções para categorias e produtos:
 - Se houver adicionais listados, adicione-os no array opcionais.
 - Caso itens estejam distribuídos em diferentes imagens/páginas do cardápio, organize-os de maneira lógica na categoria correta.
 `;
+
+  if (customPrompt && customPrompt.trim()) {
+    prompt += `\n\n### INSTRUÇÕES ADICIONAIS ESPECIAIS DO USUÁRIO:\n${customPrompt.trim()}\n(Siga rigorosamente as instruções acima com prioridade máxima ao extrair itens, filtrar páginas ou ajustar preços/categorias).\n`;
+  }
 
   // Lista de modelos recomendados (em ordem de prioridade)
   const candidateModels = [
@@ -333,27 +342,105 @@ Instruções para categorias e produtos:
       }
     }
 
-    const storeName = parsed.nome_loja?.trim() || "Nova Lanchonete";
-    const primaryColor = parsed.primary_color || "#E63946";
+    const storeName =
+      parsed.nome_loja?.trim() ||
+      parsed.store_name?.trim() ||
+      parsed.nome?.trim() ||
+      parsed.name?.trim() ||
+      "Nova Lanchonete";
+    const primaryColor =
+      parsed.primary_color || parsed.primaryColor || parsed.cor_primaria || "#E63946";
 
     // Garante que logo_svg existe
-    let finalSvg = parsed.logo_svg;
+    let finalSvg = parsed.logo_svg || parsed.logoSvg || parsed.svg;
     if (!finalSvg || typeof finalSvg !== "string" || !finalSvg.includes("<svg")) {
       finalSvg = generateDefaultFoodLogoSvg(storeName, primaryColor);
     }
 
     const logoUrl = svgToDataUrl(finalSvg);
 
+    // Normalização completa de categorias e produtos
+    let rawCategorias =
+      parsed.categorias || parsed.categories || parsed.cardapio || parsed.menu || [];
+
+    if (!Array.isArray(rawCategorias) && typeof rawCategorias === "object") {
+      rawCategorias = Object.entries(rawCategorias).map(([k, v]) => ({
+        nome: k,
+        produtos: Array.isArray(v) ? v : [],
+      }));
+    }
+
+    // Se a IA retornou produtos diretamente soltos na raiz (ex: parsed.produtos ou parsed.products ou parsed.items)
+    const rawProdutosSoltos =
+      parsed.produtos || parsed.products || parsed.items || parsed.itens;
+    if (
+      (!Array.isArray(rawCategorias) || rawCategorias.length === 0) &&
+      Array.isArray(rawProdutosSoltos) &&
+      rawProdutosSoltos.length > 0
+    ) {
+      const grouped: Record<string, any[]> = {};
+      rawProdutosSoltos.forEach((item: any) => {
+        const cat = item.categoria || item.category || "Cardápio Geral";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(item);
+      });
+      rawCategorias = Object.entries(grouped).map(([k, v]) => ({
+        nome: k,
+        produtos: v,
+      }));
+    }
+
+    const finalCategorias = (Array.isArray(rawCategorias) ? rawCategorias : []).map(
+      (cat: any) => {
+        const catName = (
+          cat.nome ||
+          cat.name ||
+          cat.categoria ||
+          cat.category ||
+          "Geral"
+        ).trim();
+        const rawProds =
+          cat.produtos || cat.products || cat.itens || cat.items || [];
+        const prodsList = (Array.isArray(rawProds) ? rawProds : []).map((p: any) => {
+          const prodName = (p.nome || p.name || p.item || "Item").trim();
+          const prodDesc = (p.descricao || p.description || "").trim();
+          const prodPrice = Number(p.preco ?? p.price ?? p.valor ?? 0);
+          const rawOpts = p.opcionais || p.options || p.adicionais || [];
+          const optsList = (Array.isArray(rawOpts) ? rawOpts : []).map((opt: any) => ({
+            nome: (opt.nome || opt.name || opt.item || "Adicional").trim(),
+            preco: Number(opt.preco ?? opt.price ?? opt.valor ?? 0),
+          }));
+          return {
+            nome: prodName,
+            descricao: prodDesc,
+            preco: isNaN(prodPrice) ? 0 : prodPrice,
+            opcionais: optsList,
+          };
+        });
+        return {
+          nome: catName,
+          produtos: prodsList,
+        };
+      }
+    ).filter((c) => c.produtos.length > 0 || c.nome);
+
     return {
       nome_loja: storeName,
-      descricao: parsed.descricao || `Cardápio Online de ${storeName}`,
-      telefone: parsed.telefone?.replace(/\D/g, "") || "11999999999",
+      descricao:
+        parsed.descricao ||
+        parsed.description ||
+        `Cardápio Online de ${storeName}`,
+      telefone:
+        parsed.telefone?.replace(/\D/g, "") ||
+        parsed.phone?.replace(/\D/g, "") ||
+        parsed.whatsapp?.replace(/\D/g, "") ||
+        "11999999999",
       primary_color: primaryColor,
-      has_logo: Boolean(parsed.has_logo),
-      logo_bounding_box: parsed.logo_bounding_box,
+      has_logo: Boolean(parsed.has_logo || parsed.hasLogo),
+      logo_bounding_box: parsed.logo_bounding_box || parsed.logoBoundingBox,
       logo_svg: finalSvg,
       logo_url: logoUrl,
-      categorias: Array.isArray(parsed.categorias) ? parsed.categorias : [],
+      categorias: finalCategorias,
     };
   } catch (error: any) {
     console.error("Erro ao analisar cardápio com Gemini:", error);
