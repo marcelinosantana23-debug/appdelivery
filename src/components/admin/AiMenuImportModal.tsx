@@ -22,6 +22,7 @@ import {
   Check,
   Plus,
   Trash2,
+  Key,
 } from "lucide-react";
 import type { Tenant, Product } from "@/types";
 import { copyTextToClipboard, getStoreUrl } from "@/utils/url";
@@ -50,6 +51,33 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
 }) => {
   const [fileItems, setFileItems] = useState<FileItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Chave da API do Gemini salva em localStorage
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem("topfood_gemini_api_key") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [keySavedFeedback, setKeySavedFeedback] = useState(false);
+
+  const handleApiKeyChange = (value: string) => {
+    setGeminiApiKey(value);
+    try {
+      const trimmed = value.trim();
+      if (trimmed) {
+        localStorage.setItem("topfood_gemini_api_key", trimmed);
+        setKeySavedFeedback(true);
+        setTimeout(() => setKeySavedFeedback(false), 2500);
+      } else {
+        localStorage.removeItem("topfood_gemini_api_key");
+      }
+    } catch (e) {
+      console.warn("Falha ao salvar no localStorage", e);
+    }
+  };
 
   const [step, setStep] = useState<ImportStep>("idle");
   const [progressMsg, setProgressMsg] = useState("");
@@ -208,8 +236,20 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
         formData.append("files", item.file);
       });
 
+      const trimmedKey = geminiApiKey.trim();
+      if (trimmedKey) {
+        formData.append("geminiApiKey", trimmedKey);
+        formData.append("apiKey", trimmedKey);
+      }
+
+      const headers: Record<string, string> = {};
+      if (trimmedKey) {
+        headers["x-gemini-api-key"] = trimmedKey;
+      }
+
       const response = await fetch("/api/admin/lojas/importar-cardapio", {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -292,6 +332,73 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
           {/* ESTADO 1: FORMULÁRIO DE UPLOAD */}
           {step === "idle" && (
             <div className="space-y-4">
+              {/* Campo da Chave de API do Gemini */}
+              <div className="rounded-2xl border border-violet-500/30 bg-violet-950/25 p-4 space-y-2.5 transition">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <label
+                    htmlFor="gemini-api-key-input"
+                    className="text-xs font-bold text-violet-200 flex items-center gap-1.5"
+                  >
+                    <Key className="h-3.5 w-3.5 text-amber-400" />
+                    Chave da API do Gemini
+                    {keySavedFeedback ? (
+                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                        <Check className="h-3 w-3" /> Salva no navegador!
+                      </span>
+                    ) : geminiApiKey ? (
+                      <span className="text-[10px] font-medium text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Check className="h-3 w-3" /> Salva no navegador
+                      </span>
+                    ) : null}
+                  </label>
+
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-amber-400 hover:text-amber-300 underline font-medium flex items-center gap-1"
+                  >
+                    Criar chave grátis no Google AI Studio
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+
+                <div className="relative flex items-center">
+                  <input
+                    id="gemini-api-key-input"
+                    type={showApiKey ? "text" : "password"}
+                    value={geminiApiKey}
+                    onChange={(e) => handleApiKeyChange(e.target.value)}
+                    placeholder="Cole sua Chave de API do Gemini aqui (AIzaSy...)"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-20 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono transition"
+                  />
+                  <div className="absolute right-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition"
+                      title={showApiKey ? "Ocultar chave" : "Mostrar chave"}
+                    >
+                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                    {geminiApiKey && (
+                      <button
+                        type="button"
+                        onClick={() => handleApiKeyChange("")}
+                        className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-slate-800 transition"
+                        title="Limpar chave"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  🔒 Salva automaticamente no seu navegador (<span className="text-slate-300 font-mono">localStorage</span>). Você não precisa colar toda vez.
+                </p>
+              </div>
+
               {/* Dropzone & Preview list */}
               {fileItems.length === 0 ? (
                 /* Dropzone inicial para seleção */

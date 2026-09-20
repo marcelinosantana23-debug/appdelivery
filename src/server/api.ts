@@ -265,29 +265,21 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 const handleImportarCardapio = async (c: any) => {
   try {
     const db = getDb(c);
-    const apiKey =
-      c.env?.GEMINI_API_KEY ||
-      (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
-        ? process.env.GEMINI_API_KEY
-        : undefined);
-
-    if (!apiKey) {
-      return c.json(
-        {
-          success: false,
-          error:
-            "A chave GEMINI_API_KEY não foi configurada no servidor. Configure a variável GEMINI_API_KEY no painel de configurações para habilitar a IA.",
-        },
-        400
-      );
-    }
-
     const contentType = c.req.header("content-type") || "";
+    let requestApiKey: string | undefined = c.req.header("x-gemini-api-key")?.trim() || undefined;
+
     const filesToProcess: MenuFileInput[] = [];
     let customLogoUrl: string | undefined;
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await c.req.formData();
+      const formKey =
+        (formData.get("geminiApiKey") as string)?.trim() ||
+        (formData.get("apiKey") as string)?.trim();
+      if (formKey) {
+        requestApiKey = formKey;
+      }
+
       const filesFromForm = [
         ...formData.getAll("files"),
         ...formData.getAll("file"),
@@ -309,6 +301,10 @@ const handleImportarCardapio = async (c: any) => {
       }
     } else {
       const body = await c.req.json();
+      const bodyKey = body.geminiApiKey?.trim() || body.apiKey?.trim();
+      if (bodyKey) {
+        requestApiKey = bodyKey;
+      }
       customLogoUrl = body.customLogoUrl;
 
       if (Array.isArray(body.files) && body.files.length > 0) {
@@ -329,6 +325,25 @@ const handleImportarCardapio = async (c: any) => {
           fileName: body.fileName,
         });
       }
+    }
+
+    // Prioridade: 1) Chave informada na requisição (modal), 2) c.env.GEMINI_API_KEY, 3) process.env.GEMINI_API_KEY
+    const apiKey =
+      requestApiKey ||
+      c.env?.GEMINI_API_KEY ||
+      (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
+        ? process.env.GEMINI_API_KEY
+        : undefined);
+
+    if (!apiKey) {
+      return c.json(
+        {
+          success: false,
+          error:
+            "A chave da API do Gemini não foi encontrada. Cole sua chave no campo 'Cole sua Chave de API do Gemini aqui' no modal ou configure a variável GEMINI_API_KEY.",
+        },
+        400
+      );
     }
 
     if (filesToProcess.length === 0) {
