@@ -210,11 +210,11 @@ Instruções para categorias e produtos:
 - Caso itens estejam distribuídos em diferentes imagens/páginas do cardápio, organize-os de maneira lógica na categoria correta.
 `;
 
-  // Lista de modelos em ordem de preferência para fallback automático
+  // Lista de modelos recomendados (em ordem de prioridade)
   const candidateModels = [
     "gemini-2.5-flash",
     "gemini-1.5-flash",
-    "gemini-1.5-pro",
+    "gemini-2.0-flash",
   ];
 
   let lastError: any = null;
@@ -252,11 +252,14 @@ Instruções para categorias e produtos:
       lastError = err;
       const errMsg = (err?.message || "").toLowerCase();
       const status = err?.status || err?.statusCode || err?.code || 0;
-      const isTransient =
+      const isRetryable =
         status === 503 ||
         status === 429 ||
+        status === 404 ||
         errMsg.includes("503") ||
         errMsg.includes("429") ||
+        errMsg.includes("404") ||
+        errMsg.includes("not found") ||
         errMsg.includes("high demand") ||
         errMsg.includes("unavailable") ||
         errMsg.includes("resource_exhausted") ||
@@ -264,7 +267,7 @@ Instruções para categorias e produtos:
         errMsg.includes("quota");
 
       console.warn(
-        `[Gemini] Falha ao tentar modelo ${currentModel} (status: ${status}, transiente: ${isTransient}):`,
+        `[Gemini] Falha ao tentar modelo ${currentModel} (status: ${status}, retentável: ${isRetryable}):`,
         err.message
       );
 
@@ -272,8 +275,11 @@ Instruções para categorias e produtos:
         console.log(
           `[Gemini] Ativando fallback automático para o próximo modelo: ${candidateModels[i + 1]}...`
         );
-        // Aguarda 600ms antes de acionar o próximo modelo da fila
-        await new Promise((resolve) => setTimeout(resolve, 600));
+        // Passa imediatamente se for 404 (modelo inexistente), ou aguarda 400ms se for 503/429
+        const isNotFound = status === 404 || errMsg.includes("404") || errMsg.includes("not found");
+        if (!isNotFound) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
       }
     }
   }
