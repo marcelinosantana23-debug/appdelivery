@@ -210,24 +210,96 @@ Instruções para categorias e produtos:
 - Caso itens estejam distribuídos em diferentes imagens/páginas do cardápio, organize-os de maneira lógica na categoria correta.
 `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            ...fileParts,
-            {
-              text: prompt,
-            },
-          ],
+  // Lista de modelos em ordem de preferência para fallback automático
+  const candidateModels = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+  ];
+
+  let lastError: any = null;
+  let response: any = null;
+  let usedModel = "";
+
+  for (let i = 0; i < candidateModels.length; i++) {
+    const currentModel = candidateModels[i];
+    try {
+      console.log(`[Gemini] Tentando processar cardápio com o modelo: ${currentModel}...`);
+      response = await ai.models.generateContent({
+        model: currentModel,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              ...fileParts,
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
         },
-      ],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+      });
+
+      if (response && response.text) {
+        usedModel = currentModel;
+        console.log(`[Gemini] Cardápio processado com sucesso pelo modelo: ${usedModel}`);
+        break;
+      }
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = (err?.message || "").toLowerCase();
+      const status = err?.status || err?.statusCode || err?.code || 0;
+      const isTransient =
+        status === 503 ||
+        status === 429 ||
+        errMsg.includes("503") ||
+        errMsg.includes("429") ||
+        errMsg.includes("high demand") ||
+        errMsg.includes("unavailable") ||
+        errMsg.includes("resource_exhausted") ||
+        errMsg.includes("overloaded") ||
+        errMsg.includes("quota");
+
+      console.warn(
+        `[Gemini] Falha ao tentar modelo ${currentModel} (status: ${status}, transiente: ${isTransient}):`,
+        err.message
+      );
+
+      if (i < candidateModels.length - 1) {
+        console.log(
+          `[Gemini] Ativando fallback automático para o próximo modelo: ${candidateModels[i + 1]}...`
+        );
+        // Aguarda 600ms antes de acionar o próximo modelo da fila
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    }
+  }
+
+  if (!response || !response.text) {
+    const errorStr = (lastError?.message || "").toLowerCase();
+    if (
+      lastError?.status === 503 ||
+      lastError?.status === 429 ||
+      errorStr.includes("503") ||
+      errorStr.includes("429") ||
+      errorStr.includes("high demand") ||
+      errorStr.includes("unavailable") ||
+      errorStr.includes("resource_exhausted") ||
+      errorStr.includes("overloaded")
+    ) {
+      throw new Error(
+        "Os servidores do Gemini estão com alta demanda temporária. Por favor, aguarde alguns segundos e clique em Gerar novamente."
+      );
+    }
+    throw new Error(
+      lastError?.message || "Não foi possível obter resposta dos servidores do Gemini."
+    );
+  }
+
+  try {
 
     const responseText = response.text || "";
     let parsed: any;

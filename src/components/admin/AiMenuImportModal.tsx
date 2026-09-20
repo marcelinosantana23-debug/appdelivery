@@ -276,10 +276,26 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
       clearTimeout(timer2);
       clearTimeout(timer3);
       setStep("idle");
-      setErrorMessage(
-        err.message ||
-          "Erro ao processar o cardápio. Verifique se as fotos estão nítidas e se a chave GEMINI_API_KEY está configurada."
-      );
+
+      let msg = err.message || "";
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes("503") ||
+        lower.includes("429") ||
+        lower.includes("high demand") ||
+        lower.includes("alta demanda") ||
+        lower.includes("unavailable") ||
+        lower.includes("resource_exhausted") ||
+        lower.includes("overloaded")
+      ) {
+        msg =
+          "Os servidores do Gemini estão com alta demanda temporária. Por favor, aguarde alguns segundos e clique em Gerar novamente.";
+      } else if (!msg) {
+        msg =
+          "Erro ao processar o cardápio. Verifique se as fotos estão nítidas e se a chave GEMINI_API_KEY está configurada.";
+      }
+
+      setErrorMessage(msg);
     }
   };
 

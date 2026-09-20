@@ -422,12 +422,30 @@ const handleImportarCardapio = async (c: any) => {
     );
   } catch (err: any) {
     console.error("Erro na rota importar-cardapio:", err);
+    let errorMsg = err.message || "Falha ao importar e processar cardápio com a IA.";
+    const lower = errorMsg.toLowerCase();
+    const isOverloaded =
+      err.status === 503 ||
+      err.status === 429 ||
+      lower.includes("503") ||
+      lower.includes("429") ||
+      lower.includes("high demand") ||
+      lower.includes("alta demanda") ||
+      lower.includes("unavailable") ||
+      lower.includes("resource_exhausted") ||
+      lower.includes("overloaded");
+
+    if (isOverloaded) {
+      errorMsg =
+        "Os servidores do Gemini estão com alta demanda temporária. Por favor, aguarde alguns segundos e clique em Gerar novamente.";
+    }
+
     return c.json(
       {
         success: false,
-        error: err.message || "Falha ao importar e processar cardápio com a IA.",
+        error: errorMsg,
       },
-      500
+      isOverloaded ? 503 : 500
     );
   }
 };
