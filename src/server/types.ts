@@ -48,6 +48,11 @@ export interface Tenant {
   isOpen: boolean;
   createdAt: number;
   updatedAt: number;
+  productCount?: number;
+  orderCount?: number;
+  completedOrdersCount?: number;
+  salesCount?: number;
+  revenue?: number;
 }
 
 export interface PlatformSettings {
@@ -114,6 +119,7 @@ export interface EstablishmentCategory {
 
 export type OrderType = "delivery" | "pickup";
 export type PaymentMethod = "pix" | "card" | "cash";
+export type CardType = "credit" | "debit";
 export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "cancelled";
 
 export interface OrderItem {
@@ -140,6 +146,10 @@ export interface Order {
   customerPhone: string;
   orderType: OrderType;
   paymentMethod: PaymentMethod;
+  cardType?: CardType;
+  paymentDetails?: string;
+  pixReceiptUrl?: string;
+  pix_receipt_url?: string;
   address?: {
     street: string;
     number: string;

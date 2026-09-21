@@ -79,6 +79,8 @@ export interface Tenant {
   updatedAt: number;
   productCount?: number;
   orderCount?: number;
+  completedOrdersCount?: number;
+  salesCount?: number;
   revenue?: number;
 }
 
@@ -107,6 +109,7 @@ export interface EstablishmentCategory {
   icon: string;
   order: number;
   order_index?: number;
+  slug?: string;
   active?: boolean;
   createdAt?: number;
 }
@@ -127,12 +130,14 @@ export interface CartItem {
   quantity: number;
   selectedOptions: ProductOption[];
   notes: string;
+  totalPrice?: number;
 }
 
 export type OrderItem = CartItem;
 
 export type OrderType = "delivery" | "pickup";
 export type PaymentMethod = "pix" | "card" | "cash";
+export type CardType = "credit" | "debit";
 export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "cancelled";
 
 export interface Order {
@@ -141,6 +146,10 @@ export interface Order {
   items: CartItem[];
   orderType: OrderType;
   paymentMethod: PaymentMethod;
+  cardType?: CardType;
+  paymentDetails?: string;
+  pixReceiptUrl?: string;
+  pix_receipt_url?: string;
   address?: {
     street: string;
     number: string;

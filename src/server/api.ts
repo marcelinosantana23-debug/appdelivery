@@ -424,7 +424,7 @@ const handleImportarCardapio = async (c: any) => {
         if (Array.isArray(cat.produtos)) {
           for (const prod of cat.produtos) {
             const prodImg =
-              (prod.image || prod.imagem || "").trim() ||
+              (prod.image || "").trim() ||
               generateProductImageUrl(prod.nome, catSlug, prod.descricao);
 
             const novoProduto = await db.createProduct(novaLoja.id, {
@@ -1175,11 +1175,19 @@ api.post("/pedidos", async (c) => {
     const statusInicial: OrderStatus = normalizeOrderStatus(body.status || "Pendente");
 
     // 4. Salvar pedido no D1 e KV
+    const comprovante = body.pix_receipt_url || body.pixReceiptUrl || body.comprovantePix || body.receipt || undefined;
+    const tipoCartao = body.cardType || body.card_type || body.tipoCartao || undefined;
+    const detalhesPgto = body.paymentDetails || body.payment_details || undefined;
+
     const novoPedido = await db.createOrder(loja.id, {
       customerName: cliente.trim(),
       customerPhone: telefone.trim(),
       orderType: tipoEntrega,
       paymentMethod: formaPagamento,
+      cardType: tipoCartao,
+      paymentDetails: detalhesPgto,
+      pixReceiptUrl: comprovante,
+      pix_receipt_url: comprovante,
       address: endereco,
       changeFor: trocoPara,
       subtotal,
@@ -1370,7 +1378,7 @@ api.get("/orders/:orderId/status", async (c) => {
             success: true,
             orderId: parsed.orderId,
             status: parsed.status,
-            statusPt: STATUS_MAP_EN_TO_PT[parsed.status] || parsed.status,
+            statusPt: (STATUS_MAP_EN_TO_PT as Record<string, string>)[parsed.status] || parsed.status,
             updatedAt: parsed.updatedAt,
           }, 200);
         }
@@ -1610,10 +1618,21 @@ api.get("/tenants", async (c) => {
         db.getOrdersByTenant(t.id),
         db.getTenantCredentials(t.id),
       ]);
+      const completedOrders = orders.filter(
+        (o) =>
+          o.status === "done" ||
+          o.status === "Concluído" ||
+          o.status === "concluido" ||
+          o.status === "Entregue" ||
+          o.status === "entregue" ||
+          o.status === "finalizado"
+      );
       return {
         ...t,
         productCount: products.length,
         orderCount: orders.length,
+        completedOrdersCount: completedOrders.length,
+        salesCount: orders.filter((o) => o.status !== "cancelled").length,
         revenue: orders.reduce((sum, o) => sum + (o.total || 0), 0),
         adminEmail: creds?.email || t.email,
         adminPassword: creds?.password || "123456",
@@ -1622,6 +1641,45 @@ api.get("/tenants", async (c) => {
     })
   );
   return c.json({ success: true, tenants: enriched }, 200);
+});
+
+// Endpoint para o Carrossel 1: Lojas em Destaque ranqueadas por vendas
+api.get("/featured-stores", async (c) => {
+  try {
+    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    const db = getDb(c);
+    const stores = await db.getFeaturedStoresRanked();
+    return c.json({ success: true, stores }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao consultar lojas em destaque" }, 500);
+  }
+});
+
+// Endpoint para o Carrossel 2: Mais Pedidos (lanches com maior volume de vendas de todas as lojas)
+api.get("/top-selling-products", async (c) => {
+  try {
+    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    const db = getDb(c);
+    const limit = Number(c.req.query("limit")) || 10;
+    const days = Number(c.req.query("days")) || 30;
+    const products = await db.getTopSellingProducts(limit, days);
+    return c.json({ success: true, products }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao consultar produtos mais vendidos" }, 500);
+  }
+});
+
+api.get("/mais-pedidos", async (c) => {
+  try {
+    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    const db = getDb(c);
+    const limit = Number(c.req.query("limit")) || 10;
+    const days = Number(c.req.query("days")) || 30;
+    const products = await db.getTopSellingProducts(limit, days);
+    return c.json({ success: true, products }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao consultar produtos mais pedidos" }, 500);
+  }
 });
 
 api.get("/tenants/:slugOrId/credentials", async (c) => {
@@ -2315,6 +2373,49 @@ api.get("/orders/stream", async (c) => {
   });
 });
 
+async function parseIncomingOrderPayload(c: any): Promise<any> {
+  const contentType = c.req.header("content-type") || "";
+  let body: any = {};
+  let receiptUrl: string | undefined = undefined;
+
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await c.req.formData();
+    for (const [key, value] of formData.entries()) {
+      if (value && typeof value === "object" && "name" in value && "arrayBuffer" in value) {
+        const file = value as File;
+        if (file.size > 0) {
+          const buffer = await file.arrayBuffer();
+          const base64 = btoa(
+            new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+          );
+          const mime = file.type || "image/jpeg";
+          receiptUrl = `data:${mime};base64,${base64}`;
+        }
+      } else if (typeof value === "string") {
+        try {
+          if (key === "items" || key === "address" || key === "statusHistory") {
+            body[key] = JSON.parse(value);
+          } else {
+            body[key] = value;
+          }
+        } catch {
+          body[key] = value;
+        }
+      }
+    }
+  } else {
+    body = await c.req.json();
+    receiptUrl = body.pix_receipt_url || body.pixReceiptUrl || body.receipt;
+  }
+
+  if (receiptUrl) {
+    body.pix_receipt_url = receiptUrl;
+    body.pixReceiptUrl = receiptUrl;
+  }
+
+  return body;
+}
+
 api.post("/tenants/:slugOrId/orders", async (c) => {
   try {
     const db = getDb(c);
@@ -2332,7 +2433,7 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
       );
     }
 
-    const body = await c.req.json();
+    const body = await parseIncomingOrderPayload(c);
     const order = await db.createOrder(tenant.id, body);
     return c.json({ success: true, order }, 201);
   } catch (e: any) {
@@ -2364,11 +2465,30 @@ api.get("/orders", async (c) => {
   }
 });
 
+// Obter comprovante de um pedido: GET /api/orders/:orderId/receipt
+api.get("/orders/:orderId/receipt", async (c) => {
+  try {
+    const db = getDb(c);
+    const orderId = c.req.param("orderId");
+    const order = await db.getOrderById(orderId);
+    if (!order) {
+      return c.json({ success: false, error: "Pedido não encontrado" }, 404);
+    }
+    const receipt = order.pixReceiptUrl || order.pix_receipt_url;
+    if (!receipt) {
+      return c.json({ success: false, error: "Comprovante não disponível para este pedido" }, 404);
+    }
+    return c.json({ success: true, orderId: order.id, receiptUrl: receipt });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
 // Rota direta de compatibilidade para clientes móveis e redes externas postando em /orders
 api.post("/orders", async (c) => {
   try {
     const db = getDb(c);
-    const body = await c.req.json();
+    const body = await parseIncomingOrderPayload(c);
     const tenantIdentifier = body.tenantId || body.tenantSlug || body.loja || "marcelino";
     const tenant = await db.getTenantByIdOrSlug(tenantIdentifier);
 
@@ -2638,7 +2758,7 @@ async function handlePutAdminSettings(c: any) {
 
     // Permitir se autenticar com email e senha de super_admin se enviado no payload
     if (!isAuthorized && body.email && body.password) {
-      const authCheck = await db.verifyUser(body.email, body.password);
+      const authCheck = await db.authenticateUser(body.email, body.password);
       if (authCheck && authCheck.role === "super_admin") {
         isAuthorized = true;
       }

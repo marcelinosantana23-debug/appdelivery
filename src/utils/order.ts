@@ -51,9 +51,13 @@ export function buildWhatsAppMessage(order: Order, config: StoreConfig): string 
   lines.push("");
   lines.push("*PAGAMENTO:*");
   if (order.paymentMethod === "pix") {
-    lines.push(`PIX - Chave: ${config.pixKey}`);
+    lines.push(`PIX - Comprovante anexado no sistema`);
+    if (config.pixKey) {
+      lines.push(`Chave PIX: ${config.pixKey}`);
+    }
   } else if (order.paymentMethod === "card") {
-    lines.push("Cartão na entrega");
+    const cardDetail = order.cardType === "credit" ? "Crédito" : order.cardType === "debit" ? "Débito" : "Débito/Crédito";
+    lines.push(`Cartão na entrega (${cardDetail})`);
   } else if (order.paymentMethod === "cash") {
     lines.push("Dinheiro");
     if (order.changeFor) {
@@ -65,5 +69,16 @@ export function buildWhatsAppMessage(order: Order, config: StoreConfig): string 
 }
 
 export function getWhatsAppUrl(order: Order, config: StoreConfig): string {
-  return `https://wa.me/${config.whatsapp}?text=${buildWhatsAppMessage(order, config)}`;
+  const cleanPhone = (config.whatsapp || "").replace(/\D/g, "");
+  const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+  return `https://wa.me/${formattedPhone}?text=${buildWhatsAppMessage(order, config)}`;
+}
+
+export function getMerchantSupportWhatsAppUrl(order: Order, config: StoreConfig): string {
+  const cleanPhone = (config.whatsapp || "").replace(/\D/g, "");
+  const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+  const text = encodeURIComponent(
+    `Olá, acabei de fazer o pedido ${order.id} no valor de ${formatPrice(order.total, config)} pelo Top Food e gostaria de tirar uma dúvida!`
+  );
+  return `https://wa.me/${formattedPhone}?text=${text}`;
 }

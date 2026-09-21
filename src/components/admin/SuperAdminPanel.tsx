@@ -1865,6 +1865,9 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         address: "",
                         primaryColor: "#E63946",
                         bannerImage: "",
+                        businessType: "Lanchonetes",
+                        isFeatured: false,
+                        priorityOrder: 0,
                       });
                     }}
                     className="rounded-xl border border-slate-800 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"

@@ -72,8 +72,15 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
               </div>
             )}
             {rank !== undefined && (
-              <div className="flex items-center gap-1 rounded-full bg-red-600/95 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-md backdrop-blur-xs">
+              <div
+                className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black shadow-md backdrop-blur-xs ${
+                  rank === 1
+                    ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 ring-1 ring-white/50"
+                    : "bg-red-600/95 text-white"
+                }`}
+              >
                 <span>#{rank}</span>
+                {rank === 1 && <span>Líder de Vendas</span>}
               </div>
             )}
           </div>
@@ -109,6 +116,11 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
                   <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
                     <Sparkles className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
                     <span>⭐ Destaque</span>
+                  </span>
+                )}
+                {tenant.completedOrdersCount !== undefined && tenant.completedOrdersCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                    <span>🔥 {tenant.completedOrdersCount} {tenant.completedOrdersCount === 1 ? "venda" : "vendas"}</span>
                   </span>
                 )}
               </div>

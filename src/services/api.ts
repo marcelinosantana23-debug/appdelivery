@@ -10,6 +10,8 @@ import type {
   TenantCredential,
   FinancialReportData,
   PlatformSettings,
+  TopSellingProduct,
+  FeaturedStoreRanked,
 } from "@/types";
 
 const BASE_URL = "/api";
@@ -125,6 +127,8 @@ export async function createTenantApi(data: {
   primaryColor?: string;
   bannerImage?: string;
   businessType?: string;
+  isFeatured?: boolean;
+  priorityOrder?: number;
 }): Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string; message?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants`, {
@@ -660,6 +664,52 @@ export async function updateTenantFeaturedApi(
         priorityOrder: priorityOrder !== undefined ? priorityOrder : 0,
       }),
     });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchFeaturedStoresRankedApi(): Promise<{
+  success: boolean;
+  stores?: FeaturedStoreRanked[];
+  error?: string;
+}> {
+  try {
+    const timestamp = Date.now();
+    const res = await fetch(`${BASE_URL}/featured-stores?_t=${timestamp}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchTopSellingProductsApi(
+  limit: number = 10,
+  days: number = 30
+): Promise<{
+  success: boolean;
+  products?: TopSellingProduct[];
+  error?: string;
+}> {
+  try {
+    const timestamp = Date.now();
+    const res = await fetch(
+      `${BASE_URL}/top-selling-products?limit=${limit}&days=${days}&_t=${timestamp}`,
+      {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      }
+    );
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };

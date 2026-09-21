@@ -342,7 +342,12 @@ export function AdminFinancialReport() {
   }, [reportData?.orders, searchTerm, paymentFilter]);
 
   // Estatísticas calculadas do gráfico diário
-  const chartStats = useMemo(() => {
+  const chartStats = useMemo<{
+    maxRevenue: number;
+    bestDay: DailyRevenueItem | null;
+    dailyAvg: number;
+    daysWithSales: number;
+  }>(() => {
     if (!reportData?.dailyRevenue || reportData.dailyRevenue.length === 0) {
       return { maxRevenue: 100, bestDay: null, dailyAvg: 0, daysWithSales: 0 };
     }

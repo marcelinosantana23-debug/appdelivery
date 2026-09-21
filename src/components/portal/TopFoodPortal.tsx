@@ -4,6 +4,7 @@ import { PortalHeader } from "./PortalHeader";
 import { EstablishmentCategories } from "./EstablishmentCategories";
 import { DEFAULT_ESTABLISHMENT_CATEGORIES, matchStoreCategory } from "./portalUtils";
 import { FeaturedStoresCarousel } from "./FeaturedStoresCarousel";
+import { TopSellingProductsCarousel } from "./TopSellingProductsCarousel";
 import { CategoryStoreSection } from "./CategoryStoreSection";
 import type { EstablishmentCategory, Tenant } from "@/types";
 import { Store, SearchX } from "lucide-react";
@@ -109,12 +110,20 @@ export function TopFoodPortal({
 
       {/* Conteúdo Principal do Marketplace */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 pb-12">
-        {/* Carrossel: Mais Pedidos da Semana (Exibido quando na visão geral sem busca) */}
+        {/* Carrosséis do Topo da Vitrine Principal */}
         {!searchQuery && activeCategory === "todos" && (
-          <FeaturedStoresCarousel
-            tenants={activeTenants}
-            onSelectStore={onSelectStore}
-          />
+          <>
+            {/* Carrossel 1: Lojas em Destaque (ordenado automaticamente pelo histórico de pedidos concluídos no D1) */}
+            <FeaturedStoresCarousel
+              tenants={activeTenants}
+              onSelectStore={onSelectStore}
+            />
+
+            {/* Carrossel 2: Mais Pedidos (diretamente ABAIXO do carrossel de Lojas em Destaque) */}
+            <TopSellingProductsCarousel
+              onSelectStore={onSelectStore}
+            />
+          </>
         )}
 
         {/* Título Principal da Seção */}

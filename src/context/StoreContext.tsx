@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings } from "@/types";
+import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings, TopSellingProduct, FeaturedStoreRanked } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
 import {
@@ -32,6 +32,8 @@ import {
   getPlatformSettingsApi,
   updatePlatformSettingsApi,
   updateTenantFeaturedApi,
+  fetchFeaturedStoresRankedApi,
+  fetchTopSellingProductsApi,
 } from "@/services/api";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { playNewOrderChime } from "@/utils/audio";
@@ -51,6 +53,10 @@ interface StoreContextValue {
 
   // Multi-tenant state
   tenants: Tenant[];
+  featuredStoresRanked: FeaturedStoreRanked[];
+  topSellingProducts: TopSellingProduct[];
+  refreshFeaturedStoresRanked: () => Promise<void>;
+  refreshTopSellingProducts: () => Promise<void>;
   currentTenant: Tenant | null;
   config: StoreConfig;
   updateConfig: (partial: Partial<StoreConfig>) => Promise<void>;
@@ -112,8 +118,14 @@ interface StoreContextValue {
 
   // Super Admin actions & Establishment Categories
   establishmentCategories: EstablishmentCategory[];
-  createEstablishmentCategory: (name: string, icon?: string, order?: number) => Promise<EstablishmentCategory | null>;
-  deleteEstablishmentCategory: (id: string) => Promise<boolean>;
+  createEstablishmentCategory: (
+    name: string,
+    icon?: string,
+    order?: number
+  ) => Promise<{ success: boolean; category?: EstablishmentCategory; error?: string; message?: string }>;
+  deleteEstablishmentCategory: (
+    id: string
+  ) => Promise<{ success: boolean; message?: string; error?: string }>;
   refreshEstablishmentCategories: () => Promise<void>;
   createNewTenant: (data: {
     name: string;
@@ -127,6 +139,8 @@ interface StoreContextValue {
     primaryColor?: string;
     bannerImage?: string;
     businessType?: string;
+    isFeatured?: boolean;
+    priorityOrder?: number;
   }) => Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string }>;
   toggleTenantStatus: (slugOrId: string, status: TenantStatus) => Promise<boolean>;
   deleteTenant: (slugOrId: string) => Promise<boolean>;
@@ -405,11 +419,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applyThemeColors(config);
   }, [config]);
 
-  // Load tenants list
+  // Load tenants list and ranked carousels
+  const [featuredStoresRanked, setFeaturedStoresRanked] = useState<FeaturedStoreRanked[]>([]);
+  const [topSellingProducts, setTopSellingProducts] = useState<TopSellingProduct[]>([]);
+
+  const refreshFeaturedStoresRanked = useCallback(async () => {
+    try {
+      const res = await fetchFeaturedStoresRankedApi();
+      if (res.success && res.stores) {
+        setFeaturedStoresRanked(res.stores);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const refreshTopSellingProducts = useCallback(async () => {
+    try {
+      const res = await fetchTopSellingProductsApi(10, 30);
+      if (res.success && res.products) {
+        setTopSellingProducts(res.products);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const refreshTenants = useCallback(async () => {
-    const res = await fetchTenantsApi();
-    if (res.success && res.tenants) {
-      setTenants(res.tenants);
+    try {
+      const [tRes, fRes, pRes] = await Promise.all([
+        fetchTenantsApi(),
+        fetchFeaturedStoresRankedApi(),
+        fetchTopSellingProductsApi(10, 30),
+      ]);
+      if (tRes.success && tRes.tenants) {
+        setTenants(tRes.tenants);
+      }
+      if (fRes.success && fRes.stores) {
+        setFeaturedStoresRanked(fRes.stores);
+      }
+      if (pRes.success && pRes.products) {
+        setTopSellingProducts(pRes.products);
+      }
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -428,9 +481,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const res = await createEstablishmentCategoryApi({ name, icon, order });
       if (res.success && res.category) {
         await refreshEstablishmentCategories();
-        return res.category;
       }
-      return null;
+      return res;
     },
     [refreshEstablishmentCategories]
   );
@@ -440,9 +492,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const res = await deleteEstablishmentCategoryApi(id);
       if (res.success) {
         await refreshEstablishmentCategories();
-        return true;
       }
-      return false;
+      return res;
     },
     [refreshEstablishmentCategories]
   );
@@ -1014,6 +1065,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         customerPhone: order.customerPhone,
         orderType: order.orderType,
         paymentMethod: order.paymentMethod,
+        cardType: order.cardType,
+        paymentDetails: order.paymentDetails,
+        pixReceiptUrl: order.pixReceiptUrl || order.pix_receipt_url,
+        pix_receipt_url: order.pix_receipt_url || order.pixReceiptUrl,
         address: order.address,
         changeFor: order.changeFor,
         subtotal: order.subtotal,
@@ -1454,6 +1509,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       primaryColor?: string;
       bannerImage?: string;
       businessType?: string;
+      isFeatured?: boolean;
+      priorityOrder?: number;
     }) => {
       const res = await createTenantApi(data);
       if (res.success && res.tenant) {
@@ -1504,6 +1561,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         showToast,
         dismissToast,
         tenants,
+        featuredStoresRanked,
+        topSellingProducts,
+        refreshFeaturedStoresRanked,
+        refreshTopSellingProducts,
         currentTenant,
         config,
         updateConfig,

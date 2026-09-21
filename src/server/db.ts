@@ -626,7 +626,7 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p1",
-        product: { id: "p1", name: "X-Burger Artesanal Duplo", price: 34.0 },
+        product: { id: "msp-1", name: "X-Salada Especial MS", price: 26.9, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80" },
         quantity: 2,
         selectedOptions: [],
         notes: "Maionese à parte",
@@ -654,7 +654,7 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p2",
-        product: { id: "p2", name: "Smash Burger Especial", price: 26.0 },
+        product: { id: "msp-2", name: "Smash Burger Duplo Bacon", price: 31.9, image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80" },
         quantity: 2,
         selectedOptions: [],
         notes: "Sem cebola",
@@ -688,8 +688,8 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p3",
-        product: { id: "p1", name: "Combo Família Lanches", price: 86.0 },
-        quantity: 1,
+        product: { id: "msp-3", name: "X-Tudo Campeão MS", price: 34.9, image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80" },
+        quantity: 2,
         selectedOptions: [],
         notes: "",
       },
@@ -721,7 +721,7 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p4",
-        product: { id: "p2", name: "Double Cheddar Bacon", price: 31.0 },
+        product: { id: "msp-2", name: "Smash Burger Duplo Bacon", price: 31.9, image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80" },
         quantity: 2,
         selectedOptions: [],
         notes: "Cheddar bem cremoso",
@@ -744,8 +744,8 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p5",
-        product: { id: "p3", name: "Trio Especial da Casa", price: 95.0 },
-        quantity: 1,
+        product: { id: "msp-3", name: "X-Tudo Campeão MS", price: 34.9, image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80" },
+        quantity: 2,
         selectedOptions: [],
         notes: "",
       },
@@ -768,7 +768,7 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p6",
-        product: { id: "p1", name: "Burguer Clássico", price: 22.0 },
+        product: { id: "msp-4", name: "Batata Frita Crocante Rústica", price: 18.0, image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=600&q=80" },
         quantity: 2,
         selectedOptions: [],
         notes: "",
@@ -791,8 +791,8 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p7",
-        product: { id: "p1", name: "Combo MS Especial", price: 78.0 },
-        quantity: 1,
+        product: { id: "msp-1", name: "X-Salada Especial MS", price: 26.9, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80" },
+        quantity: 2,
         selectedOptions: [],
         notes: "",
       },
@@ -814,8 +814,8 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p8",
-        product: { id: "p1", name: "Combo Galera 4 Lanches", price: 110.0 },
-        quantity: 1,
+        product: { id: "msp-3", name: "X-Tudo Campeão MS", price: 34.9, image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80" },
+        quantity: 3,
         selectedOptions: [],
         notes: "",
       },
@@ -837,7 +837,7 @@ const initialOrders: Order[] = [
     items: [
       {
         id: "item-p9",
-        product: { id: "p1", name: "X-Burger Artesanal", price: 29.0 },
+        product: { id: "msp-1", name: "X-Salada Especial MS", price: 26.9, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80" },
         quantity: 2,
         selectedOptions: [],
         notes: "Cancelado pelo cliente",
@@ -1091,6 +1091,9 @@ export class Database {
           customer_phone TEXT NOT NULL,
           order_type TEXT NOT NULL DEFAULT 'delivery',
           payment_method TEXT NOT NULL DEFAULT 'pix',
+          card_type TEXT,
+          payment_details TEXT,
+          pix_receipt_url TEXT,
           address_json TEXT DEFAULT '{}',
           change_for TEXT,
           subtotal REAL NOT NULL,
@@ -1175,7 +1178,10 @@ export class Database {
         "ALTER TABLE tenants ADD COLUMN is_featured INTEGER DEFAULT 0",
         "ALTER TABLE tenants ADD COLUMN priority_order INTEGER DEFAULT 0",
         "ALTER TABLE establishment_categories ADD COLUMN order_index INTEGER DEFAULT 0",
-        "ALTER TABLE establishment_categories ADD COLUMN active INTEGER DEFAULT 1"
+        "ALTER TABLE establishment_categories ADD COLUMN active INTEGER DEFAULT 1",
+        "ALTER TABLE orders ADD COLUMN pix_receipt_url TEXT",
+        "ALTER TABLE orders ADD COLUMN card_type TEXT",
+        "ALTER TABLE orders ADD COLUMN payment_details TEXT"
       ];
 
       for (const alter of alterQueries) {
@@ -1232,8 +1238,15 @@ export class Database {
           }
         }
 
-        // 5. Backfill de order_items a partir de pedidos existentes se a tabela estiver vazia
+        // 5. Seed de pedidos e order_items se estiver vazia
         try {
+          const ordCountRes = await db.prepare("SELECT count(*) as total FROM orders").first<{ total: number }>();
+          if (!ordCountRes || Number(ordCountRes.total) === 0) {
+            for (const ord of initialOrders) {
+              await this.insertOrderRow(ord);
+            }
+          }
+
           const oiCountRes = await db.prepare("SELECT count(*) as total FROM order_items").first<{ total: number }>();
           if (!oiCountRes || Number(oiCountRes.total) === 0) {
             const ordersRes = await db.prepare("SELECT id, tenant_id, items_json, created_at FROM orders").all<{ id: string; tenant_id: string; items_json: string; created_at: number }>();
@@ -1255,12 +1268,14 @@ export class Database {
                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                     ).bind(oiId, ord.id, ord.tenant_id, pId, pName, pPrice, pQty, pImg, optJson, ord.created_at || Date.now()).run();
                   }
-                } catch {}
+                } catch {
+                  // Ignore item insertion error during initial backfill
+                }
               }
             }
           }
         } catch (backfillErr) {
-          console.warn("order_items backfill notice:", backfillErr);
+          console.warn("orders/order_items backfill notice:", backfillErr);
         }
       } catch (e) {
         console.warn("D1 seed initial check warning:", e);
@@ -1430,6 +1445,73 @@ export class Database {
         .run();
     } catch {
       // ignore
+    }
+  }
+
+  private async insertOrderRow(o: Order): Promise<void> {
+    if (!this.env?.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO orders (
+          id, tenant_id, customer_name, customer_phone, order_type, payment_method,
+          card_type, payment_details, pix_receipt_url,
+          address_json, change_for, subtotal, delivery_fee, total, status,
+          items_json, status_history_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          o.id,
+          o.tenantId,
+          o.customerName,
+          o.customerPhone,
+          o.orderType,
+          o.paymentMethod,
+          o.cardType || null,
+          o.paymentDetails || null,
+          o.pixReceiptUrl || o.pix_receipt_url || null,
+          JSON.stringify(o.address || {}),
+          o.changeFor || "",
+          o.subtotal,
+          o.deliveryFee,
+          o.total,
+          o.status,
+          JSON.stringify(o.items || []),
+          JSON.stringify(o.statusHistory || []),
+          o.createdAt
+        )
+        .run();
+
+      if (o.items && o.items.length > 0) {
+        for (const it of o.items) {
+          const oiId = it.id || `oi-${o.id}-${Math.random().toString(36).substring(2, 7)}`;
+          const pId = it.product?.id || `p-${Math.random().toString(36).substring(2, 7)}`;
+          const pName = it.product?.name || "Lanche Especial";
+          const pPrice = Number(it.product?.price) || 0;
+          const pImg = it.product?.image || "";
+          const pQty = Number(it.quantity) || 1;
+          const optJson = JSON.stringify(it.selectedOptions || []);
+          await this.env.DB.prepare(
+            `INSERT OR IGNORE INTO order_items (
+              id, order_id, tenant_id, product_id, name, price, quantity, image, options_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+            .bind(
+              oiId,
+              o.id,
+              o.tenantId,
+              pId,
+              pName,
+              pPrice,
+              pQty,
+              pImg,
+              optJson,
+              o.createdAt || Date.now()
+            )
+            .run();
+        }
+      }
+    } catch (e) {
+      console.warn("D1 insertOrderRow warning:", e);
     }
   }
 
@@ -2120,6 +2202,10 @@ export class Database {
     // Omit password from return object
     const { password: _, ...safeUser } = user;
     return safeUser as User;
+  }
+
+  async verifyUser(email: string, password: string): Promise<User | null> {
+    return this.authenticateUser(email, password);
   }
 
   async getUserById(userId: string): Promise<User | null> {
@@ -2992,10 +3078,18 @@ export class Database {
   }
 
   async createOrder(tenantId: string, orderData: Omit<Order, "id" | "tenantId" | "createdAt">): Promise<Order> {
+    const rawCardType = (orderData as any).cardType || (orderData as any).card_type || undefined;
+    const rawPaymentDetails = (orderData as any).paymentDetails || (orderData as any).payment_details || undefined;
+    const rawReceipt = (orderData as any).pixReceiptUrl || (orderData as any).pix_receipt_url || (orderData as any).receipt || undefined;
+
     const newOrder: Order = {
       ...orderData,
       id: `#${Math.floor(1000 + Math.random() * 9000)}`,
       tenantId,
+      cardType: rawCardType,
+      paymentDetails: rawPaymentDetails,
+      pixReceiptUrl: rawReceipt,
+      pix_receipt_url: rawReceipt,
       createdAt: Date.now(),
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
@@ -3006,9 +3100,10 @@ export class Database {
         await this.env.DB.prepare(
           `INSERT INTO orders (
             id, tenant_id, customer_name, customer_phone, order_type, payment_method,
+            card_type, payment_details, pix_receipt_url,
             address_json, change_for, subtotal, delivery_fee, total, status,
             items_json, status_history_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newOrder.id,
@@ -3017,6 +3112,9 @@ export class Database {
             newOrder.customerPhone,
             newOrder.orderType,
             newOrder.paymentMethod,
+            newOrder.cardType || null,
+            newOrder.paymentDetails || null,
+            newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
             JSON.stringify(newOrder.address || {}),
             newOrder.changeFor || "",
             newOrder.subtotal,
@@ -3028,6 +3126,40 @@ export class Database {
             newOrder.createdAt
           )
           .run();
+
+        if (newOrder.items && newOrder.items.length > 0) {
+          for (const item of newOrder.items) {
+            try {
+              const oiId = item.id || `oi-${newOrder.id}-${Math.random().toString(36).substring(2, 7)}`;
+              const pId = item.product?.id || `p-${Math.random().toString(36).substring(2, 7)}`;
+              const pName = item.product?.name || "Lanche";
+              const pPrice = Number(item.product?.price) || 0;
+              const pImg = item.product?.image || "";
+              const pQty = Number(item.quantity) || 1;
+              const optJson = JSON.stringify(item.selectedOptions || []);
+              await this.env.DB.prepare(
+                `INSERT INTO order_items (
+                  id, order_id, tenant_id, product_id, name, price, quantity, image, options_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              )
+                .bind(
+                  oiId,
+                  newOrder.id,
+                  newOrder.tenantId,
+                  pId,
+                  pName,
+                  pPrice,
+                  pQty,
+                  pImg,
+                  optJson,
+                  newOrder.createdAt
+                )
+                .run();
+            } catch (itemErr) {
+              console.warn("D1 createOrder insert order_item error:", itemErr);
+            }
+          }
+        }
       } catch (e) {
         console.warn("D1 createOrder error:", e);
       }
@@ -3504,6 +3636,10 @@ export class Database {
       customerPhone: row.customer_phone,
       orderType: row.order_type,
       paymentMethod: row.payment_method,
+      cardType: row.card_type || undefined,
+      paymentDetails: row.payment_details || undefined,
+      pixReceiptUrl: row.pix_receipt_url || undefined,
+      pix_receipt_url: row.pix_receipt_url || undefined,
       address: this.safeJsonParse(row.address_json, undefined),
       changeFor: row.change_for,
       subtotal: Number(row.subtotal),
@@ -3748,5 +3884,271 @@ export class Database {
     }
 
     return newCustomer;
+  }
+
+  // ===================== CARROSSÉIS DA HOME (HISTÓRICO DE VENDAS D1) =====================
+
+  /**
+   * Carrossel 1: Lojas em Destaque
+   * Regra: Apenas lojas com is_featured = true.
+   * Consulta no D1 contando os pedidos concluídos de cada loja (COUNT(orders.id)).
+   * A loja patrocinada com MAIOR número de vendas ocupa AUTOMATICAMENTE a 1ª posição (#1).
+   */
+  async getFeaturedStoresRanked(): Promise<FeaturedStoreRanked[]> {
+    await this.ensureTables();
+
+    if (this.env?.DB) {
+      try {
+        const query = `
+          SELECT 
+            t.*,
+            COALESCE(ord_stat.completed_count, 0) as completed_orders_count,
+            COALESCE(ord_stat.total_count, 0) as sales_count
+          FROM tenants t
+          LEFT JOIN (
+            SELECT 
+              tenant_id,
+              COUNT(CASE WHEN status IN ('done', 'Concluído', 'concluido', 'Entregue', 'entregue', 'finalizado') THEN 1 END) as completed_count,
+              COUNT(id) as total_count
+            FROM orders
+            WHERE status != 'cancelled'
+            GROUP BY tenant_id
+          ) ord_stat ON ord_stat.tenant_id = t.id
+          WHERE (t.is_featured = 1 OR t.is_featured = true) AND t.status != 'inactive'
+          ORDER BY 
+            completed_orders_count DESC, 
+            sales_count DESC, 
+            t.priority_order DESC, 
+            t.created_at DESC
+        `;
+        const res = await this.env.DB.prepare(query).all<any>();
+        if (res.results && res.results.length > 0) {
+          return res.results.map((r: any, idx: number) => {
+            const tenant = this.mapTenantRow(r);
+            const completedOrdersCount = Number(r.completed_orders_count) || 0;
+            const salesCount = Number(r.sales_count) || 0;
+            return {
+              ...tenant,
+              completedOrdersCount,
+              salesCount,
+              rank: idx + 1,
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("D1 getFeaturedStoresRanked query warning, falling back to memory:", e);
+      }
+    }
+
+    // Fallback em memória a partir de globalStore
+    const featuredTenants = globalStore.tenants.filter(
+      (t) => Boolean(t.isFeatured) && t.status !== "inactive"
+    );
+
+    const ranked = featuredTenants.map((t) => {
+      const storeOrders = globalStore.orders.filter((o) => o.tenantId === t.id);
+      const completedOrders = storeOrders.filter(
+        (o) =>
+          o.status === "done" ||
+          o.status === "Concluído" ||
+          o.status === "concluido" ||
+          o.status === "Entregue" ||
+          o.status === "entregue" ||
+          o.status === "finalizado"
+      );
+      const nonCancelledOrders = storeOrders.filter((o) => o.status !== "cancelled");
+      return {
+        ...t,
+        completedOrdersCount: completedOrders.length,
+        salesCount: nonCancelledOrders.length,
+        rank: 0,
+      };
+    });
+
+    // Ordenação: MAIOR número de pedidos concluídos ocupa AUTOMATICAMENTE o 1º lugar
+    ranked.sort((a, b) => {
+      if (b.completedOrdersCount !== a.completedOrdersCount) {
+        return b.completedOrdersCount - a.completedOrdersCount;
+      }
+      if (b.salesCount !== a.salesCount) {
+        return b.salesCount - a.salesCount;
+      }
+      const aPri = a.priorityOrder || 0;
+      const bPri = b.priorityOrder || 0;
+      if (aPri !== bPri) return bPri - aPri;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    return ranked.map((store, index) => ({
+      ...store,
+      rank: index + 1,
+    }));
+  }
+
+  /**
+   * Carrossel 2: Mais Pedidos
+   * Regra: Cards dos lanches/produtos individuais mais vendidos de TODAS as lojas do app.
+   * Consulta no D1 contando os itens nos pedidos (order_items com SUM(quantity)).
+   * O lanche com maior volume de pedidos da semana/mês ocupa AUTOMATICAMENTE a 1ª posição.
+   */
+  async getTopSellingProducts(limit = 10, daysWindow = 30): Promise<TopSellingProduct[]> {
+    await this.ensureTables();
+
+    if (this.env?.DB) {
+      try {
+        const cutoffTimestamp = Date.now() - daysWindow * 86400000;
+
+        // 1. Tenta buscar filtrando pela janela de tempo (semana/mês)
+        let query = `
+          SELECT 
+            oi.tenant_id as tenantId,
+            oi.product_id as productId,
+            MAX(oi.name) as name,
+            MAX(oi.price) as price,
+            COALESCE(NULLIF(MAX(p.image), ''), NULLIF(MAX(oi.image), ''), '') as image,
+            COALESCE(MAX(p.description), '') as description,
+            MAX(t.name) as tenantName,
+            MAX(t.slug) as tenantSlug,
+            MAX(t.logo) as tenantLogo,
+            MAX(t.primary_color) as tenantPrimaryColor,
+            SUM(oi.quantity) as totalSold
+          FROM order_items oi
+          JOIN tenants t ON t.id = oi.tenant_id
+          LEFT JOIN products p ON (p.id = oi.product_id AND p.tenant_id = oi.tenant_id)
+          JOIN orders o ON o.id = oi.order_id
+          WHERE t.status != 'inactive'
+            AND o.status != 'cancelled'
+            AND oi.created_at >= ?
+          GROUP BY oi.tenant_id, oi.product_id
+          ORDER BY totalSold DESC, name ASC
+          LIMIT ?
+        `;
+        let res = await this.env.DB.prepare(query).bind(cutoffTimestamp, limit).all<any>();
+
+        // Se retornar menos de 2 produtos na janela recente, consulta todo o histórico de order_items
+        if (!res.results || res.results.length < 2) {
+          query = `
+            SELECT 
+              oi.tenant_id as tenantId,
+              oi.product_id as productId,
+              MAX(oi.name) as name,
+              MAX(oi.price) as price,
+              COALESCE(NULLIF(MAX(p.image), ''), NULLIF(MAX(oi.image), ''), '') as image,
+              COALESCE(MAX(p.description), '') as description,
+              MAX(t.name) as tenantName,
+              MAX(t.slug) as tenantSlug,
+              MAX(t.logo) as tenantLogo,
+              MAX(t.primary_color) as tenantPrimaryColor,
+              SUM(oi.quantity) as totalSold
+            FROM order_items oi
+            JOIN tenants t ON t.id = oi.tenant_id
+            LEFT JOIN products p ON (p.id = oi.product_id AND p.tenant_id = oi.tenant_id)
+            JOIN orders o ON o.id = oi.order_id
+            WHERE t.status != 'inactive'
+              AND o.status != 'cancelled'
+            GROUP BY oi.tenant_id, oi.product_id
+            ORDER BY totalSold DESC, name ASC
+            LIMIT ?
+          `;
+          res = await this.env.DB.prepare(query).bind(limit).all<any>();
+        }
+
+        if (res.results && res.results.length > 0) {
+          return res.results.map((r: any, idx: number) => {
+            const safeSlug = String(r.name || "item")
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/(^-|-$)/g, "");
+            return {
+              id: `top-${idx + 1}-${r.tenantId}-${r.productId}-${safeSlug}`,
+              productId: r.productId,
+              name: r.name,
+              price: Number(r.price) || 0,
+              image: r.image || "",
+              description: r.description || "",
+              tenantId: r.tenantId,
+              tenantName: r.tenantName,
+              tenantSlug: r.tenantSlug,
+              tenantLogo: r.tenantLogo || "🍔",
+              tenantPrimaryColor: r.tenantPrimaryColor || "#E63946",
+              totalSold: Number(r.totalSold) || 0,
+              rank: idx + 1,
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("D1 getTopSellingProducts warning, falling back to memory:", e);
+      }
+    }
+
+    // Fallback em memória agregando order.items
+    const salesMap = new Map<
+      string,
+      {
+        productId: string;
+        name: string;
+        price: number;
+        image: string;
+        description: string;
+        tenantId: string;
+        tenantName: string;
+        tenantSlug: string;
+        tenantLogo: string;
+        tenantPrimaryColor: string;
+        totalSold: number;
+      }
+    >();
+
+    const validOrders = globalStore.orders.filter((o) => o.status !== "cancelled");
+    for (const order of validOrders) {
+      const tenant = globalStore.tenants.find((t) => t.id === order.tenantId && t.status !== "inactive");
+      if (!tenant) continue;
+
+      for (const item of order.items || []) {
+        const pId = item.product?.id || `p-${Math.random().toString(36).substring(2, 6)}`;
+        // Agrupa por loja e produto para consolidar o total vendido de forma única
+        const key = `${tenant.id}__${pId}`;
+        const existing = salesMap.get(key);
+        const qty = Number(item.quantity) || 1;
+
+        const matchingProduct =
+          globalStore.products.find((p) => p.id === pId && p.tenantId === tenant.id) ||
+          globalStore.products.find((p) => p.id === pId);
+        const img = item.product?.image || matchingProduct?.image || "";
+        const desc = matchingProduct?.description || item.notes || "";
+
+        if (existing) {
+          existing.totalSold += qty;
+          if (!existing.image && img) existing.image = img;
+        } else {
+          salesMap.set(key, {
+            productId: pId,
+            name: matchingProduct?.name || item.product?.name || "Lanche Especial",
+            price: Number(matchingProduct?.price ?? item.product?.price) || 0,
+            image: img,
+            description: desc,
+            tenantId: tenant.id,
+            tenantName: tenant.name,
+            tenantSlug: tenant.slug,
+            tenantLogo: tenant.logo || "🍔",
+            tenantPrimaryColor: tenant.primaryColor || "#E63946",
+            totalSold: qty,
+          });
+        }
+      }
+    }
+
+    const sorted = Array.from(salesMap.values()).sort((a, b) => b.totalSold - a.totalSold);
+    return sorted.slice(0, limit).map((prod, idx) => {
+      const safeSlug = String(prod.name || "item")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+      return {
+        id: `top-${idx + 1}-${prod.tenantId}-${prod.productId}-${safeSlug}`,
+        ...prod,
+        rank: idx + 1,
+      };
+    });
   }
 }

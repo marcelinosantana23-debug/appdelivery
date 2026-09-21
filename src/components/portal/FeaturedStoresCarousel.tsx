@@ -1,27 +1,52 @@
 import { useRef, useMemo } from "react";
-import { Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
-import type { Tenant } from "@/types";
+import { Sparkles, ChevronLeft, ChevronRight, Trophy } from "lucide-react";
+import type { Tenant, FeaturedStoreRanked } from "@/types";
+import { useStore } from "@/context/StoreContext";
 import { StoreCard } from "./StoreCard";
 
 interface FeaturedStoresCarouselProps {
-  tenants: Tenant[];
+  tenants?: Tenant[];
+  stores?: FeaturedStoreRanked[];
   onSelectStore: (slug: string) => void;
 }
 
-export function FeaturedStoresCarousel({ tenants, onSelectStore }: FeaturedStoresCarouselProps) {
+export function FeaturedStoresCarousel({
+  tenants: propTenants,
+  stores: propStores,
+  onSelectStore,
+}: FeaturedStoresCarouselProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { featuredStoresRanked, tenants: contextTenants } = useStore();
 
-  // Exibe apenas lojas marcadas como destaque/patrocinadas, ordenadas por prioridade decrescente
+  // Exibe apenas lojas com is_featured = true, ranqueadas no D1 por histórico de vendas (COUNT(orders.id)).
+  // A loja com MAIOR número de pedidos concluídos ocupa AUTOMATICAMENTE a 1ª posição (#1).
   const featuredStores = useMemo(() => {
-    return (tenants || [])
+    if (propStores && propStores.length > 0) {
+      return propStores;
+    }
+
+    if (featuredStoresRanked && featuredStoresRanked.length > 0) {
+      return featuredStoresRanked;
+    }
+
+    const source = propTenants && propTenants.length > 0 ? propTenants : contextTenants;
+    return (source || [])
       .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive")
       .sort((a, b) => {
+        const aCompleted = a.completedOrdersCount || 0;
+        const bCompleted = b.completedOrdersCount || 0;
+        if (bCompleted !== aCompleted) return bCompleted - aCompleted;
+
+        const aSales = a.salesCount || a.orderCount || 0;
+        const bSales = b.salesCount || b.orderCount || 0;
+        if (bSales !== aSales) return bSales - aSales;
+
         const aPri = a.priorityOrder || 0;
         const bPri = b.priorityOrder || 0;
         if (aPri !== bPri) return bPri - aPri;
         return (b.createdAt || 0) - (a.createdAt || 0);
       });
-  }, [tenants]);
+  }, [propStores, featuredStoresRanked, propTenants, contextTenants]);
 
   if (!featuredStores || featuredStores.length === 0) return null;
 
@@ -33,7 +58,7 @@ export function FeaturedStoresCarousel({ tenants, onSelectStore }: FeaturedStore
   };
 
   return (
-    <section className="mt-6">
+    <section id="featured-stores-carousel" className="mt-6">
       {/* Cabeçalho do Carrossel com botões de navegação */}
       <div className="flex items-center justify-between px-4 sm:px-0 mb-3">
         <div className="flex items-center gap-2">
@@ -45,12 +70,13 @@ export function FeaturedStoresCarousel({ tenants, onSelectStore }: FeaturedStore
               <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight">
                 Lojas em Destaque
               </h2>
-              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                Patrocinadas
+              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                <Trophy className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                <span>Patrocinadas por Vendas</span>
               </span>
             </div>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 hidden sm:block">
-              Os estabelecimentos parceiros em evidência no Top Food
+              Lojas patrocinadas ordenadas automaticamente pelo volume histórico de pedidos
             </p>
           </div>
         </div>
@@ -83,7 +109,7 @@ export function FeaturedStoresCarousel({ tenants, onSelectStore }: FeaturedStore
       >
         {featuredStores.map((store, index) => (
           <StoreCard
-            key={store.id || store.slug}
+            key={`featured-${store.id || store.slug}-${index}`}
             tenant={store}
             variant="carousel"
             rank={index + 1}
