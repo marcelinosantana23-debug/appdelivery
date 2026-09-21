@@ -1,5 +1,6 @@
 import { Search, Sparkles, Store, UtensilsCrossed, ShieldCheck } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
+import { useStore } from "@/context/StoreContext";
 
 interface PortalHeaderProps {
   searchQuery: string;
@@ -14,14 +15,26 @@ export function PortalHeader({
   onStoreAdminClick,
   totalStores,
 }: PortalHeaderProps) {
+  const { platformSettings } = useStore();
+
+  const bannerImg =
+    platformSettings?.bannerUrl?.trim() ||
+    "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1400&q=80";
+  const logoImg = platformSettings?.logoUrl?.trim() || "";
+  const heroTitle = platformSettings?.heroTitle?.trim() || "Top Food - O Portal do Delivery";
+  const heroSubtitle =
+    platformSettings?.heroSubtitle?.trim() ||
+    "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.";
+  const primaryColor = platformSettings?.primaryColor?.trim() || "#E63946";
+
   return (
     <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
       {/* 1. BANNER DO PORTAL TOP FOOD (Mesmo layout e proporção das vitrines) */}
       <div className="relative h-44 w-full overflow-hidden bg-slate-900 sm:h-56 md:h-64">
         {/* Imagem de Capa Marketplace */}
         <img
-          src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1400&q=80"
-          alt="Top Food - O Portal do Delivery"
+          src={bannerImg}
+          alt={heroTitle}
           className="h-full w-full object-cover object-center transition-transform duration-700 hover:scale-105"
         />
 
@@ -57,17 +70,43 @@ export function PortalHeader({
         </div>
       </div>
 
-      {/* 2. INFORMAÇÕES DO PORTAL (Avatar TF sobreposto com o mesmo layout da vitrine) */}
+      {/* 2. INFORMAÇÕES DO PORTAL (Avatar TF ou Logo oficial sobreposta com o mesmo layout da vitrine) */}
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 pb-5">
         <div className="relative -mt-10 sm:-mt-12 flex items-end gap-3.5 sm:gap-4">
-          {/* Logo: Ícone do Top Food (TF) */}
+          {/* Logo Oficial ou Ícone do Top Food (TF) */}
           <div
             id="topfood-portal-logo"
-            className="relative z-10 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white dark:border-slate-900 bg-gradient-to-br from-red-600 via-rose-600 to-amber-500 text-white shadow-xl select-none"
+            className="relative z-10 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white dark:border-slate-900 shadow-xl select-none bg-slate-950"
+            style={{
+              boxShadow: `0 8px 24px -4px ${primaryColor}40`,
+            }}
           >
-            <div className="text-center font-black leading-none">
-              <span className="text-2xl sm:text-3xl tracking-tighter">TF</span>
-              <span className="block text-[8px] font-bold tracking-widest text-amber-200 uppercase">Delivery</span>
+            {logoImg ? (
+              <img
+                src={logoImg}
+                alt="Logo Oficial Top Food"
+                className="h-full w-full object-cover object-center"
+                onError={(e) => {
+                  // Fallback se imagem quebrar
+                  e.currentTarget.style.display = "none";
+                  const fallback = document.getElementById("tf-logo-fallback");
+                  if (fallback) fallback.style.display = "flex";
+                }}
+              />
+            ) : null}
+            <div
+              id="tf-logo-fallback"
+              className={`h-full w-full flex items-center justify-center text-white ${
+                logoImg ? "hidden" : "flex"
+              }`}
+              style={{
+                backgroundColor: primaryColor,
+              }}
+            >
+              <div className="text-center font-black leading-none">
+                <span className="text-2xl sm:text-3xl tracking-tighter">TF</span>
+                <span className="block text-[8px] font-bold tracking-widest text-amber-200 uppercase">Delivery</span>
+              </div>
             </div>
           </div>
 
@@ -75,15 +114,22 @@ export function PortalHeader({
           <div className="flex-1 min-w-0 pb-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white">
-                Top Food - O Portal do Delivery
+                {heroTitle}
               </h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-400">
+              <span
+                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold"
+                style={{
+                  backgroundColor: `${primaryColor}15`,
+                  borderColor: `${primaryColor}40`,
+                  color: primaryColor,
+                }}
+              >
                 <ShieldCheck className="h-3 w-3" />
                 Multi-Lojas
               </span>
             </div>
             <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.
+              {heroSubtitle}
             </p>
           </div>
         </div>
@@ -98,7 +144,10 @@ export function PortalHeader({
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Buscar por lanchonete, pizzaria, açaí, burger, comida..."
-              className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80 pl-10 pr-4 py-2.5 text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition focus:border-primary focus:bg-white dark:focus:bg-slate-800"
+              className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80 pl-10 pr-4 py-2.5 text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition focus:bg-white dark:focus:bg-slate-800"
+              style={{
+                borderColor: undefined,
+              }}
             />
             {searchQuery && (
               <button
@@ -114,7 +163,7 @@ export function PortalHeader({
           {/* Contador de Lojas */}
           <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
             <span className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+              <Sparkles className="h-3.5 w-3.5" style={{ color: primaryColor }} />
               {totalStores} {totalStores === 1 ? "loja parceira" : "lojas parceiras"}
             </span>
           </div>

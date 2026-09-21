@@ -22,6 +22,16 @@ export function CategoryStoreSection({
 
   if (!tenants || tenants.length === 0) return null;
 
+  const sortedTenants = [...tenants].sort((a, b) => {
+    const aFeat = a.isFeatured ? 1 : 0;
+    const bFeat = b.isFeatured ? 1 : 0;
+    if (aFeat !== bFeat) return bFeat - aFeat;
+    const aPri = a.priorityOrder || 0;
+    const bPri = b.priorityOrder || 0;
+    if (aPri !== bPri) return bPri - aPri;
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+
   const scroll = (direction: "left" | "right") => {
     if (containerRef.current) {
       const scrollAmount = direction === "left" ? -320 : 320;
@@ -97,7 +107,7 @@ export function CategoryStoreSection({
         ref={containerRef}
         className="flex gap-3.5 overflow-x-auto overflow-y-hidden pb-2.5 px-1 sm:px-0 scrollbar-none snap-x overscroll-x-contain"
       >
-        {tenants.map((store) => (
+        {sortedTenants.map((store) => (
           <StoreCard
             key={store.id || store.slug}
             tenant={store}

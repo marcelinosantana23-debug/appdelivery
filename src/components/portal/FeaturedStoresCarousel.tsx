@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { Flame, ChevronLeft, ChevronRight } from "lucide-react";
+import { useRef, useMemo } from "react";
+import { Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Tenant } from "@/types";
 import { StoreCard } from "./StoreCard";
 
@@ -11,7 +11,19 @@ interface FeaturedStoresCarouselProps {
 export function FeaturedStoresCarousel({ tenants, onSelectStore }: FeaturedStoresCarouselProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  if (!tenants || tenants.length === 0) return null;
+  // Exibe apenas lojas marcadas como destaque/patrocinadas, ordenadas por prioridade decrescente
+  const featuredStores = useMemo(() => {
+    return (tenants || [])
+      .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive")
+      .sort((a, b) => {
+        const aPri = a.priorityOrder || 0;
+        const bPri = b.priorityOrder || 0;
+        if (aPri !== bPri) return bPri - aPri;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+  }, [tenants]);
+
+  if (!featuredStores || featuredStores.length === 0) return null;
 
   const scroll = (direction: "left" | "right") => {
     if (containerRef.current) {
@@ -25,15 +37,20 @@ export function FeaturedStoresCarousel({ tenants, onSelectStore }: FeaturedStore
       {/* Cabeçalho do Carrossel com botões de navegação */}
       <div className="flex items-center justify-between px-4 sm:px-0 mb-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400">
-            <Flame className="h-4 w-4 fill-red-500 text-red-500 animate-pulse" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+            <Sparkles className="h-4 w-4 fill-amber-500 text-amber-500 animate-pulse" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight">
-              Mais Pedidos da Semana
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight">
+                Lojas em Destaque
+              </h2>
+              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                Patrocinadas
+              </span>
+            </div>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 hidden sm:block">
-              Os estabelecimentos favoritos e mais procurados da plataforma
+              Os estabelecimentos parceiros em evidência no Top Food
             </p>
           </div>
         </div>
@@ -64,7 +81,7 @@ export function FeaturedStoresCarousel({ tenants, onSelectStore }: FeaturedStore
         ref={containerRef}
         className="flex gap-3.5 overflow-x-auto overflow-y-hidden pb-3 px-4 sm:px-0 scrollbar-none snap-x overscroll-x-contain"
       >
-        {tenants.map((store, index) => (
+        {featuredStores.map((store, index) => (
           <StoreCard
             key={store.id || store.slug}
             tenant={store}

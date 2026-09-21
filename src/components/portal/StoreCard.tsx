@@ -1,4 +1,4 @@
-import { Star, Clock, Bike, ArrowRight } from "lucide-react";
+import { Star, Clock, Bike, ArrowRight, Sparkles } from "lucide-react";
 import type { Tenant } from "@/types";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
@@ -40,7 +40,11 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
       <div
         id={`store-card-carousel-${tenant.slug}`}
         onClick={handleCardClick}
-        className="group relative flex w-[280px] sm:w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer"
+        className={`group relative flex w-[280px] sm:w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer ${
+          tenant.isFeatured
+            ? "border-amber-400/60 dark:border-amber-500/40 shadow-amber-500/5 ring-1 ring-amber-500/20"
+            : "border-gray-200/80 dark:border-slate-800"
+        }`}
       >
         {/* Banner com Foto da Loja */}
         <div className="relative aspect-16/9 w-full overflow-hidden bg-slate-900">
@@ -59,13 +63,20 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
 
-          {/* Ranking Badge opcional (ex: #1 Mais Pedido) */}
-          {rank !== undefined && (
-            <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-extrabold text-white shadow-md backdrop-blur-xs">
-              <span>#{rank}</span>
-              <span className="hidden sm:inline">Mais Pedido</span>
-            </div>
-          )}
+          {/* Badges no topo do Banner */}
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+            {tenant.isFeatured && (
+              <div className="flex items-center gap-1 rounded-full bg-amber-500 text-slate-950 px-2.5 py-0.5 text-[10px] font-extrabold shadow-md backdrop-blur-xs">
+                <Sparkles className="h-3 w-3 fill-slate-950" />
+                <span>Patrocinado</span>
+              </div>
+            )}
+            {rank !== undefined && (
+              <div className="flex items-center gap-1 rounded-full bg-red-600/95 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-md backdrop-blur-xs">
+                <span>#{rank}</span>
+              </div>
+            )}
+          </div>
 
           {/* Status Badge */}
           <div className="absolute top-2.5 right-2.5">
@@ -89,10 +100,18 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
         <div className="flex flex-1 flex-col justify-between p-3.5 pt-4">
           <div>
             <div className="flex items-center justify-between gap-1">
-              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:text-gray-300">
-                <span>{catInfo.icon}</span>
-                <span>{catInfo.label}</span>
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+                  <span>{catInfo.icon}</span>
+                  <span>{catInfo.label}</span>
+                </span>
+                {tenant.isFeatured && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                    <Sparkles className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                    <span>⭐ Destaque</span>
+                  </span>
+                )}
+              </div>
 
               {/* Avaliação */}
               <div className="flex items-center gap-1 text-xs font-bold text-amber-500 dark:text-amber-400">
@@ -146,7 +165,11 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
     <div
       id={`store-card-grid-${tenant.slug}`}
       onClick={handleCardClick}
-      className="group relative flex flex-col sm:flex-row overflow-hidden rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-300 dark:hover:border-slate-700 cursor-pointer"
+      className={`group relative flex flex-col sm:flex-row overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-sm transition-all duration-300 hover:shadow-md cursor-pointer ${
+        tenant.isFeatured
+          ? "border-amber-400/60 dark:border-amber-500/40 shadow-amber-500/5 ring-1 ring-amber-500/20 hover:border-amber-400"
+          : "border-gray-200/80 dark:border-slate-800 hover:border-gray-300 dark:hover:border-slate-700"
+      }`}
     >
       {/* Banner / Foto */}
       <div className="relative h-36 sm:h-auto sm:w-44 shrink-0 overflow-hidden bg-slate-900">
@@ -161,6 +184,14 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
           <div className="h-full w-full bg-gradient-to-br from-red-600 to-amber-500" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-black/60 to-transparent" />
+
+        {/* Patrocinado Badge no banner do grid */}
+        {tenant.isFeatured && (
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 rounded-full bg-amber-500 text-slate-950 px-2.5 py-0.5 text-[10px] font-extrabold shadow-md backdrop-blur-xs">
+            <Sparkles className="h-3 w-3 fill-slate-950" />
+            <span>Patrocinado</span>
+          </div>
+        )}
 
         {/* Logo Avatar sobreposta */}
         <div className="absolute bottom-2.5 left-2.5 sm:bottom-auto sm:top-2.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border-2 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-xl shadow-md">
@@ -184,10 +215,18 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
       <div className="flex flex-1 flex-col justify-between p-4">
         <div>
           <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300">
-              <span>{catInfo.icon}</span>
-              <span>{catInfo.label}</span>
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                <span>{catInfo.icon}</span>
+                <span>{catInfo.label}</span>
+              </span>
+              {tenant.isFeatured && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                  <Sparkles className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                  <span>⭐ Destaque</span>
+                </span>
+              )}
+            </div>
 
             {/* Avaliação */}
             <div className="flex items-center gap-1 text-xs font-bold text-amber-500 dark:text-amber-400">

@@ -12,6 +12,7 @@ import type {
   FinancialReportData,
   DailyRevenueItem,
   PaymentBreakdownItem,
+  PlatformSettings,
 } from "./types";
 import { mockProducts } from "../data/mockData";
 import { orderEvents } from "./events";
@@ -42,6 +43,8 @@ const initialTenants: Tenant[] = [
     themeMode: "light",
     menuLayout: "list",
     showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 10,
     businessType: "Lanchonetes",
     rating: 4.9,
     ratingCount: 184,
@@ -74,6 +77,8 @@ const initialTenants: Tenant[] = [
     themeMode: "light",
     menuLayout: "list",
     showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 5,
     businessType: "Lanchonetes",
     rating: 4.8,
     ratingCount: 126,
@@ -908,6 +913,15 @@ export const defaultEstablishmentCategories: EstablishmentCategory[] = [
   { id: "distribuidoras", name: "Distribuidoras", icon: "🍺", order: 7, order_index: 7, active: true },
 ];
 
+export const defaultPlatformSettings: PlatformSettings = {
+  logoUrl: "",
+  bannerUrl: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1400&q=80",
+  heroTitle: "Top Food - O Portal do Delivery",
+  heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
+  primaryColor: "#E63946",
+  updatedAt: Date.now(),
+};
+
 // In-memory data store for Node.js / preview runtime (with persistence)
 class MemoryStore {
   tenants: Tenant[] = [...initialTenants];
@@ -917,6 +931,7 @@ class MemoryStore {
   establishmentCategories: EstablishmentCategory[] = [...defaultEstablishmentCategories];
   orders: Order[] = [...initialOrders];
   customers: Customer[] = [...initialCustomers];
+  platformSettings: PlatformSettings = { ...defaultPlatformSettings };
 
   // Helper to slugify
   slugify(text: string): string {
@@ -981,7 +996,14 @@ export class Database {
           accent_color TEXT DEFAULT '#FCBF49',
           status TEXT DEFAULT 'active',
           is_open INTEGER DEFAULT 1,
+          is_featured INTEGER DEFAULT 0,
+          priority_order INTEGER DEFAULT 0,
           created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS platform_settings (
+          id TEXT PRIMARY KEY,
+          settings_json TEXT NOT NULL,
           updated_at INTEGER NOT NULL
         )`,
         `CREATE TABLE IF NOT EXISTS users (
@@ -1100,6 +1122,8 @@ export class Database {
         "ALTER TABLE users ADD COLUMN tenant_id TEXT",
         "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
         "ALTER TABLE tenants ADD COLUMN business_type TEXT DEFAULT 'Lanchonetes'",
+        "ALTER TABLE tenants ADD COLUMN is_featured INTEGER DEFAULT 0",
+        "ALTER TABLE tenants ADD COLUMN priority_order INTEGER DEFAULT 0",
         "ALTER TABLE establishment_categories ADD COLUMN order_index INTEGER DEFAULT 0",
         "ALTER TABLE establishment_categories ADD COLUMN active INTEGER DEFAULT 1"
       ];
@@ -1112,14 +1136,16 @@ export class Database {
         }
       }
 
-      // 3. Índices de performance
+      // 3. Índices de performance e Views
       const indexQueries = [
         "CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug)",
+        "CREATE INDEX IF NOT EXISTS idx_tenants_featured ON tenants(is_featured, priority_order)",
         "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
         "CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id)",
         "CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id)",
         "CREATE INDEX IF NOT EXISTS idx_establishment_categories_order ON establishment_categories(order_index)",
-        "CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id)"
+        "CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id)",
+        "CREATE VIEW IF NOT EXISTS stores AS SELECT * FROM tenants"
       ];
 
       for (const idx of indexQueries) {
@@ -1171,8 +1197,9 @@ export class Database {
           delivery_fee, min_order, estimated_time, address, hours, tagline,
           announcement, logo, banner, banner_image, primary_color, secondary_color,
           primary_dark, primary_light, accent_color, status, is_open,
+          is_featured, priority_order,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           t.id,
@@ -1200,12 +1227,56 @@ export class Database {
           t.accentColor,
           t.status,
           t.isOpen ? 1 : 0,
+          t.isFeatured ? 1 : 0,
+          t.priorityOrder || 0,
           t.createdAt,
           t.updatedAt
         )
         .run();
     } catch {
-      // ignore
+      try {
+        await this.env.DB.prepare(
+          `INSERT OR IGNORE INTO tenants (
+            id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
+            delivery_fee, min_order, estimated_time, address, hours, tagline,
+            announcement, logo, banner, banner_image, primary_color, secondary_color,
+            primary_dark, primary_light, accent_color, status, is_open,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            t.id,
+            t.name,
+            t.slug,
+            t.email,
+            t.phone || "",
+            t.whatsapp,
+            t.pixKey,
+            t.pixKeyType,
+            t.deliveryFee,
+            0,
+            "30-45 min",
+            t.address,
+            t.hours,
+            t.tagline,
+            t.announcement || "",
+            t.logo,
+            t.bannerImage || "",
+            t.bannerImage || "",
+            t.primaryColor,
+            t.secondaryColor || "#1E293B",
+            t.primaryDark,
+            t.primaryLight,
+            t.accentColor,
+            t.status,
+            t.isOpen ? 1 : 0,
+            t.createdAt,
+            t.updatedAt
+          )
+          .run();
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -1288,11 +1359,30 @@ export class Database {
     await this.ensureTables();
     if (this.env?.DB) {
       try {
-        const res = await this.env.DB.prepare(
-          "SELECT * FROM tenants ORDER BY created_at DESC"
-        ).all<any>();
+        let res: any;
+        try {
+          res = await this.env.DB.prepare(
+            "SELECT * FROM tenants ORDER BY is_featured DESC, priority_order DESC, created_at DESC"
+          ).all<any>();
+        } catch {
+          res = await this.env.DB.prepare(
+            "SELECT * FROM tenants ORDER BY created_at DESC"
+          ).all<any>();
+        }
         if (res.results && res.results.length > 0) {
           const d1Tenants = res.results.map((r: any) => this.mapTenantRow(r));
+          d1Tenants.sort((a: Tenant, b: Tenant) => {
+            const aFeat = Boolean(a.isFeatured);
+            const bFeat = Boolean(b.isFeatured);
+            if (aFeat && !bFeat) return -1;
+            if (!aFeat && bFeat) return 1;
+            if (aFeat && bFeat) {
+              const aOrder = Number(a.priorityOrder) || 0;
+              const bOrder = Number(b.priorityOrder) || 0;
+              if (aOrder !== bOrder) return bOrder - aOrder;
+            }
+            return (b.createdAt || 0) - (a.createdAt || 0);
+          });
           // Sincroniza store em memória para manter consistência
           for (const dt of d1Tenants) {
             const idx = globalStore.tenants.findIndex((t) => t.id === dt.id || t.slug === dt.slug);
@@ -1308,7 +1398,20 @@ export class Database {
         console.warn("D1 query failed, using memory store:", e);
       }
     }
-    return [...globalStore.tenants];
+    const memTenants = [...globalStore.tenants];
+    memTenants.sort((a, b) => {
+      const aFeat = Boolean(a.isFeatured);
+      const bFeat = Boolean(b.isFeatured);
+      if (aFeat && !bFeat) return -1;
+      if (!aFeat && bFeat) return 1;
+      if (aFeat && bFeat) {
+        const aOrder = Number(a.priorityOrder) || 0;
+        const bOrder = Number(b.priorityOrder) || 0;
+        if (aOrder !== bOrder) return bOrder - aOrder;
+      }
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+    return memTenants;
   }
 
   async getTenantByIdOrSlug(idOrSlug: string): Promise<Tenant | null> {
@@ -1555,9 +1658,23 @@ export class Database {
     const tenant = await this.getTenantByIdOrSlug(id);
     if (!tenant) return null;
 
+    const isFeaturedVal = partial.isFeatured !== undefined
+      ? Boolean(partial.isFeatured)
+      : ((partial as any).is_featured !== undefined
+          ? Boolean((partial as any).is_featured)
+          : (tenant.isFeatured ?? false));
+
+    const priorityOrderVal = partial.priorityOrder !== undefined
+      ? Number(partial.priorityOrder)
+      : ((partial as any).priority_order !== undefined
+          ? Number((partial as any).priority_order)
+          : (tenant.priorityOrder ?? 0));
+
     const updated: Tenant = {
       ...tenant,
       ...partial,
+      isFeatured: isFeaturedVal,
+      priorityOrder: priorityOrderVal,
       updatedAt: Date.now(),
     };
 
@@ -1568,7 +1685,8 @@ export class Database {
             name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
             delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
             logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-            accent_color = ?, business_type = ?, status = ?, is_open = ?, updated_at = ?
+            accent_color = ?, business_type = ?, status = ?, is_open = ?,
+            is_featured = ?, priority_order = ?, updated_at = ?
           WHERE id = ?`
         )
           .bind(
@@ -1589,12 +1707,14 @@ export class Database {
             updated.businessType || "Lanchonetes",
             updated.status,
             updated.isOpen ? 1 : 0,
+            updated.isFeatured ? 1 : 0,
+            updated.priorityOrder || 0,
             updated.updatedAt,
             tenant.id
           )
           .run();
       } catch {
-        // Fallback in case D1 table does not have banner_image column yet
+        // Fallback in case D1 table does not have banner_image or is_featured column yet
         try {
           await this.env.DB.prepare(
             `UPDATE tenants SET 
@@ -1805,6 +1925,86 @@ export class Database {
       (c) => c.id !== id
     );
     return true;
+  }
+
+  // ===================== PLATFORM APPEARANCE & SETTINGS (CLOUDFLARE D1 / KV) =====================
+
+  async getPlatformSettings(): Promise<PlatformSettings> {
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        const cached = await kv.get("platform:settings");
+        if (cached) {
+          const parsed = JSON.parse(cached) as PlatformSettings;
+          return { ...defaultPlatformSettings, ...parsed };
+        }
+      } catch (e) {
+        console.warn("KV getPlatformSettings error:", e);
+      }
+    }
+
+    await this.ensureTables();
+    if (this.env?.DB) {
+      try {
+        const row = await this.env.DB.prepare(
+          "SELECT settings_json FROM platform_settings WHERE id = 'main' LIMIT 1"
+        ).first<{ settings_json: string }>();
+        if (row?.settings_json) {
+          const parsed = JSON.parse(row.settings_json) as PlatformSettings;
+          const merged = { ...defaultPlatformSettings, ...parsed };
+          globalStore.platformSettings = merged;
+          if (kv) {
+            try {
+              await kv.put("platform:settings", JSON.stringify(merged));
+            } catch (err) {
+              console.warn("KV put platform:settings error:", err);
+            }
+          }
+          return merged;
+        }
+      } catch (e) {
+        console.warn("D1 getPlatformSettings error:", e);
+      }
+    }
+
+    return { ...globalStore.platformSettings };
+  }
+
+  async updatePlatformSettings(partial: Partial<PlatformSettings>): Promise<PlatformSettings> {
+    const current = await this.getPlatformSettings();
+    const updated: PlatformSettings = {
+      ...current,
+      ...partial,
+      updatedAt: Date.now(),
+    };
+
+    globalStore.platformSettings = updated;
+
+    await this.ensureTables();
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          `INSERT INTO platform_settings (id, settings_json, updated_at) 
+           VALUES ('main', ?, ?)
+           ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, updated_at = excluded.updated_at`
+        )
+          .bind(JSON.stringify(updated), updated.updatedAt || Date.now())
+          .run();
+      } catch (e) {
+        console.warn("D1 updatePlatformSettings error:", e);
+      }
+    }
+
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put("platform:settings", JSON.stringify(updated));
+      } catch (e) {
+        console.warn("KV updatePlatformSettings error:", e);
+      }
+    }
+
+    return updated;
   }
 
   // ===================== USERS & AUTH =====================
@@ -3146,6 +3346,8 @@ export class Database {
       themeMode: row.theme_mode === "dark" ? "dark" : "light",
       menuLayout: row.menu_layout === "grid" ? "grid" : "list",
       showFeaturedCarousel: row.show_featured_carousel !== undefined ? Boolean(row.show_featured_carousel) : true,
+      isFeatured: row.is_featured !== undefined ? Boolean(row.is_featured) : Boolean(row.isFeatured || false),
+      priorityOrder: Number(row.priority_order !== undefined ? row.priority_order : (row.priorityOrder || 0)),
       businessType: row.business_type || row.category || "Lanchonetes",
       rating: Number(row.rating) || 4.9,
       ratingCount: Number(row.rating_count) || 120,

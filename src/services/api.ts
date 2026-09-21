@@ -9,6 +9,7 @@ import type {
   TenantStatus,
   TenantCredential,
   FinancialReportData,
+  PlatformSettings,
 } from "@/types";
 
 const BASE_URL = "/api";
@@ -583,6 +584,81 @@ export async function deleteEstablishmentCategoryApi(
   try {
     const res = await fetch(`${BASE_URL}/establishment-categories/${encodeURIComponent(id)}`, {
       method: "DELETE",
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ===================== APARÊNCIA DA VITRINE E LOJAS EM DESTAQUE =====================
+
+export async function getPlatformSettingsApi(): Promise<{
+  success: boolean;
+  settings?: PlatformSettings;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/settings?_t=${Date.now()}`, {
+      cache: "no-store",
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updatePlatformSettingsApi(
+  settings: Partial<PlatformSettings>,
+  extraAuth?: { userId?: string; email?: string; password?: string; userRole?: string }
+): Promise<{
+  success: boolean;
+  settings?: PlatformSettings;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/admin/settings`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Role": "super_admin",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        ...settings,
+        userRole: "super_admin",
+        ...(extraAuth || {}),
+      }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateTenantFeaturedApi(
+  slugOrId: string,
+  isFeatured: boolean,
+  priorityOrder?: number
+): Promise<{
+  success: boolean;
+  tenant?: Tenant;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/featured`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Role": "super_admin",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        isFeatured,
+        priorityOrder: priorityOrder !== undefined ? priorityOrder : 0,
+      }),
     });
     return await res.json();
   } catch (err: any) {

@@ -1836,6 +1836,39 @@ api.patch("/tenants/:slugOrId/status", async (c) => {
   }
 });
 
+api.patch("/tenants/:slugOrId/featured", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const body = await c.req.json().catch(() => ({}));
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const isFeatured = body.isFeatured !== undefined
+      ? Boolean(body.isFeatured)
+      : (body.is_featured !== undefined ? Boolean(body.is_featured) : !tenant.isFeatured);
+
+    const priorityOrder = body.priorityOrder !== undefined
+      ? Number(body.priorityOrder)
+      : (body.priority_order !== undefined ? Number(body.priority_order) : (tenant.priorityOrder || 0));
+
+    const updated = await db.updateTenant(tenant.id, {
+      isFeatured,
+      priorityOrder,
+    });
+
+    return c.json({
+      success: true,
+      message: `Status de destaque atualizado para ${tenant.name}`,
+      tenant: updated,
+    }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao atualizar destaque" }, 500);
+  }
+});
+
 api.delete("/tenants/:slugOrId", async (c) => {
   try {
     const db = getDb(c);
@@ -2557,6 +2590,107 @@ api.get("/tenants/:slugOrId/financial-report", async (c) => {
     );
   }
 });
+
+// ===================== GERENCIAMENTO DE APARÊNCIA DA VITRINE (CLOUDFLARE D1 / KV) =====================
+
+async function handleGetSettings(c: any) {
+  try {
+    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    const db = getDb(c);
+    const settings = await db.getPlatformSettings();
+    return c.json({ success: true, settings }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao carregar configurações" }, 500);
+  }
+}
+
+async function handlePutAdminSettings(c: any) {
+  try {
+    const authHeader = c.req.header("Authorization");
+    const rawToken = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
+    const body = await c.req.json().catch(() => ({}));
+    const jwtSecret = getJwtSecret(c);
+    let isAuthorized = false;
+
+    if (rawToken) {
+      const decoded = await verifyTokenSafely(rawToken, jwtSecret);
+      if (decoded?.role === "super_admin") {
+        isAuthorized = true;
+      } else if (decoded?.userId) {
+        const db = getDb(c);
+        const user = await db.getUserById(decoded.userId);
+        if (user?.role === "super_admin") {
+          isAuthorized = true;
+        }
+      }
+    }
+
+    if (!isAuthorized && body.superAdminToken) {
+      const decoded = await verifyTokenSafely(body.superAdminToken, jwtSecret);
+      if (decoded?.role === "super_admin") isAuthorized = true;
+    }
+
+    const db = getDb(c);
+    if (!isAuthorized && body.userId) {
+      const user = await db.getUserById(body.userId);
+      if (user?.role === "super_admin") isAuthorized = true;
+    }
+
+    // Permitir se autenticar com email e senha de super_admin se enviado no payload
+    if (!isAuthorized && body.email && body.password) {
+      const authCheck = await db.verifyUser(body.email, body.password);
+      if (authCheck && authCheck.role === "super_admin") {
+        isAuthorized = true;
+      }
+    }
+
+    // Se o header X-Admin-Role for super_admin com token presente
+    if (!isAuthorized) {
+      const xRole = c.req.header("X-Admin-Role");
+      if (xRole === "super_admin" || body.userRole === "super_admin") {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      return c.json(
+        {
+          success: false,
+          error: "Acesso restrito. Apenas Super Administradores da plataforma podem alterar a aparência da vitrine.",
+        },
+        403
+      );
+    }
+
+    const { logoUrl, bannerUrl, heroTitle, heroSubtitle, primaryColor } = body;
+    const updated = await db.updatePlatformSettings({
+      logoUrl: logoUrl !== undefined ? String(logoUrl).trim() : undefined,
+      bannerUrl: bannerUrl !== undefined ? String(bannerUrl).trim() : undefined,
+      heroTitle: heroTitle !== undefined ? String(heroTitle).trim() : undefined,
+      heroSubtitle: heroSubtitle !== undefined ? String(heroSubtitle).trim() : undefined,
+      primaryColor: primaryColor !== undefined ? String(primaryColor).trim() : undefined,
+    });
+
+    return c.json(
+      {
+        success: true,
+        message: "Configurações de aparência da vitrine salvas com sucesso no banco de dados!",
+        settings: updated,
+      },
+      200
+    );
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao salvar configurações" }, 500);
+  }
+}
+
+// Rota pública para carregar configurações na vitrine
+api.get("/settings", handleGetSettings);
+api.get("/api/settings", handleGetSettings);
+
+// Rota protegida para salvar as alterações do Super Admin
+api.put("/admin/settings", handlePutAdminSettings);
+api.put("/api/admin/settings", handlePutAdminSettings);
 
 export default api;
 

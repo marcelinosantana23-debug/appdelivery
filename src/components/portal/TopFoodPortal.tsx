@@ -24,9 +24,19 @@ export function TopFoodPortal({
   const [activeCategory, setActiveCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Apenas lojas ativas no marketplace
+  // Apenas lojas ativas no marketplace, com destaque/patrocinadas primeiro por prioridade decrescente
   const activeTenants = useMemo(() => {
-    return tenants.filter((t) => t.status !== "inactive");
+    return (tenants || [])
+      .filter((t) => t.status !== "inactive")
+      .sort((a, b) => {
+        const aFeat = a.isFeatured ? 1 : 0;
+        const bFeat = b.isFeatured ? 1 : 0;
+        if (aFeat !== bFeat) return bFeat - aFeat;
+        const aPri = a.priorityOrder || 0;
+        const bPri = b.priorityOrder || 0;
+        if (aPri !== bPri) return bPri - aPri;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
   }, [tenants]);
 
   // Lista consolidada de categorias cadastradas no Cloudflare D1

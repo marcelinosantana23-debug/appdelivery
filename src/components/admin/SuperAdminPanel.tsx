@@ -31,6 +31,7 @@ import {
   List,
   Flame,
   Tag,
+  Loader2,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
@@ -40,6 +41,7 @@ import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
 import { AiMenuImportModal } from "./AiMenuImportModal";
+import { AdminVitrineAppearance } from "./AdminVitrineAppearance";
 
 interface SuperAdminPanelProps {
   onManageStore: (tenant: Tenant) => void;
@@ -62,15 +64,17 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     createEstablishmentCategory,
     deleteEstablishmentCategory,
     refreshEstablishmentCategories,
+    toggleTenantFeatured,
   } = useStore();
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [viewMode, setViewMode] = useState<"cards" | "credentials">("cards");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "featured">("all");
+  const [viewMode, setViewMode] = useState<"cards" | "credentials" | "appearance">("cards");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAiImportModalOpen, setIsAiImportModalOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [togglingFeaturedId, setTogglingFeaturedId] = useState<string | null>(null);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -285,6 +289,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     primaryColor: "#E63946",
     bannerImage: "",
     businessType: "Lanchonetes",
+    isFeatured: false,
+    priorityOrder: 0,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingNewBanner, setIsProcessingNewBanner] = useState(false);
@@ -402,6 +408,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     adminEmail: "",
     adminPassword: "",
     businessType: "Lanchonetes",
+    isFeatured: false,
+    priorityOrder: 0,
   });
   const [isConfigSaving, setIsConfigSaving] = useState(false);
   const [isProcessingConfigBanner, setIsProcessingConfigBanner] = useState(false);
@@ -479,6 +487,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       adminEmail: (tenant as any).adminEmail || tenant.email || `admin@${tenant.slug}.com`,
       adminPassword: (tenant as any).adminPassword || "123456",
       businessType: tenant.businessType || "Lanchonetes",
+      isFeatured: Boolean(tenant.isFeatured),
+      priorityOrder: Number(tenant.priorityOrder) || 0,
     });
     setConfigSuccessMessage("");
     setConfigErrorMessage("");
@@ -527,6 +537,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         menuLayout: configForm.menuLayout,
         showFeaturedCarousel: configForm.showFeaturedCarousel,
         businessType: configForm.businessType || "Lanchonetes",
+        isFeatured: Boolean(configForm.isFeatured),
+        priorityOrder: Number(configForm.priorityOrder) || 0,
       });
 
       if (res.success) {
@@ -562,12 +574,18 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.slug.toLowerCase().includes(search.toLowerCase()) ||
       t.email.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || t.status === statusFilter;
+    const matchStatus =
+      statusFilter === "all"
+        ? true
+        : statusFilter === "featured"
+        ? Boolean(t.isFeatured)
+        : t.status === statusFilter;
     return matchSearch && matchStatus;
   });
 
   const totalTenants = tenants.length;
   const activeTenants = tenants.filter((t) => t.status === "active").length;
+  const featuredTenantsCount = tenants.filter((t) => t.isFeatured).length;
   const totalOrders = tenants.reduce((sum, t) => sum + (t.orderCount || 0), 0);
   const totalRevenue = tenants.reduce((sum, t) => sum + (t.revenue || 0), 0);
 
@@ -610,6 +628,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     try {
       const res = await createNewTenant({
         ...formData,
+        isFeatured: Boolean(formData.isFeatured),
+        priorityOrder: Number(formData.priorityOrder) || 0,
         pixKey: formData.pixKey || formData.email,
         whatsapp: formData.whatsapp || "5511999999999",
       });
@@ -628,6 +648,21 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       setFormError(err.message || "Erro inesperado.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleFeatured = async (tenant: Tenant) => {
+    setTogglingFeaturedId(tenant.id);
+    try {
+      const nextFeatured = !tenant.isFeatured;
+      const res = await toggleTenantFeatured(tenant.id, nextFeatured, tenant.priorityOrder || 0);
+      if (!res.success) {
+        alert(res.error || "Erro ao alterar destaque da loja.");
+      }
+    } catch (err: any) {
+      alert(err.message || "Erro inesperado ao alterar destaque.");
+    } finally {
+      setTogglingFeaturedId(null);
     }
   };
 
@@ -794,6 +829,17 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
             </div>
           </div>
 
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 sm:p-5 min-w-0 overflow-hidden">
+            <div className="flex items-center justify-between text-amber-300">
+              <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">Lojas Destaque</span>
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 shrink-0" />
+            </div>
+            <div className="mt-2 flex flex-wrap items-baseline gap-1.5 sm:gap-2">
+              <span className="text-xl sm:text-3xl font-black text-amber-400">{featuredTenantsCount}</span>
+              <span className="text-[11px] sm:text-xs text-amber-300/80 font-semibold">patrocinadas</span>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-5 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between text-slate-400">
               <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">Lojas Inativas</span>
@@ -861,7 +907,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
           <div>
             <h2 className="text-lg font-bold text-white sm:text-xl">Lanchonetes e Clientes Cadastrados</h2>
             <p className="text-xs text-slate-400">
-              Gerencie instâncias, ative ou pause lojas e acesse o painel individual de cada cliente.
+              Gerencie instâncias, aparência da vitrine, lojas em destaque patrocinadas e credenciais.
             </p>
           </div>
 
@@ -897,6 +943,18 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 Ativas ({activeTenants})
               </button>
               <button
+                onClick={() => setStatusFilter("featured")}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-medium transition ${
+                  statusFilter === "featured"
+                    ? "bg-amber-500/25 text-amber-300 border border-amber-500/40"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="Filtrar apenas lojas em destaque patrocinadas"
+              >
+                <Sparkles className="h-3 w-3 text-amber-400" />
+                <span>Destaques ({featuredTenantsCount})</span>
+              </button>
+              <button
                 onClick={() => setStatusFilter("inactive")}
                 className={`rounded-lg px-2.5 py-1.5 font-medium transition ${
                   statusFilter === "inactive" ? "bg-red-950/80 text-red-300" : "text-slate-400 hover:text-white"
@@ -906,7 +964,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               </button>
             </div>
 
-            {/* View Mode Toggle: Cards vs Credenciais */}
+            {/* View Mode Toggle: Cards vs Credenciais vs Aparência */}
             <div className="flex rounded-xl border border-slate-800 bg-slate-900/80 p-0.5 text-xs">
               <button
                 type="button"
@@ -930,12 +988,27 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 <Key className="h-3.5 w-3.5" />
                 <span>Logins & Senhas ({tenants.length})</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("appearance")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition ${
+                  viewMode === "appearance" ? "bg-amber-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                }`}
+                title="Personalizar logo, banner, título e cor primária da vitrine principal"
+              >
+                <Palette className="h-3.5 w-3.5" />
+                <span>Aparência da Vitrine</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Content Section: Cards Grid OR Credentials Table */}
-        {filteredTenants.length === 0 ? (
+        {/* Content Section: Appearance OR Cards Grid OR Credentials Table */}
+        {viewMode === "appearance" ? (
+          <div className="mt-6">
+            <AdminVitrineAppearance onViewVitrine={onExit} />
+          </div>
+        ) : filteredTenants.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-slate-800 p-12 text-center">
             <Store className="mx-auto h-12 w-12 text-slate-600" />
             <h3 className="mt-3 text-sm font-semibold text-slate-300">Nenhuma lanchonete encontrada</h3>
@@ -964,7 +1037,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 <div>
                   <h3 className="text-sm font-bold text-white">Credenciais de Acesso das Lanchonetes</h3>
                   <p className="text-[11px] text-slate-400">
-                    Gerenciamento direto de e-mails de login e senhas persistidos no Cloudflare D1/KV
+                    Gerenciamento direto de e-mails de login, senhas e status de patrocínio no Cloudflare D1/KV
                   </p>
                 </div>
               </div>
@@ -978,6 +1051,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 <thead className="bg-slate-950/60 uppercase text-[10px] font-bold tracking-wider text-slate-400 border-b border-slate-800">
                   <tr>
                     <th className="px-4 py-3.5">Lanchonete</th>
+                    <th className="px-4 py-3.5">Destaque (Marketing)</th>
                     <th className="px-4 py-3.5">Vitrine Pública</th>
                     <th className="px-4 py-3.5">Login (E-mail / Usuário)</th>
                     <th className="px-4 py-3.5">Senha de Acesso</th>
@@ -1017,6 +1091,33 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                               </div>
                             </div>
                           </div>
+                        </td>
+
+                        {/* Destaque (Marketing Pago) */}
+                        <td className="px-4 py-3.5">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFeatured(t)}
+                            disabled={togglingFeaturedId === t.id}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition ${
+                              t.isFeatured
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                                : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-white hover:border-amber-500/30"
+                            }`}
+                            title="Alternar loja em destaque (patrocinada)"
+                          >
+                            {togglingFeaturedId === t.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                            ) : (
+                              <Sparkles className={`h-3 w-3 ${t.isFeatured ? "text-amber-400 fill-amber-400" : "text-slate-500"}`} />
+                            )}
+                            <span>{t.isFeatured ? "⭐ Destaque" : "Normal"}</span>
+                            {t.isFeatured && (t.priorityOrder || 0) > 0 && (
+                              <span className="font-mono text-[9px] bg-amber-500/30 px-1 rounded text-amber-200">
+                                P{t.priorityOrder}
+                              </span>
+                            )}
+                          </button>
                         </td>
 
                         {/* Vitrine */}
@@ -1206,23 +1307,61 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         </div>
                       </div>
 
-                      {/* Status Badge & Toggle */}
-                      <button
-                        onClick={() => handleStatusToggle(t)}
-                        title={isActive ? "Clique para desativar loja" : "Clique para ativar loja"}
-                        className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold shrink-0 transition ${
-                          isActive
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
-                            : "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20"
-                        }`}
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full ${
-                            isActive ? "bg-emerald-400 animate-pulse" : "bg-red-500"
-                          }`}
-                        />
-                        {isActive ? "Ativa" : "Desativada"}
-                      </button>
+                      {/* Status and Featured Badges & Toggles */}
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          {/* Botão de Destaque / Patrocínio */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFeatured(t)}
+                            disabled={togglingFeaturedId === t.id}
+                            title={
+                              t.isFeatured
+                                ? "Loja em destaque na vitrine (Clique para remover)"
+                                : "Destacar loja na vitrine (Marketing Pago)"
+                            }
+                            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold transition ${
+                              t.isFeatured
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30"
+                                : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-white hover:border-amber-500/40"
+                            }`}
+                          >
+                            {togglingFeaturedId === t.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                            ) : (
+                              <Sparkles
+                                className={`h-3 w-3 ${
+                                  t.isFeatured ? "text-amber-400 fill-amber-400" : "text-slate-500"
+                                }`}
+                              />
+                            )}
+                            <span>{t.isFeatured ? "Destaque" : "Destacar"}</span>
+                            {t.isFeatured && (t.priorityOrder || 0) > 0 && (
+                              <span className="text-[9px] font-mono bg-amber-500/30 px-1 rounded text-amber-200">
+                                P{t.priorityOrder}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* Status Badge & Toggle */}
+                          <button
+                            onClick={() => handleStatusToggle(t)}
+                            title={isActive ? "Clique para desativar loja" : "Clique para ativar loja"}
+                            className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition ${
+                              isActive
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
+                                : "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20"
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                isActive ? "bg-emerald-400 animate-pulse" : "bg-red-500"
+                              }`}
+                            />
+                            {isActive ? "Ativa" : "Pausada"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     <p className="mt-3 text-xs text-slate-400 line-clamp-1">{t.tagline}</p>
@@ -1992,6 +2131,36 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       </button>
                     </div>
                   )}
+                </div>
+
+                {/* Destaque & Marketing Pago (Patrocinada) */}
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Destaque & Marketing Pago (Vitrine Principal)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.isFeatured}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, isFeatured: e.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <span>Destacar na Vitrine (Patrocinada)</span>
+                    </label>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-0.5">Ordem de Prioridade (0, 1, 2...):</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.priorityOrder}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, priorityOrder: Number(e.target.value) || 0 }))}
+                        placeholder="0"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-white outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-2">
@@ -2892,6 +3061,50 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 <p className="text-[11px] text-slate-400">
                   Ao salvar, essas credenciais serão salvas imediatamente no Cloudflare D1 e o lojista poderá entrar no painel com este novo e-mail e senha.
                 </p>
+              </div>
+
+              {/* 6. DESTAQUE E PATROCÍNIO (MARKETING PAGO) */}
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <Sparkles className="h-4 w-4 text-amber-400" />
+                    <span>6. Destaque na Vitrine & Marketing Pago</span>
+                  </div>
+                  <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wider">Patrocinado</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <label className="flex items-center gap-2.5 rounded-xl border border-slate-700 bg-slate-900 p-3 cursor-pointer hover:border-amber-500/50 transition">
+                    <input
+                      type="checkbox"
+                      checked={configForm.isFeatured}
+                      onChange={(e) => setConfigForm((prev) => ({ ...prev, isFeatured: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="block font-bold text-white">⭐ Ativar Loja em Destaque</span>
+                      <span className="text-[11px] text-slate-400">Exibe a loja na seção VIP / Patrocinadas da vitrine</span>
+                    </div>
+                  </label>
+
+                  <div className="rounded-xl border border-slate-700 bg-slate-900 p-3">
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Ordem de Prioridade (Ex: 1 para 1º lugar)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={configForm.priorityOrder}
+                      onChange={(e) =>
+                        setConfigForm((prev) => ({ ...prev, priorityOrder: Number(e.target.value) || 0 }))
+                      }
+                      placeholder="0"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-white outline-none focus:border-amber-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Lojas com destaque ativo e prioridade aparecem primeiro na vitrine do Top Food.
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2 flex items-center gap-3">

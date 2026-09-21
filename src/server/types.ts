@@ -39,6 +39,8 @@ export interface Tenant {
   themeMode?: "light" | "dark";
   menuLayout?: "list" | "grid";
   showFeaturedCarousel?: boolean;
+  isFeatured?: boolean;
+  priorityOrder?: number;
   businessType?: string;
   rating?: number;
   ratingCount?: number;
@@ -46,6 +48,15 @@ export interface Tenant {
   isOpen: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface PlatformSettings {
+  logoUrl?: string;
+  bannerUrl?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  primaryColor?: string;
+  updatedAt?: number;
 }
 
 export interface User {

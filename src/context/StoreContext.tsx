@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential } from "@/types";
+import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
 import {
@@ -29,6 +29,9 @@ import {
   fetchEstablishmentCategoriesApi,
   createEstablishmentCategoryApi,
   deleteEstablishmentCategoryApi,
+  getPlatformSettingsApi,
+  updatePlatformSettingsApi,
+  updateTenantFeaturedApi,
 } from "@/services/api";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { playNewOrderChime } from "@/utils/audio";
@@ -137,6 +140,18 @@ interface StoreContextValue {
     slugOrId: string
   ) => Promise<{ success: boolean; error?: string; credentials?: TenantCredential }>;
   getAllTenantCredentials: () => Promise<{ success: boolean; credentials?: TenantCredential[]; error?: string }>;
+
+  // Platform settings (Vitrine & Marketing)
+  platformSettings: PlatformSettings;
+  refreshPlatformSettings: () => Promise<void>;
+  updatePlatformSettings: (
+    partial: Partial<PlatformSettings>
+  ) => Promise<{ success: boolean; message?: string; error?: string; settings?: PlatformSettings }>;
+  toggleTenantFeatured: (
+    slugOrId: string,
+    isFeatured?: boolean,
+    priorityOrder?: number
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -432,6 +447,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [refreshEstablishmentCategories]
   );
 
+  // Platform Settings (Vitrine e Marketing)
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
+    logoUrl: "",
+    bannerUrl: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1400&q=80",
+    heroTitle: "Top Food - O Portal do Delivery",
+    heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
+    primaryColor: "#E63946",
+  });
+
+  const refreshPlatformSettings = useCallback(async () => {
+    try {
+      const res = await getPlatformSettingsApi();
+      if (res.success && res.settings) {
+        setPlatformSettings((prev) => ({
+          ...prev,
+          ...res.settings,
+        }));
+      }
+    } catch (e) {
+      console.warn("Erro ao buscar configurações da plataforma:", e);
+    }
+  }, []);
+
+  const updatePlatformSettings = useCallback(
+    async (partial: Partial<PlatformSettings>) => {
+      try {
+        const extraAuth = currentUser
+          ? { userId: currentUser.id, email: currentUser.email, userRole: currentUser.role }
+          : undefined;
+        const res = await updatePlatformSettingsApi(partial, extraAuth);
+        if (res.success && res.settings) {
+          setPlatformSettings((prev) => ({
+            ...prev,
+            ...res.settings,
+          }));
+          return { success: true, message: res.message || "Configurações salvas com sucesso!", settings: res.settings };
+        }
+        return { success: false, error: res.error || "Erro ao salvar configurações da vitrine." };
+      } catch (err: any) {
+        return { success: false, error: err.message || "Erro inesperado ao salvar configurações." };
+      }
+    },
+    [currentUser]
+  );
+
+  const toggleTenantFeatured = useCallback(
+    async (slugOrId: string, isFeatured?: boolean, priorityOrder?: number) => {
+      try {
+        const target = tenants.find((t) => t.id === slugOrId || t.slug === slugOrId);
+        const nextFeatured = isFeatured !== undefined ? isFeatured : !(target?.isFeatured);
+        const nextPriority = priorityOrder !== undefined ? priorityOrder : (target?.priorityOrder || 0);
+
+        const res = await updateTenantFeaturedApi(slugOrId, nextFeatured, nextPriority);
+        if (res.success && res.tenant) {
+          await refreshTenants();
+          return { success: true };
+        }
+        return { success: false, error: res.error || "Erro ao atualizar destaque da loja." };
+      } catch (err: any) {
+        return { success: false, error: err.message || "Erro inesperado ao alterar destaque." };
+      }
+    },
+    [tenants, refreshTenants]
+  );
+
   // Load current store data with strict isolation
   const loadStoreBySlug = useCallback(
     async (slug: string) => {
@@ -507,12 +587,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshTenants();
     refreshEstablishmentCategories();
+    refreshPlatformSettings();
     if (currentSlug) {
       loadStoreBySlug(currentSlug);
     } else {
       setIsLoadingStore(false);
     }
-  }, [currentSlug, refreshTenants, refreshEstablishmentCategories, loadStoreBySlug]);
+  }, [currentSlug, refreshTenants, refreshEstablishmentCategories, refreshPlatformSettings, loadStoreBySlug]);
+
+  // Sincroniza cor primária dinâmica da vitrine quando nenhum estabelecimento com tema próprio estiver selecionado
+  useEffect(() => {
+    if (platformSettings.primaryColor) {
+      document.documentElement.style.setProperty("--portal-primary", platformSettings.primaryColor);
+      if (!currentTenant) {
+        document.documentElement.style.setProperty("--color-primary", platformSettings.primaryColor);
+      }
+    }
+  }, [platformSettings.primaryColor, currentTenant]);
 
   // Handle browser back/forward navigation
   useEffect(() => {
@@ -1466,6 +1557,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         createEstablishmentCategory,
         deleteEstablishmentCategory,
         refreshEstablishmentCategories,
+        platformSettings,
+        refreshPlatformSettings,
+        updatePlatformSettings,
+        toggleTenantFeatured,
       }}
     >
       {children}
