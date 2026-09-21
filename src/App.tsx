@@ -18,15 +18,17 @@ import { OfflineIndicator } from "@/components/common/OfflineIndicator";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
+import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
 
-type View = "menu" | "checkout" | "tracking" | "admin" | "superadmin";
+type View = "portal" | "menu" | "checkout" | "tracking" | "admin" | "superadmin";
 
 interface CustomerAppProps {
   onStoreAdminClick: () => void;
   onSuperAdminClick: () => void;
+  onBackToPortal: () => void;
 }
 
-function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps) {
+function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: CustomerAppProps) {
   const {
     products,
     isStoreOpen,
@@ -199,10 +201,17 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
             O endereço acessado não corresponde a nenhuma vitrine ativa ou o link está indisponível.
           </p>
 
-          <div className="mt-6">
+          <div className="mt-6 flex flex-col items-center gap-3">
             <p className="text-xs text-gray-400">
               Por favor, confira o link fornecido pelo estabelecimento para acessar o cardápio.
             </p>
+            <button
+              type="button"
+              onClick={onBackToPortal}
+              className="mt-2 inline-flex items-center gap-2 rounded-xl bg-primary hover:bg-primary-dark px-4 py-2 text-xs font-bold text-white shadow-xs transition active:scale-95 cursor-pointer"
+            >
+              Ir para o Portal Top Food
+            </button>
           </div>
         </div>
       </div>
@@ -236,6 +245,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick }: CustomerAppProps)
       <Header
         onStoreAdminClick={onStoreAdminClick}
         onSuperAdminClick={onSuperAdminClick}
+        onBackToPortal={onBackToPortal}
       />
       <CategoryNav
         activeCategory={activeCategory}
@@ -326,12 +336,11 @@ function AppContent() {
   } = useStore();
 
   const getInitialView = (): View => {
-    if (typeof window === "undefined") return "menu";
+    if (typeof window === "undefined") return "portal";
     const path = window.location.pathname.toLowerCase();
 
     // SEPARAÇÃO CRÍTICA DE ROTAS:
     // Apenas rotas administrativas explícitas podem ativar as telas de login administrativo.
-    // Todas as outras URLs (ex: /loja/:slug, /, /?store=...) abrem estritamente no MODO CLIENTE.
     if (
       path === "/super-admin" ||
       path === "/superadmin" ||
@@ -345,6 +354,19 @@ function AppContent() {
       return "admin";
     }
 
+    // Se houver query param explícito (?loja= ou ?store= ou ?tenant=)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("loja") || params.get("store") || params.get("tenant")) {
+      return "menu";
+    }
+
+    // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
+    const clean = path.replace(/\/+$/, "");
+    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+      return "portal";
+    }
+
+    // Caso contrário, é uma rota direta de vitrine (ex: /ms-preparacoes, /loja/:slug, /burger-town)
     return "menu";
   };
 
@@ -359,9 +381,11 @@ function AppContent() {
             window.history.pushState({ view: "superadmin" }, "", "/super-admin");
           } else if (targetView === "admin") {
             window.history.pushState({ view: "admin" }, "", "/admin");
+          } else if (targetView === "portal") {
+            window.history.pushState({ view: "portal" }, "", "/");
           } else {
-            const slug = targetSlug || currentTenant?.slug || config.slug || "marcelino";
-            window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
+            const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
+            window.history.pushState({ view: "menu", slug }, "", `/${slug}`);
           }
         } catch (err) {
           console.warn("History pushState error:", err);
@@ -388,11 +412,29 @@ function AppContent() {
       } else if (path === "/admin" || path.startsWith("/admin/")) {
         setView("admin");
       } else {
-        setView("menu");
-        // Se a rota for /loja/:slug, sincronizar com o tenant correspondente
-        const match = window.location.pathname.match(/^\/loja\/([^/?#]+)/i);
-        if (match && match[1]) {
-          selectTenant(decodeURIComponent(match[1]).toLowerCase());
+        const clean = path.replace(/\/+$/, "");
+        if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+          const params = new URLSearchParams(window.location.search);
+          const qSlug = params.get("loja") || params.get("store") || params.get("tenant");
+          if (qSlug) {
+            selectTenant(qSlug);
+            setView("menu");
+          } else {
+            setView("portal");
+          }
+        } else {
+          // É uma rota de loja direta (ex: /ms-preparacoes ou /loja/:slug)
+          let slug = "";
+          const match = path.match(/^\/loja\/([^/?#]+)/i);
+          if (match && match[1]) {
+            slug = decodeURIComponent(match[1]).toLowerCase();
+          } else {
+            slug = path.replace(/^\/+|\/+$/g, "");
+          }
+          if (slug) {
+            selectTenant(slug);
+            setView("menu");
+          }
         }
       }
     };
@@ -402,13 +444,27 @@ function AppContent() {
   }, [selectTenant]);
 
   const renderMainView = () => {
+    // 0. TOP FOOD PORTAL VIEW (Marketplace Homepage)
+    if (view === "portal") {
+      return (
+        <TopFoodPortal
+          onSelectStore={(slug) => {
+            selectTenant(slug);
+            navigateTo("menu", slug);
+          }}
+          onStoreAdminClick={() => navigateTo("admin")}
+          onSuperAdminClick={() => navigateTo("superadmin")}
+        />
+      );
+    }
+
     // 1. SUPER ADMIN VIEW
     if (view === "superadmin") {
       // If not authenticated as Super Admin, show the dedicated restricted login screen
       if (!isSuperAdmin) {
         return (
           <SuperAdminLogin
-            onBack={() => navigateTo("menu")}
+            onBack={() => navigateTo("portal")}
             onSuccess={() => setView("superadmin")}
           />
         );
@@ -425,7 +481,7 @@ function AppContent() {
             selectTenant(tenant.slug);
             navigateTo("menu");
           }}
-          onExit={() => navigateTo("menu")}
+          onExit={() => navigateTo("portal")}
         />
       );
     }
@@ -436,7 +492,7 @@ function AppContent() {
       if (!isAdminAuthed) {
         return (
           <StoreAdminLogin
-            onBack={() => navigateTo("menu")}
+            onBack={() => navigateTo("portal")}
             onSuccess={() => setView("admin")}
             onGoToSuperAdmin={() => navigateTo("superadmin")}
           />
@@ -446,7 +502,7 @@ function AppContent() {
       // Authenticated Store Admin Panel (locked to their tenant if role === tenant_admin)
       return (
         <AdminPanel
-          onExit={() => navigateTo("menu")}
+          onExit={() => navigateTo("portal")}
           onGoToSuperAdmin={isSuperAdmin ? () => navigateTo("superadmin") : undefined}
         />
       );
@@ -457,6 +513,7 @@ function AppContent() {
       <CustomerApp
         onStoreAdminClick={() => navigateTo("admin")}
         onSuperAdminClick={() => navigateTo("superadmin")}
+        onBackToPortal={() => navigateTo("portal")}
       />
     );
   };

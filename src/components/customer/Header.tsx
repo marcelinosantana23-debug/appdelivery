@@ -1,4 +1,4 @@
-import { Clock, MapPin, Store, AlertTriangle, Bike, Sparkles } from "lucide-react";
+import { Clock, MapPin, Store, AlertTriangle, Bike, Sparkles, ArrowLeft } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName } from "@/utils/storeFormat";
@@ -8,9 +8,10 @@ interface HeaderProps {
   onAdminClick?: () => void;
   onStoreAdminClick?: () => void;
   onSuperAdminClick?: () => void;
+  onBackToPortal?: () => void;
 }
 
-export function Header(_props: HeaderProps = {}) {
+export function Header(props: HeaderProps = {}) {
   const { isStoreOpen, isStoreActive, config } = useStore();
 
   const hasBanner = Boolean(config.bannerImage);
@@ -48,10 +49,25 @@ export function Header(_props: HeaderProps = {}) {
         {/* Top Floating Toolbar - Clean customer-facing interface */}
         <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-2xl px-4 pt-3.5 sm:px-6">
           <div className="flex items-center justify-between gap-2">
-            {/* Clean store badge with store name */}
-            <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-3.5 py-1.5 text-xs font-semibold text-white/95 backdrop-blur-md shadow">
-              <Store className="h-3.5 w-3.5 text-amber-300" />
-              <span className="max-w-[200px] truncate sm:max-w-[280px]">{config.name}</span>
+            <div className="flex items-center gap-2">
+              {/* Botão de retorno ao Portal Principal do Top Food */}
+              {props.onBackToPortal && (
+                <button
+                  type="button"
+                  onClick={props.onBackToPortal}
+                  className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 hover:bg-black/60 px-3 py-1.5 text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs transition active:scale-95 cursor-pointer group"
+                  title="Ver todas as lojas no Top Food"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 text-amber-300 transition-transform group-hover:-translate-x-0.5" />
+                  <span>Início</span>
+                </button>
+              )}
+
+              {/* Clean store badge with store name */}
+              <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-3.5 py-1.5 text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs">
+                <Store className="h-3.5 w-3.5 text-amber-300" />
+                <span className="max-w-[140px] truncate sm:max-w-[240px]">{config.name}</span>
+              </div>
             </div>
 
             {/* Status chip & Install button */}
@@ -74,6 +90,20 @@ export function Header(_props: HeaderProps = {}) {
 
       {/* 2. INFORMAÇÕES DA LANCHONETE (Perfil iFood com avatar sobreposto) */}
       <div className="relative mx-auto max-w-2xl px-4 sm:px-6 pb-4">
+        {/* Link discreto de retorno acima das informações */}
+        {props.onBackToPortal && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={props.onBackToPortal}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline transition cursor-pointer group"
+            >
+              <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
+              <span>Ver todas as lojas no Top Food</span>
+            </button>
+          </div>
+        )}
+
         <div className="relative -mt-10 sm:-mt-12 flex items-end gap-3.5 sm:gap-4">
           {/* Logo / Foto de Perfil da Loja */}
           <div className="relative z-10 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-4xl sm:text-5xl shadow-xl">

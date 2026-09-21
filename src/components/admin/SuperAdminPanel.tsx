@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Store,
   Plus,
@@ -30,10 +30,12 @@ import {
   LayoutGrid,
   List,
   Flame,
+  Tag,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
-import type { Tenant, TenantStatus } from "@/types";
+import type { Tenant, TenantStatus, EstablishmentCategory } from "@/types";
+import { DEFAULT_ESTABLISHMENT_CATEGORIES } from "@/components/portal/portalUtils";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
@@ -56,6 +58,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     currentUser,
     updateSuperAdminCredentials,
     updateTenantCredentials,
+    establishmentCategories,
+    createEstablishmentCategory,
+    deleteEstablishmentCategory,
+    refreshEstablishmentCategories,
   } = useStore();
 
   const [search, setSearch] = useState("");
@@ -278,6 +284,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     address: "",
     primaryColor: "#E63946",
     bannerImage: "",
+    businessType: "Lanchonetes",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingNewBanner, setIsProcessingNewBanner] = useState(false);
@@ -288,6 +295,89 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   } | null>(null);
   const [formError, setFormError] = useState("");
   const newTenantBannerInputRef = useRef<HTMLInputElement>(null);
+
+  // Category Modal State (Create new dynamic category or manage list)
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [categoryTargetForm, setCategoryTargetForm] = useState<"new" | "edit" | "manage">("new");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryIcon, setNewCategoryIcon] = useState("🍽️");
+  const [newCategoryOrder, setNewCategoryOrder] = useState<number>(10);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categoryError, setCategoryError] = useState("");
+  const [categorySuccess, setCategorySuccess] = useState("");
+
+  // Categorias disponíveis consolidadas do banco de dados Cloudflare D1
+  const availableCategories = React.useMemo<EstablishmentCategory[]>(() => {
+    const fromDb = establishmentCategories || [];
+    const base = fromDb.length > 0 ? [...fromDb] : DEFAULT_ESTABLISHMENT_CATEGORIES.filter((c) => c.id !== "todos");
+    return [...base].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+  }, [establishmentCategories]);
+
+  const openNewCategoryModal = (target: "new" | "edit" | "manage" = "new") => {
+    setCategoryTargetForm(target);
+    setNewCategoryName("");
+    setNewCategoryIcon("🍽️");
+    setNewCategoryOrder((availableCategories.length + 1) * 5);
+    setCategoryError("");
+    setCategorySuccess("");
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) {
+      setCategoryError("O nome da categoria é obrigatório.");
+      return;
+    }
+
+    setIsSavingCategory(true);
+    setCategoryError("");
+    setCategorySuccess("");
+
+    try {
+      const res = await createEstablishmentCategory(
+        newCategoryName.trim(),
+        newCategoryIcon.trim() || "🍽️",
+        Number(newCategoryOrder) || 10
+      );
+
+      if (res.success && res.category) {
+        setCategorySuccess(`Categoria "${res.category.name}" criada com sucesso no banco de dados!`);
+        if (categoryTargetForm === "new") {
+          setFormData((prev) => ({ ...prev, businessType: res.category!.name }));
+        } else if (categoryTargetForm === "edit") {
+          setConfigForm((prev) => ({ ...prev, businessType: res.category!.name }));
+        }
+        await refreshEstablishmentCategories();
+        setTimeout(() => {
+          setIsCategoryModalOpen(false);
+          setCategorySuccess("");
+        }, 1200);
+      } else {
+        setCategoryError(res.error || "Erro ao cadastrar categoria.");
+      }
+    } catch (err: any) {
+      setCategoryError(err.message || "Erro de conexão ao salvar categoria.");
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (catId: string, catName: string) => {
+    if (!confirm(`Tem certeza que deseja excluir a categoria "${catName}" do sistema?`)) return;
+    try {
+      const res = await deleteEstablishmentCategory(catId);
+      if (res.success) {
+        setCategorySuccess(`Categoria "${catName}" excluída com sucesso!`);
+        await refreshEstablishmentCategories();
+        setTimeout(() => setCategorySuccess(""), 2000);
+      } else {
+        setCategoryError(res.error || "Erro ao excluir categoria.");
+      }
+    } catch (err: any) {
+      setCategoryError(err.message || "Erro inesperado ao excluir.");
+    }
+  };
 
   // Store Config Modal State (Super Admin editing existing store)
   const [isStoreConfigModalOpen, setIsStoreConfigModalOpen] = useState(false);
@@ -311,6 +401,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     showFeaturedCarousel: true,
     adminEmail: "",
     adminPassword: "",
+    businessType: "Lanchonetes",
   });
   const [isConfigSaving, setIsConfigSaving] = useState(false);
   const [isProcessingConfigBanner, setIsProcessingConfigBanner] = useState(false);
@@ -387,6 +478,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       showFeaturedCarousel: tenant.showFeaturedCarousel !== false,
       adminEmail: (tenant as any).adminEmail || tenant.email || `admin@${tenant.slug}.com`,
       adminPassword: (tenant as any).adminPassword || "123456",
+      businessType: tenant.businessType || "Lanchonetes",
     });
     setConfigSuccessMessage("");
     setConfigErrorMessage("");
@@ -434,6 +526,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         themeMode: configForm.themeMode,
         menuLayout: configForm.menuLayout,
         showFeaturedCarousel: configForm.showFeaturedCarousel,
+        businessType: configForm.businessType || "Lanchonetes",
       });
 
       if (res.success) {
@@ -593,6 +686,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
             >
               <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400 shrink-0 ${isRefreshing ? "animate-spin text-amber-400" : ""}`} />
               <span className="hidden sm:inline">Atualizar</span>
+            </button>
+            <button
+              onClick={() => openNewCategoryModal("manage")}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-sm transition hover:bg-slate-700 hover:text-white active:scale-[0.98] sm:text-sm sm:px-3.5 sm:py-2"
+              title="Gerenciar Categorias de Estabelecimentos (Doceria, Distribuidora, etc.)"
+            >
+              <Tag className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 shrink-0" />
+              <span className="hidden sm:inline">Categorias</span>
+              <span className="sm:hidden">Categorias</span>
             </button>
             <button
               onClick={openCredentialsModal}
@@ -1763,6 +1865,39 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   </div>
                 </div>
 
+                {/* Categoria do Estabelecimento */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
+                      <Tag className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Categoria do Estabelecimento *</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => openNewCategoryModal("new")}
+                      className="flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 transition"
+                      title="Cadastrar nova categoria no banco de dados Cloudflare D1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Nova Categoria</span>
+                    </button>
+                  </div>
+                  <select
+                    value={formData.businessType}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, businessType: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    {availableCategories.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.icon} {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-400">
+                    Define em qual carrossel e seção da vitrine principal esta loja será agrupada.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-300 mb-1">Chave PIX da Loja</label>
@@ -2625,6 +2760,35 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     />
                   </div>
 
+                  {/* Categoria do Estabelecimento */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-slate-300 font-semibold">
+                        Categoria *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => openNewCategoryModal("edit")}
+                        className="flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 transition"
+                        title="Cadastrar nova categoria no banco de dados"
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>Nova Categoria</span>
+                      </button>
+                    </div>
+                    <select
+                      value={configForm.businessType}
+                      onChange={(e) => setConfigForm((prev) => ({ ...prev, businessType: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      {availableCategories.map((cat) => (
+                        <option key={cat.id} value={cat.name}>
+                          {cat.icon} {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">WhatsApp para Pedidos</label>
                     <input
@@ -2775,6 +2939,225 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
           refreshTenants();
         }}
       />
+
+      {/* MODAL: Gerenciar & Cadastrar Nova Categoria de Estabelecimentos */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl sm:rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-2xl text-slate-100 box-border">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Tag className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Categorias de Estabelecimentos</h3>
+                  <p className="text-xs text-slate-400">
+                    Defina categorias para agrupar lojas em carrosséis e filtros na vitrine.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Mensagens de Feedback */}
+            {categorySuccess && (
+              <div className="mt-3.5 flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{categorySuccess}</span>
+              </div>
+            )}
+
+            {categoryError && (
+              <div className="mt-3.5 flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{categoryError}</span>
+              </div>
+            )}
+
+            {/* Formulário: Nova Categoria */}
+            <form onSubmit={handleSaveCategory} className="mt-4 space-y-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  Cadastrar Nova Categoria
+                </span>
+                {categoryTargetForm !== "manage" && (
+                  <span className="text-[10px] text-slate-400">
+                    Será atribuída à loja em {categoryTargetForm === "new" ? "criação" : "edição"}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Nome da Categoria *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Ex: Doceria, Distribuidora, Hamburgueria..."
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Ícone / Emoji
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={newCategoryIcon}
+                      onChange={(e) => setNewCategoryIcon(e.target.value)}
+                      className="w-14 text-center rounded-xl border border-slate-700 bg-slate-900 py-1.5 text-base text-white outline-none focus:border-amber-500"
+                    />
+                    <span className="text-xs text-slate-400">Emoji da vitrine</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Ordem de Exibição
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="999"
+                    value={newCategoryOrder}
+                    onChange={(e) => setNewCategoryOrder(Number(e.target.value) || 10)}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Atalhos Rápidos de Emojis */}
+              <div>
+                <span className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  Sugestões de Emojis:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {["🍰", "🍺", "🍔", "🍕", "🍨", "🍧", "🥩", "🍣", "☕", "🥖", "🥤", "🥗", "🌮", "🍩", "🍫", "🍗", "🥪", "🍱", "🍇", "🛒"].map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setNewCategoryIcon(emoji)}
+                      className={`h-7 w-7 rounded-lg text-sm flex items-center justify-center transition ${
+                        newCategoryIcon === emoji
+                          ? "bg-amber-500/30 border border-amber-400 scale-110"
+                          : "bg-slate-900 border border-slate-800 hover:border-slate-600"
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSavingCategory || !newCategoryName.trim()}
+                  className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 transition hover:brightness-110 disabled:opacity-50"
+                >
+                  {isSavingCategory ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Salvando no D1...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Salvar Categoria</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* Listagem de Categorias Existentes */}
+            <div className="mt-5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300">
+                  Categorias Ativas ({availableCategories.length})
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Sincronizado Cloudflare D1
+                </span>
+              </div>
+
+              <div className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950/60 max-h-56 overflow-y-auto">
+                {availableCategories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className="flex items-center justify-between px-3 py-2 text-xs hover:bg-slate-900/50 transition"
+                  >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-base">{cat.icon}</span>
+                        <div className="truncate">
+                          <span className="font-semibold text-white truncate block">
+                            {cat.name}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            Ordem: {cat.order ?? 99} • slug: {cat.slug || cat.id}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {categoryTargetForm !== "manage" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (categoryTargetForm === "new") {
+                                setFormData((prev) => ({ ...prev, businessType: cat.name }));
+                              } else if (categoryTargetForm === "edit") {
+                                setConfigForm((prev) => ({ ...prev, businessType: cat.name }));
+                              }
+                              setIsCategoryModalOpen(false);
+                            }}
+                            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 transition"
+                          >
+                            Selecionar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                          className="rounded-lg p-1 text-slate-500 hover:bg-red-950 hover:text-red-400 transition"
+                          title={`Excluir categoria "${cat.name}"`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 border-t border-slate-800 pt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import type { CartItem, Product, ProductOption, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential } from "@/types";
+import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
+import { categories as defaultMockCategories } from "@/data/mockData";
 import {
   fetchTenantsApi,
   fetchTenantDetailsApi,
@@ -14,6 +15,9 @@ import {
   createTenantProductApi,
   updateTenantProductApi,
   deleteTenantProductApi,
+  reorderTenantProductsApi,
+  fetchTenantCategoriesApi,
+  createTenantCategoryApi,
   createTenantOrderApi,
   updateOrderStatusApi,
   loginApi,
@@ -22,6 +26,9 @@ import {
   fetchTenantCredentialsApi,
   fetchAllTenantCredentialsApi,
   updateTenantCredentialsApi,
+  fetchEstablishmentCategoriesApi,
+  createEstablishmentCategoryApi,
+  deleteEstablishmentCategoryApi,
 } from "@/services/api";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { playNewOrderChime } from "@/utils/audio";
@@ -56,10 +63,14 @@ interface StoreContextValue {
   isLoadingStore: boolean;
   storeNotFound: boolean;
 
-  // Product management (Tenant Admin)
-  addProduct: (product: Omit<Product, "id" | "tenantId">) => Promise<Product | null>;
-  editProduct: (productId: string, partial: Partial<Product>) => Promise<void>;
+  // Product & Category management (Tenant Admin)
+  addProduct: (product: Omit<Product, "id" | "tenantId"> & { newCategoryName?: string }) => Promise<Product | null>;
+  editProduct: (productId: string, partial: Partial<Product> & { newCategoryName?: string }) => Promise<void>;
   removeProduct: (productId: string) => Promise<void>;
+  reorderProducts: (orderedIds: string[]) => Promise<boolean>;
+  storeCategories: Category[];
+  createCategory: (name: string, icon?: string) => Promise<Category | null>;
+  refreshCategories: () => Promise<void>;
 
   // Customer Shopping cart
   cart: CartItem[];
@@ -96,7 +107,11 @@ interface StoreContextValue {
     password: string
   ) => Promise<{ success: boolean; error?: string; message?: string }>;
 
-  // Super Admin actions
+  // Super Admin actions & Establishment Categories
+  establishmentCategories: EstablishmentCategory[];
+  createEstablishmentCategory: (name: string, icon?: string, order?: number) => Promise<EstablishmentCategory | null>;
+  deleteEstablishmentCategory: (id: string) => Promise<boolean>;
+  refreshEstablishmentCategories: () => Promise<void>;
   createNewTenant: (data: {
     name: string;
     slug?: string;
@@ -108,6 +123,7 @@ interface StoreContextValue {
     address?: string;
     primaryColor?: string;
     bannerImage?: string;
+    businessType?: string;
   }) => Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string }>;
   toggleTenantStatus: (slugOrId: string, status: TenantStatus) => Promise<boolean>;
   deleteTenant: (slugOrId: string) => Promise<boolean>;
@@ -170,7 +186,7 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
 }
 
 function getInitialUrlSlug(): string {
-  if (typeof window === "undefined") return "marcelino";
+  if (typeof window === "undefined") return "";
   const path = window.location.pathname;
 
   // 1. /loja/:slug
@@ -183,12 +199,18 @@ function getInitialUrlSlug(): string {
     if (hashMatch && hashMatch[1]) return decodeURIComponent(hashMatch[1]).toLowerCase();
   }
 
-  // 3. Query string (?loja=slug ou ?tenant=slug)
+  // 3. Query string (?loja=slug ou ?tenant=slug ou ?store=slug)
   const params = new URLSearchParams(window.location.search);
   const qSlug = params.get("loja") || params.get("tenant") || params.get("store");
   if (qSlug) return decodeURIComponent(qSlug).toLowerCase();
 
-  // 4. Direct single-segment path /:slug (quando não for /admin, /super-admin, etc)
+  // 4. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
+  const clean = path.replace(/\/+$/, "").toLowerCase();
+  if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+    return "";
+  }
+
+  // 5. Direct single-segment path /:slug (quando não for /admin, /super-admin, etc)
   if (
     path &&
     path !== "/" &&
@@ -204,25 +226,27 @@ function getInitialUrlSlug(): string {
     }
   }
 
-  // 5. Se o lojista estiver logado ou recarregando (F5) no painel /admin, recupera a loja da sessão
-  try {
-    const savedTenant = localStorage.getItem("delivery_tenant_session");
-    if (savedTenant) {
-      const parsed = JSON.parse(savedTenant);
-      if (parsed?.slug) return parsed.slug;
-    }
-    const savedUser = localStorage.getItem("delivery_user_session");
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      if (user?.tenantId === "tenant-ms-preparacoes" || user?.email?.includes("marcelino")) {
-        return "marcelino";
+  // 6. Se o lojista estiver logado ou recarregando (F5) no painel /admin, recupera a loja da sessão
+  if (path.startsWith("/admin")) {
+    try {
+      const savedTenant = localStorage.getItem("delivery_tenant_session");
+      if (savedTenant) {
+        const parsed = JSON.parse(savedTenant);
+        if (parsed?.slug) return parsed.slug;
       }
+      const savedUser = localStorage.getItem("delivery_user_session");
+      if (savedUser) {
+        const user = JSON.parse(savedUser);
+        if (user?.tenantId === "tenant-ms-preparacoes" || user?.email?.includes("marcelino")) {
+          return "ms-preparacoes";
+        }
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
-  return "marcelino";
+  return "";
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -275,6 +299,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   });
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [storeCategories, setStoreCategories] = useState<Category[]>(defaultMockCategories);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
@@ -373,9 +398,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Categorias de estabelecimentos (Top Food Portal e Super Admin)
+  const [establishmentCategories, setEstablishmentCategories] = useState<EstablishmentCategory[]>([]);
+
+  const refreshEstablishmentCategories = useCallback(async () => {
+    const res = await fetchEstablishmentCategoriesApi();
+    if (res.success && res.categories) {
+      setEstablishmentCategories(res.categories);
+    }
+  }, []);
+
+  const createEstablishmentCategory = useCallback(
+    async (name: string, icon?: string, order?: number) => {
+      const res = await createEstablishmentCategoryApi({ name, icon, order });
+      if (res.success && res.category) {
+        await refreshEstablishmentCategories();
+        return res.category;
+      }
+      return null;
+    },
+    [refreshEstablishmentCategories]
+  );
+
+  const deleteEstablishmentCategory = useCallback(
+    async (id: string) => {
+      const res = await deleteEstablishmentCategoryApi(id);
+      if (res.success) {
+        await refreshEstablishmentCategories();
+        return true;
+      }
+      return false;
+    },
+    [refreshEstablishmentCategories]
+  );
+
   // Load current store data with strict isolation
   const loadStoreBySlug = useCallback(
     async (slug: string) => {
+      if (!slug || slug.trim() === "") {
+        setIsLoadingStore(false);
+        setStoreNotFound(false);
+        return;
+      }
+
       setIsLoadingStore(true);
       setStoreNotFound(false);
 
@@ -397,11 +462,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setConfig(storeCfg);
         applyThemeColors(storeCfg);
 
-        // Fetch ONLY this tenant's products and orders from database
-        const [pRes, oRes] = await Promise.all([
+        // Fetch ONLY this tenant's products, orders, and categories from database
+        const [pRes, oRes, cRes] = await Promise.all([
           fetchTenantProductsApi(t.id),
           fetchTenantOrdersApi(t.id),
+          fetchTenantCategoriesApi(t.id),
         ]);
+
+        if (cRes.success && cRes.categories && cRes.categories.length > 0) {
+          setStoreCategories(cRes.categories);
+        }
 
         let loadedProducts = (pRes.success && pRes.products) ? pRes.products : [];
         if (loadedProducts.length === 0 && t.slug && t.slug !== t.id) {
@@ -436,15 +506,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Initial load
   useEffect(() => {
     refreshTenants();
-    loadStoreBySlug(currentSlug);
-  }, [currentSlug, refreshTenants, loadStoreBySlug]);
+    refreshEstablishmentCategories();
+    if (currentSlug) {
+      loadStoreBySlug(currentSlug);
+    } else {
+      setIsLoadingStore(false);
+    }
+  }, [currentSlug, refreshTenants, refreshEstablishmentCategories, loadStoreBySlug]);
 
   // Handle browser back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
       const slug = getInitialUrlSlug();
       setCurrentSlug(slug);
-      loadStoreBySlug(slug);
+      if (slug) {
+        loadStoreBySlug(slug);
+      } else {
+        setIsLoadingStore(false);
+      }
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -661,14 +740,88 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [config.isOpen, currentTenant, showToast]);
 
-  // ---------------- PRODUCT MANAGEMENT ----------------
-  const addProduct = useCallback(
-    async (productData: Omit<Product, "id" | "tenantId">): Promise<Product | null> => {
+  // ---------------- PRODUCT & CATEGORY MANAGEMENT ----------------
+  const refreshCategories = useCallback(async () => {
+    if (!currentTenant) return;
+    try {
+      const res = await fetchTenantCategoriesApi(currentTenant.id);
+      if (res.success && res.categories && res.categories.length > 0) {
+        setStoreCategories(res.categories);
+      }
+    } catch (e) {
+      console.warn("Erro ao recarregar categorias:", e);
+    }
+  }, [currentTenant]);
+
+  const createCategory = useCallback(
+    async (name: string, icon = "🍽️"): Promise<Category | null> => {
       if (!currentTenant) return null;
       try {
-        const res = await createTenantProductApi(currentTenant.id, productData);
+        const res = await createTenantCategoryApi(currentTenant.id, { name, icon });
+        if (res.success && res.category) {
+          setStoreCategories((prev) => {
+            if (prev.some((c) => c.id === res.category!.id || c.name.toLowerCase() === res.category!.name.toLowerCase())) {
+              return prev;
+            }
+            return [...prev, res.category!];
+          });
+          return res.category;
+        }
+      } catch (e) {
+        console.warn("Erro ao criar categoria:", e);
+      }
+      return null;
+    },
+    [currentTenant]
+  );
+
+  const reorderProducts = useCallback(
+    async (orderedIds: string[]): Promise<boolean> => {
+      setProducts((prev) => {
+        const map = new Map(prev.map((p) => [p.id, p]));
+        const ordered: Product[] = [];
+        for (const id of orderedIds) {
+          const item = map.get(id);
+          if (item) {
+            ordered.push(item);
+            map.delete(id);
+          }
+        }
+        for (const item of map.values()) {
+          ordered.push(item);
+        }
+        return ordered;
+      });
+
+      if (!currentTenant) return true;
+      try {
+        const res = await reorderTenantProductsApi(currentTenant.id, orderedIds);
+        if (res.success) {
+          showToast("Ordem do cardápio atualizada!", "success");
+          return true;
+        } else {
+          showToast(res.error || "Erro ao salvar ordem dos produtos.", "error");
+          return false;
+        }
+      } catch (e) {
+        console.warn("Erro ao reordenar produtos:", e);
+        showToast("Erro ao conectar com o servidor para reordenar.", "error");
+        return false;
+      }
+    },
+    [currentTenant, showToast]
+  );
+
+  const addProduct = useCallback(
+    async (productData: Omit<Product, "id" | "tenantId"> & { newCategoryName?: string }): Promise<Product | null> => {
+      if (!currentTenant) return null;
+      try {
+        const res = await createTenantProductApi(currentTenant.id, productData as any);
         if (res.success && res.product) {
           setProducts((prev) => [res.product!, ...prev]);
+          if (productData.newCategoryName) {
+            await refreshCategories();
+          }
           showToast("Produto cadastrado com sucesso!", "success");
           return res.product;
         }
@@ -678,11 +831,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return null;
     },
-    [currentTenant, showToast]
+    [currentTenant, showToast, refreshCategories]
   );
 
   const editProduct = useCallback(
-    async (productId: string, partial: Partial<Product>) => {
+    async (productId: string, partial: Partial<Product> & { newCategoryName?: string }) => {
       // Atualização otimista imediata na interface
       setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, ...partial } : p)));
 
@@ -697,12 +850,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (!currentTenant) return;
       try {
-        await updateTenantProductApi(currentTenant.id, productId, partial);
+        await updateTenantProductApi(currentTenant.id, productId, partial as any);
+        if (partial.newCategoryName) {
+          await refreshCategories();
+        }
       } catch (e) {
         console.warn("Erro ao persistir edição de produto:", e);
       }
     },
-    [currentTenant, showToast]
+    [currentTenant, showToast, refreshCategories]
   );
 
   const removeProduct = useCallback(
@@ -1206,6 +1362,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       address?: string;
       primaryColor?: string;
       bannerImage?: string;
+      businessType?: string;
     }) => {
       const res = await createTenantApi(data);
       if (res.success && res.tenant) {
@@ -1273,6 +1430,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         addProduct,
         editProduct,
         removeProduct,
+        reorderProducts,
+        storeCategories,
+        createCategory,
+        refreshCategories,
         cart,
         addToCart,
         updateCartQuantity,
@@ -1301,6 +1462,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         createNewTenant,
         toggleTenantStatus,
         deleteTenant,
+        establishmentCategories,
+        createEstablishmentCategory,
+        deleteEstablishmentCategory,
+        refreshEstablishmentCategories,
       }}
     >
       {children}

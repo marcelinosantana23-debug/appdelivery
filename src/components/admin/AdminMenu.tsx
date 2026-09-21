@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   Plus,
   Pencil,
@@ -12,30 +12,126 @@ import {
   Sparkles,
   Loader2,
   AlertTriangle,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
+  Tag,
+  Check,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { categories } from "@/data/mockData";
+import { categories as defaultMockCategories } from "@/data/mockData";
+import { fetchTenantCategoriesApi } from "@/services/api";
 import { formatPrice } from "@/utils/order";
 import {
   normalizeProductImage,
   getCategoryFallbackImage,
   handleImageError,
 } from "@/utils/imageUtils";
-import type { Product, ProductOption } from "@/types";
+import type { Category, Product, ProductOption } from "@/types";
 
 export function AdminMenu() {
-  const { products, config, addProduct, editProduct, removeProduct } = useStore();
+  const {
+    products,
+    config,
+    addProduct,
+    editProduct,
+    removeProduct,
+    reorderProducts,
+    storeCategories,
+    createCategory,
+    currentTenant,
+    currentSlug,
+  } = useStore();
   const [editing, setEditing] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
-  // Categorias presentes nos produtos para exibição organizada
-  const categoryList = useMemo(() => {
-    const presentCategoryIds = new Set(products.map((p) => p.category));
-    return categories.filter((c) => presentCategoryIds.has(c.id));
-  }, [products]);
+  // Estado centralizado para as categorias carregadas da API / banco de dados
+  const [categories, setCategories] = useState<Category[]>(() => {
+    if (storeCategories && storeCategories.length > 0) {
+      return storeCategories;
+    }
+    return defaultMockCategories;
+  });
 
+  // Estado da categoria ativa selecionada (padrão 'todos')
+  const [selectedCategory, setSelectedCategory] = useState<string>("todos");
+
+  // Criação inline rápida de categoria na barra horizontal
+  const [isAddingCategoryInline, setIsAddingCategoryInline] = useState(false);
+  const [inlineCategoryName, setInlineCategoryName] = useState("");
+
+  // Estados de Drag & Drop
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
+
+  // Busca do backend/API no carregamento da tela (useEffect)
+  useEffect(() => {
+    let isMounted = true;
+    const loadCategories = async () => {
+      try {
+        const res = await fetchTenantCategoriesApi(tenantId);
+        if (isMounted && res.success && res.categories && res.categories.length > 0) {
+          setCategories(res.categories);
+        }
+      } catch (err) {
+        console.warn("[AdminMenu] Erro ao carregar categorias do backend:", err);
+      }
+    };
+
+    loadCategories();
+    return () => {
+      isMounted = false;
+    };
+  }, [tenantId]);
+
+  // Sincroniza dinamicamente se o StoreContext atualizar storeCategories
+  useEffect(() => {
+    if (storeCategories && storeCategories.length > 0) {
+      setCategories((prev) => {
+        const map = new Map<string, Category>();
+        prev.forEach((c) => map.set(c.id.toLowerCase(), c));
+        storeCategories.forEach((c) => map.set(c.id.toLowerCase(), c));
+        return Array.from(map.values());
+      });
+    }
+  }, [storeCategories]);
+
+  // Lista consolidada de categorias cadastradas no banco de dados/API
+  const allCategories = useMemo(() => {
+    const map = new Map<string, Category>();
+
+    // 1. Categorias salvas no estado local (banco de dados/API)
+    categories.forEach((c) => {
+      if (c && c.id) map.set(c.id.toLowerCase(), c);
+    });
+
+    // 2. Categorias presentes no contexto global
+    (storeCategories || []).forEach((c) => {
+      if (c && c.id && !map.has(c.id.toLowerCase())) {
+        map.set(c.id.toLowerCase(), c);
+      }
+    });
+
+    // 3. Categorias presentes nos produtos para garantir exibição completa
+    products.forEach((p) => {
+      const catKey = (p.category || "").toLowerCase();
+      if (catKey && !map.has(catKey)) {
+        map.set(catKey, {
+          id: p.category,
+          name: p.category.charAt(0).toUpperCase() + p.category.slice(1).replace(/-/g, " "),
+          icon: "🍽️",
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [categories, storeCategories, products]);
+
+  // Filtragem dinâmica instantânea
   const filtered = useMemo(() => {
     return products.filter((p) => {
       const q = search.trim().toLowerCase();
@@ -45,23 +141,86 @@ export function AdminMenu() {
         (p.description && p.description.toLowerCase().includes(q)) ||
         p.category.toLowerCase().includes(q);
 
+      const isTodos = selectedCategory === "todos" || selectedCategory === "all";
       const matchesCat =
-        selectedCategory === "all" || p.category === selectedCategory;
+        isTodos ||
+        (p.category || "").toLowerCase() === selectedCategory.toLowerCase();
 
       return matchesSearch && matchesCat;
     });
   }, [products, search, selectedCategory]);
 
-  const handleSave = async (product: Product) => {
+  const handleSave = async (product: Product, newCategoryName?: string) => {
+    let finalCategory = product.category;
+    if (newCategoryName && newCategoryName.trim()) {
+      const created = await createCategory(newCategoryName.trim());
+      if (created) {
+        finalCategory = created.id;
+        // Adiciona imediatamente à lista do menu superior sem recarregar
+        setCategories((prev) => {
+          if (prev.some((c) => c.id.toLowerCase() === created.id.toLowerCase())) {
+            return prev;
+          }
+          return [...prev, created];
+        });
+        setSelectedCategory(created.id);
+      }
+    }
+
     const isExisting = products.some((p) => p.id === product.id);
     if (isExisting) {
-      await editProduct(product.id, product);
+      await editProduct(product.id, {
+        ...product,
+        category: finalCategory,
+        newCategoryName: newCategoryName?.trim(),
+      });
     } else {
       const { id: _id, tenantId: _tenantId, ...rest } = product;
-      await addProduct(rest);
+      await addProduct({
+        ...rest,
+        category: finalCategory,
+        newCategoryName: newCategoryName?.trim(),
+      });
     }
+
+    // Se o produto foi cadastrado em uma nova categoria, garante que ela apareça no menu
+    if (finalCategory) {
+      setCategories((prev) => {
+        if (prev.some((c) => c.id.toLowerCase() === finalCategory.toLowerCase())) {
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            id: finalCategory,
+            name:
+              newCategoryName?.trim() ||
+              finalCategory.charAt(0).toUpperCase() + finalCategory.slice(1).replace(/-/g, " "),
+            icon: "🍽️",
+          },
+        ];
+      });
+    }
+
     setShowForm(false);
     setEditing(null);
+  };
+
+  const handleCreateCategoryInline = async () => {
+    if (!inlineCategoryName.trim()) return;
+    const name = inlineCategoryName.trim();
+    const created = await createCategory(name);
+    if (created) {
+      setCategories((prev) => {
+        if (prev.some((c) => c.id.toLowerCase() === created.id.toLowerCase())) {
+          return prev;
+        }
+        return [...prev, created];
+      });
+      setSelectedCategory(created.id);
+    }
+    setInlineCategoryName("");
+    setIsAddingCategoryInline(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -73,6 +232,87 @@ export function AdminMenu() {
     if (p) {
       await editProduct(id, { available: !p.available });
     }
+  };
+
+  // Reordenação de produtos: Subir / Descer
+  const handleMoveUp = async (productId: string) => {
+    const filteredIdx = filtered.findIndex((p) => p.id === productId);
+    if (filteredIdx <= 0) return;
+    const prevProduct = filtered[filteredIdx - 1];
+
+    const currentOrder = [...products];
+    const srcIdx = currentOrder.findIndex((p) => p.id === productId);
+    const targetIdx = currentOrder.findIndex((p) => p.id === prevProduct.id);
+
+    if (srcIdx === -1 || targetIdx === -1) return;
+
+    const temp = currentOrder[srcIdx];
+    currentOrder[srcIdx] = currentOrder[targetIdx];
+    currentOrder[targetIdx] = temp;
+
+    await reorderProducts(currentOrder.map((p) => p.id));
+  };
+
+  const handleMoveDown = async (productId: string) => {
+    const filteredIdx = filtered.findIndex((p) => p.id === productId);
+    if (filteredIdx < 0 || filteredIdx >= filtered.length - 1) return;
+    const nextProduct = filtered[filteredIdx + 1];
+
+    const currentOrder = [...products];
+    const srcIdx = currentOrder.findIndex((p) => p.id === productId);
+    const targetIdx = currentOrder.findIndex((p) => p.id === nextProduct.id);
+
+    if (srcIdx === -1 || targetIdx === -1) return;
+
+    const temp = currentOrder[srcIdx];
+    currentOrder[srcIdx] = currentOrder[targetIdx];
+    currentOrder[targetIdx] = temp;
+
+    await reorderProducts(currentOrder.map((p) => p.id));
+  };
+
+  // Reordenação via Arrastar e Soltar (Drag & Drop)
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.setData("text/plain", id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverId !== id) {
+      setDragOverId(id);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setDragOverId(null);
+    if (!draggedId || draggedId === targetId) {
+      setDraggedId(null);
+      return;
+    }
+
+    const currentOrder = [...products];
+    const srcIdx = currentOrder.findIndex((p) => p.id === draggedId);
+    const targetIdx = currentOrder.findIndex((p) => p.id === targetId);
+
+    if (srcIdx === -1 || targetIdx === -1) {
+      setDraggedId(null);
+      return;
+    }
+
+    const [draggedItem] = currentOrder.splice(srcIdx, 1);
+    currentOrder.splice(targetIdx, 0, draggedItem);
+    setDraggedId(null);
+
+    await reorderProducts(currentOrder.map((p) => p.id));
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
   };
 
   return (
@@ -108,60 +348,180 @@ export function AdminMenu() {
         </button>
       </div>
 
-      {/* Filtros de Categoria (rolagem horizontal suave no cabeçalho dos filtros) */}
-      {categoryList.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => setSelectedCategory("all")}
-            className={`rounded-full px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 border ${
-              selectedCategory === "all"
-                ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            Todos ({products.length})
-          </button>
-          {categoryList.map((cat) => {
-            const count = products.filter((p) => p.category === cat.id).length;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`rounded-full px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 border flex items-center gap-1.5 ${
-                  selectedCategory === cat.id
-                    ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+      {/* Menu Superior de Categorias Dinâmicas (Scroll Horizontal) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none -mx-1 px-1 shrink-0">
+        {/* Opção fixa "Todos" no início da lista */}
+        <button
+          type="button"
+          onClick={() => setSelectedCategory("todos")}
+          className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 border cursor-pointer ${
+            selectedCategory === "todos" || selectedCategory === "all"
+              ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Todos ({products.length})
+        </button>
+
+        {/* Categorias dinâmicas carregadas do banco de dados/API */}
+        {allCategories.map((cat) => {
+          const count = products.filter(
+            (p) => (p.category || "").toLowerCase() === cat.id.toLowerCase()
+          ).length;
+          const isSelected =
+            selectedCategory.toLowerCase() === cat.id.toLowerCase();
+
+          return (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 border flex items-center gap-1.5 cursor-pointer ${
+                isSelected
+                  ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span>{cat.icon || "🍽️"}</span>
+              <span>{cat.name}</span>
+              <span
+                className={`text-[10px] font-semibold ${
+                  isSelected ? "opacity-90 text-amber-300" : "opacity-75 text-slate-500"
                 }`}
               >
-                <span>{cat.icon || "🍽️"}</span>
-                <span>{cat.name}</span>
-                <span className="text-[10px] opacity-75 font-semibold">({count})</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+                ({count})
+              </span>
+            </button>
+          );
+        })}
 
-      {/* Lista de Produtos: Cards expansíveis com altura adequada sem scroll interno */}
+        {/* Botão rápido para adicionar nova categoria diretamente pelo menu horizontal */}
+        {!isAddingCategoryInline ? (
+          <button
+            type="button"
+            onClick={() => setIsAddingCategoryInline(true)}
+            className="rounded-full px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 border border-dashed border-amber-400 text-amber-700 bg-amber-50/60 hover:bg-amber-100 flex items-center gap-1 cursor-pointer"
+            title="Criar nova categoria"
+          >
+            <Plus className="h-3.5 w-3.5 text-amber-600" />
+            <span>+ Categoria</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1 shrink-0 bg-amber-50 border border-amber-300 rounded-full px-2 py-0.5 animate-fadeIn">
+            <input
+              type="text"
+              value={inlineCategoryName}
+              onChange={(e) => setInlineCategoryName(e.target.value)}
+              placeholder="Nome da categoria..."
+              className="w-32 sm:w-40 text-xs px-2.5 py-1 bg-white border border-amber-300 rounded-full outline-none focus:ring-1 focus:ring-amber-500 font-medium text-slate-800"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateCategoryInline();
+                if (e.key === "Escape") {
+                  setIsAddingCategoryInline(false);
+                  setInlineCategoryName("");
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleCreateCategoryInline}
+              className="p-1 text-xs font-bold bg-amber-500 text-slate-950 rounded-full hover:bg-amber-600 cursor-pointer"
+              title="Salvar categoria"
+            >
+              <Check className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddingCategoryInline(false);
+                setInlineCategoryName("");
+              }}
+              className="p-1 text-xs text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+              title="Cancelar"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Barra de Informação da Ordem dos Produtos */}
+      <div className="flex items-center justify-between text-xs text-slate-500 px-1 pt-1">
+        <span className="flex items-center gap-1.5 font-medium text-slate-600">
+          <ArrowUpDown className="h-3.5 w-3.5 text-amber-500" />
+          <span>Arraste ou use as setas para definir a ordem no cardápio</span>
+        </span>
+        <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200/60">
+          {filtered.length} {filtered.length === 1 ? "produto" : "produtos"}
+        </span>
+      </div>
+
+      {/* Lista de Produtos: Cards expansíveis com altura adequada e suporte a Reordenação */}
       <div className="space-y-2.5 sm:space-y-3 w-full">
-        {filtered.map((product) => {
-          const cat = categories.find((c) => c.id === product.category);
+        {filtered.map((product, index) => {
+          const cat = allCategories.find((c) => c.id === product.category);
+          const isFirst = index === 0;
+          const isLast = index === filtered.length - 1;
+          const isDragging = draggedId === product.id;
+          const isOver = dragOverId === product.id;
+
           return (
             <div
               key={product.id}
-              className={`flex items-center justify-between p-3 sm:p-4 gap-2.5 sm:gap-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-sm min-h-[72px] sm:min-h-[80px] h-auto w-full transition-all shrink-0 ${
+              draggable={true}
+              onDragStart={(e) => handleDragStart(e, product.id)}
+              onDragOver={(e) => handleDragOver(e, product.id)}
+              onDragLeave={() => { if (dragOverId === product.id) setDragOverId(null); }}
+              onDrop={(e) => handleDrop(e, product.id)}
+              onDragEnd={handleDragEnd}
+              className={`group flex items-center justify-between p-2.5 sm:p-4 gap-2 sm:gap-3 rounded-2xl bg-white border shadow-xs hover:shadow-sm min-h-[72px] sm:min-h-[80px] h-auto w-full transition-all shrink-0 ${
+                isDragging
+                  ? "opacity-40 scale-[0.99] border-amber-400 ring-2 ring-amber-300/60 bg-amber-50/30"
+                  : isOver
+                  ? "border-amber-500 ring-2 ring-amber-400 bg-amber-50/50"
+                  : "border-slate-200/80 hover:border-slate-300"
+              } ${
                 !product.available ? "opacity-60 bg-slate-50/90 border-dashed border-slate-300" : ""
               }`}
             >
+              {/* Controles de Reordenação: Grip e Setas Subir/Descer */}
+              <div className="flex flex-col sm:flex-row items-center gap-0.5 shrink-0 text-slate-400">
+                <div
+                  className="p-1 cursor-grab active:cursor-grabbing hover:text-slate-700 select-none"
+                  title="Clique e arraste para mudar a ordem no cardápio"
+                >
+                  <GripVertical className="h-4 w-4" />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleMoveUp(product.id)}
+                    disabled={isFirst}
+                    className="p-1 rounded-md hover:bg-slate-100 hover:text-slate-800 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed transition"
+                    title="Subir posição no cardápio"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMoveDown(product.id)}
+                    disabled={isLast}
+                    className="p-1 rounded-md hover:bg-slate-100 hover:text-slate-800 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed transition"
+                    title="Descer posição no cardápio"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
               {/* Foto do Produto à Esquerda */}
               <div className="relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/60 flex items-center justify-center">
                 <img
                   src={normalizeProductImage(product.image, product.category, product.name)}
                   alt={product.name}
                   onError={(e) => handleImageError(e, product.category, product.name)}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover pointer-events-none"
                 />
                 {!product.available && (
                   <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center">
@@ -205,7 +565,7 @@ export function AdminMenu() {
                 <button
                   type="button"
                   onClick={() => toggleAvailable(product.id)}
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition cursor-pointer ${
                     product.available
                       ? "bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95"
                       : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 active:scale-95"
@@ -219,7 +579,7 @@ export function AdminMenu() {
                 <button
                   type="button"
                   onClick={() => { setEditing(product); setShowForm(true); }}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-700 active:scale-95"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-700 active:scale-95 cursor-pointer"
                   title="Editar produto"
                 >
                   <Pencil className="h-4 w-4" />
@@ -229,7 +589,7 @@ export function AdminMenu() {
                 <button
                   type="button"
                   onClick={() => handleDelete(product.id)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 hover:text-red-700 active:scale-95"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 hover:text-red-700 active:scale-95 cursor-pointer"
                   title="Excluir produto do cardápio"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -247,14 +607,14 @@ export function AdminMenu() {
           <p className="text-xs text-slate-400 mt-1">
             {search
               ? `Nenhum resultado para "${search}".`
-              : selectedCategory !== "all"
+              : selectedCategory !== "todos" && selectedCategory !== "all"
               ? "Nenhum produto nesta categoria."
               : "Clique em 'Novo' para cadastrar produtos no cardápio."}
           </p>
-          {(search || selectedCategory !== "all") && (
+          {(search || (selectedCategory !== "todos" && selectedCategory !== "all")) && (
             <button
               type="button"
-              onClick={() => { setSearch(""); setSelectedCategory("all"); }}
+              onClick={() => { setSearch(""); setSelectedCategory("todos"); }}
               className="mt-3 text-xs font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
             >
               Limpar filtros
@@ -266,6 +626,7 @@ export function AdminMenu() {
       {showForm && (
         <ProductForm
           product={editing}
+          availableCategories={allCategories}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}
         />
@@ -276,11 +637,13 @@ export function AdminMenu() {
 
 function ProductForm({
   product,
+  availableCategories,
   onSave,
   onClose,
 }: {
   product: Product | null;
-  onSave: (p: Product) => void;
+  availableCategories: { id: string; name: string; icon?: string }[];
+  onSave: (p: Product, newCategoryName?: string) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(product?.name || "");
@@ -291,7 +654,9 @@ function ProductForm({
       ? normalizeProductImage(product.image, product.category, product.name)
       : ""
   );
-  const [category, setCategory] = useState(product?.category || "lanches");
+  const [category, setCategory] = useState(product?.category || (availableCategories[0]?.id || "lanches"));
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [available, setAvailable] = useState(product?.available ?? true);
   const [options, setOptions] = useState<ProductOption[]>(product?.options || []);
   const [newOptName, setNewOptName] = useState("");
@@ -438,20 +803,32 @@ function ProductForm({
 
   const handleSave = () => {
     if (!name.trim() || !price.trim()) return;
-    const finalImage = image.trim()
-      ? normalizeProductImage(image.trim(), category, name)
-      : getCategoryFallbackImage(category, name);
+    if (isCreatingNewCategory && !newCategoryName.trim()) {
+      showToast("Digite o nome da nova categoria antes de salvar o produto.", "warning");
+      return;
+    }
 
-    onSave({
-      id: product?.id || `p-${Date.now()}`,
-      name: name.trim(),
-      description: description.trim(),
-      price: parseFloat(price),
-      image: finalImage,
-      category,
-      available,
-      options,
-    });
+    const targetCategory = isCreatingNewCategory
+      ? newCategoryName.trim().toLowerCase().replace(/\s+/g, "-")
+      : category;
+
+    const finalImage = image.trim()
+      ? normalizeProductImage(image.trim(), targetCategory, name)
+      : getCategoryFallbackImage(targetCategory, name);
+
+    onSave(
+      {
+        id: product?.id || `p-${Date.now()}`,
+        name: name.trim(),
+        description: description.trim(),
+        price: parseFloat(price),
+        image: finalImage,
+        category: targetCategory,
+        available,
+        options,
+      },
+      isCreatingNewCategory ? newCategoryName.trim() : undefined
+    );
   };
 
   return (
@@ -500,16 +877,62 @@ function ProductForm({
             </Field>
             <Field label="Categoria">
               <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                value={isCreatingNewCategory ? "__new__" : category}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    setIsCreatingNewCategory(true);
+                  } else {
+                    setIsCreatingNewCategory(false);
+                    setCategory(e.target.value);
+                  }
+                }}
                 className="form-input"
               >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {availableCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.icon ? `${c.icon} ` : ""}{c.name}
+                  </option>
                 ))}
+                <option value="__new__" className="font-bold text-amber-600 bg-amber-50">
+                  + Criar nova categoria...
+                </option>
               </select>
             </Field>
           </div>
+
+          {/* Campo dinâmico quando o lojista seleciona '+ Criar nova categoria...' */}
+          {isCreatingNewCategory && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-3.5 space-y-2 transition-all">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  <Tag className="h-3.5 w-3.5 text-amber-600" />
+                  Nome da Nova Categoria
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCreatingNewCategory(false);
+                    setNewCategoryName("");
+                    setCategory(availableCategories[0]?.id || "lanches");
+                  }}
+                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Ex: Açaí Especial, Sobremesas, Bebidas..."
+                className="w-full rounded-xl border border-amber-300 bg-white py-2 px-3 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                autoFocus
+              />
+              <p className="text-[11px] text-amber-800/80">
+                Esta nova categoria será salva na tabela de categorias no banco de dados e vinculada ao produto.
+              </p>
+            </div>
+          )}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold text-gray-700">

@@ -189,6 +189,7 @@ api.post("/lojas", async (c) => {
     const bannerImage = body.bannerImage || "";
     const logo = body.logo || "🍔";
     const slogan = body.slogan || body.tagline || `Lanches e porções artesanais - ${nome}`;
+    const businessType = body.businessType || body.categoria || body.category || "Lanchonetes";
 
     // 1. Criar loja no D1 / KV
     const novaLoja = await db.createTenant({
@@ -202,6 +203,7 @@ api.post("/lojas", async (c) => {
       address: endereco,
       primaryColor: corPrimaria,
       bannerImage,
+      businessType,
     });
 
     // Se houver campos adicionais de horário, logo ou slogan, atualiza
@@ -898,6 +900,87 @@ api.get("/lojas/:slug/categorias", async (c) => {
   }
 });
 
+// GET /api/lojas/:slug/lista-categorias - Listar categorias cadastradas para a loja
+api.get("/lojas/:slug/lista-categorias", async (c) => {
+  try {
+    const db = getDb(c);
+    const slug = c.req.param("slug");
+    const loja = await db.getTenantByIdOrSlug(slug);
+
+    if (!loja) {
+      return c.json({ success: false, error: "Loja não encontrada." }, 404);
+    }
+
+    const categories = await db.getCategoriesByTenant(loja.id);
+    return c.json({ success: true, categories, categorias: categories }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao obter categorias." }, 500);
+  }
+});
+
+// POST /api/lojas/:slug/categorias - Criar nova categoria diretamente
+api.post("/lojas/:slug/categorias", async (c) => {
+  try {
+    const db = getDb(c);
+    const slug = c.req.param("slug");
+    const loja = await db.getTenantByIdOrSlug(slug);
+
+    if (!loja) {
+      return c.json({ success: false, error: "Loja não encontrada." }, 404);
+    }
+
+    const body = await c.req.json();
+    const nome = body.nome || body.name;
+
+    if (!nome || typeof nome !== "string" || !nome.trim()) {
+      return c.json({ success: false, error: "O nome da categoria é obrigatório." }, 400);
+    }
+
+    const novaCategoria = await db.createCategory(loja.id, {
+      name: nome.trim(),
+      icon: body.icone || body.icon || "🍽️",
+    });
+
+    return c.json({
+      success: true,
+      message: "Categoria cadastrada com sucesso!",
+      category: novaCategoria,
+      categoria: novaCategoria,
+    }, 201);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao criar categoria." }, 500);
+  }
+});
+
+// PUT /api/lojas/:slug/produtos/reordenar - Salvar reordenação de produtos em lote
+api.put("/lojas/:slug/produtos/reordenar", async (c) => {
+  try {
+    const db = getDb(c);
+    const slug = c.req.param("slug");
+    const loja = await db.getTenantByIdOrSlug(slug);
+
+    if (!loja) {
+      return c.json({ success: false, error: "Loja não encontrada." }, 404);
+    }
+
+    const body = await c.req.json();
+    const orderedIds = body.orderedIds || body.ordem || body.ids || [];
+
+    if (!Array.isArray(orderedIds)) {
+      return c.json({ success: false, error: "orderedIds deve ser uma lista de IDs de produtos." }, 400);
+    }
+
+    await db.reorderProducts(loja.id, orderedIds);
+
+    return c.json({
+      success: true,
+      message: "Ordem dos produtos atualizada com sucesso no Cloudflare D1/KV!",
+    }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao reordenar produtos." }, 500);
+  }
+});
+
 // POST /api/lojas/:slug/produtos - Cadastrar novo produto na loja
 api.post("/lojas/:slug/produtos", async (c) => {
   try {
@@ -921,14 +1004,24 @@ api.post("/lojas/:slug/produtos", async (c) => {
       return c.json({ success: false, error: "Preço do produto deve ser um número válido positivo." }, 400);
     }
 
+    // Se uma nova categoria foi informada, salva primeiro no banco de dados e vincula
+    let categoriaFinal = body.categoria || body.category || "lanches";
+    const novaCategoriaNome = body.novaCategoria || body.newCategoryName || body.newCategory;
+    if (novaCategoriaNome && typeof novaCategoriaNome === "string" && novaCategoriaNome.trim()) {
+      const catCriada = await db.createCategory(loja.id, { name: novaCategoriaNome.trim() });
+      categoriaFinal = catCriada.id;
+    }
+
     const novoProduto = await db.createProduct(loja.id, {
       name: nome.trim(),
       description: body.descricao || body.description || "",
       price: preco,
-      category: body.categoria || body.category || "lanches",
+      category: categoriaFinal,
       image: body.imagem || body.image || "",
       available: body.disponivel !== undefined ? Boolean(body.disponivel) : body.available !== undefined ? Boolean(body.available) : true,
       options: body.opcionais || body.options || [],
+      position: body.position !== undefined ? Number(body.position) : (body.ordem !== undefined ? Number(body.ordem) : undefined),
+      ordem: body.ordem !== undefined ? Number(body.ordem) : (body.position !== undefined ? Number(body.position) : undefined),
     });
 
     return c.json({
@@ -945,8 +1038,11 @@ api.post("/lojas/:slug/produtos", async (c) => {
 api.put("/lojas/:slug/produtos/:id", async (c) => {
   try {
     const db = getDb(c);
+    const slug = c.req.param("slug");
     const produtoId = c.req.param("id");
     const body = await c.req.json();
+
+    const loja = await db.getTenantByIdOrSlug(slug);
 
     const partial: any = {};
     if (body.nome || body.name) partial.name = body.nome || body.name;
@@ -957,6 +1053,15 @@ api.put("/lojas/:slug/produtos/:id", async (c) => {
       partial.price = Number(body.preco ?? body.price);
     }
     if (body.categoria || body.category) partial.category = body.categoria || body.category;
+
+    // Se uma nova categoria foi informada na edição
+    const novaCategoriaNome = body.novaCategoria || body.newCategoryName || body.newCategory;
+    if (novaCategoriaNome && typeof novaCategoriaNome === "string" && novaCategoriaNome.trim()) {
+      const tenantId = loja ? loja.id : slug;
+      const catCriada = await db.createCategory(tenantId, { name: novaCategoriaNome.trim() });
+      partial.category = catCriada.id;
+    }
+
     if (body.imagem !== undefined || body.image !== undefined) {
       partial.image = body.imagem !== undefined ? body.imagem : body.image;
     }
@@ -964,6 +1069,11 @@ api.put("/lojas/:slug/produtos/:id", async (c) => {
       partial.available = Boolean(body.disponivel ?? body.available);
     }
     if (body.opcionais || body.options) partial.options = body.opcionais || body.options;
+    if (body.position !== undefined || body.ordem !== undefined) {
+      const pos = Number(body.position ?? body.ordem);
+      partial.position = pos;
+      partial.ordem = pos;
+    }
 
     const atualizado = await db.updateProduct(produtoId, partial);
     if (!atualizado) {
@@ -1619,7 +1729,7 @@ api.put("/tenants/:slugOrId/credentials", async (c) => {
 api.post("/tenants", async (c) => {
   try {
     const body = await c.req.json();
-    const { name, slug, email, password, whatsapp, pixKey, pixKeyType, deliveryFee, address, primaryColor, bannerImage } = body;
+    const { name, slug, email, password, whatsapp, pixKey, pixKeyType, deliveryFee, address, primaryColor, bannerImage, businessType, category } = body;
 
     if (!name || !email || !password) {
       return c.json(
@@ -1640,6 +1750,7 @@ api.post("/tenants", async (c) => {
       address: address || "Centro",
       primaryColor: primaryColor || "#E63946",
       bannerImage: bannerImage || "",
+      businessType: businessType || category || "Lanchonetes",
     });
 
     const user = await db.createUser({
@@ -1742,6 +1853,111 @@ api.delete("/tenants/:slugOrId", async (c) => {
   }
 });
 
+// ===================== CATEGORIAS DE ESTABELECIMENTOS =====================
+
+const handleGetEstablishmentCategories = async (c: any) => {
+  try {
+    const db = getDb(c);
+    const categories = await db.getEstablishmentCategories();
+    return c.json({ success: true, categories }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao carregar categorias" }, 500);
+  }
+};
+
+const handleCreateEstablishmentCategory = async (c: any) => {
+  try {
+    const db = getDb(c);
+    const body = await c.req.json();
+    const { name, icon, order } = body;
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return c.json({ success: false, error: "Nome da categoria é obrigatório." }, 400);
+    }
+
+    const category = await db.createEstablishmentCategory({
+      name: name.trim(),
+      icon: icon?.trim() || "🍽️",
+      order: order !== undefined ? Number(order) : undefined,
+    });
+
+    return c.json({
+      success: true,
+      message: "Categoria de estabelecimento criada com sucesso no D1!",
+      category,
+    }, 201);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao criar categoria" }, 500);
+  }
+};
+
+const handleDeleteEstablishmentCategory = async (c: any) => {
+  try {
+    const db = getDb(c);
+    const id = c.req.param("id");
+    await db.deleteEstablishmentCategory(id);
+    return c.json({ success: true, message: "Categoria removida com sucesso" }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao remover categoria" }, 500);
+  }
+};
+
+api.get("/establishment-categories", handleGetEstablishmentCategories);
+api.post("/establishment-categories", handleCreateEstablishmentCategory);
+api.delete("/establishment-categories/:id", handleDeleteEstablishmentCategory);
+
+api.get("/admin/establishment-categories", handleGetEstablishmentCategories);
+api.post("/admin/establishment-categories", handleCreateEstablishmentCategory);
+api.delete("/admin/establishment-categories/:id", handleDeleteEstablishmentCategory);
+
+api.get("/categorias-estabelecimentos", handleGetEstablishmentCategories);
+api.post("/categorias-estabelecimentos", handleCreateEstablishmentCategory);
+
+api.get("/tenants/:slugOrId/categories", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const categories = await db.getCategoriesByTenant(tenant.id);
+    return c.json({ success: true, categories, categorias: categories }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao listar categorias" }, 500);
+  }
+});
+
+api.post("/tenants/:slugOrId/categories", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const body = await c.req.json();
+    const name = body.name || body.nome;
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return c.json({ success: false, error: "O nome da categoria é obrigatório." }, 400);
+    }
+
+    const category = await db.createCategory(tenant.id, {
+      name: name.trim(),
+      icon: body.icon || body.icone || "🍽️",
+    });
+
+    return c.json({ success: true, category, categoria: category }, 201);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao criar categoria" }, 500);
+  }
+});
+
 api.get("/tenants/:slugOrId/products", async (c) => {
   const db = getDb(c);
   const slugOrId = c.req.param("slugOrId");
@@ -1760,6 +1976,30 @@ api.get("/tenants/:slugOrId/products", async (c) => {
   }, 200);
 });
 
+api.put("/tenants/:slugOrId/products/reorder", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const body = await c.req.json();
+    const orderedIds = body.orderedIds || body.order || body.ids || [];
+
+    if (!Array.isArray(orderedIds)) {
+      return c.json({ success: false, error: "orderedIds deve ser uma lista de IDs de produtos." }, 400);
+    }
+
+    await db.reorderProducts(tenant.id, orderedIds);
+    return c.json({ success: true, message: "Ordem dos produtos atualizada com sucesso!" }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao reordenar produtos" }, 500);
+  }
+});
+
 api.post("/tenants/:slugOrId/products", async (c) => {
   try {
     const db = getDb(c);
@@ -1771,6 +2011,14 @@ api.post("/tenants/:slugOrId/products", async (c) => {
     }
 
     const body = await c.req.json();
+
+    // Se uma nova categoria foi informada, salva primeiro na tabela de categorias e vincula
+    const newCategoryName = body.newCategoryName || body.novaCategoria || body.newCategory;
+    if (newCategoryName && typeof newCategoryName === "string" && newCategoryName.trim()) {
+      const createdCategory = await db.createCategory(tenant.id, { name: newCategoryName.trim() });
+      body.category = createdCategory.id;
+    }
+
     const product = await db.createProduct(tenant.id, body);
     return c.json({ success: true, product }, 201);
   } catch (e: any) {
@@ -1781,8 +2029,18 @@ api.post("/tenants/:slugOrId/products", async (c) => {
 api.put("/tenants/:slugOrId/products/:productId", async (c) => {
   try {
     const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
     const productId = c.req.param("productId");
     const body = await c.req.json();
+
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+
+    // Se uma nova categoria foi informada na edição
+    const newCategoryName = body.newCategoryName || body.novaCategoria || body.newCategory;
+    if (newCategoryName && typeof newCategoryName === "string" && newCategoryName.trim() && tenant) {
+      const createdCategory = await db.createCategory(tenant.id, { name: newCategoryName.trim() });
+      body.category = createdCategory.id;
+    }
 
     const product = await db.updateProduct(productId, body);
     if (!product) {

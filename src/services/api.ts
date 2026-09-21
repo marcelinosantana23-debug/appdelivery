@@ -2,6 +2,8 @@ import type {
   Tenant,
   User,
   Product,
+  Category,
+  EstablishmentCategory,
   Order,
   OrderStatus,
   TenantStatus,
@@ -121,6 +123,7 @@ export async function createTenantApi(data: {
   address?: string;
   primaryColor?: string;
   bannerImage?: string;
+  businessType?: string;
 }): Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string; message?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants`, {
@@ -243,6 +246,50 @@ export async function deleteTenantProductApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products/${productId}`, {
       method: "DELETE",
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function reorderTenantProductsApi(
+  slugOrId: string,
+  orderedIds: string[]
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products/reorder`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedIds }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchTenantCategoriesApi(
+  slugOrId: string
+): Promise<{ success: boolean; categories: Category[]; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/categories`);
+    const data = await res.json();
+    return { success: true, categories: data.categories || data.categorias || [] };
+  } catch (err: any) {
+    return { success: false, categories: [], error: err.message };
+  }
+}
+
+export async function createTenantCategoryApi(
+  slugOrId: string,
+  category: { name: string; icon?: string }
+): Promise<{ success: boolean; category?: Category; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(category),
     });
     return await res.json();
   } catch (err: any) {
@@ -492,6 +539,54 @@ export async function fetchTenantFinancialReportApi(
       success: false,
       error: err.message || "Erro de conexão ao carregar relatório financeiro",
     };
+  }
+}
+
+export async function fetchEstablishmentCategoriesApi(): Promise<{
+  success: boolean;
+  categories?: EstablishmentCategory[];
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/establishment-categories`);
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function createEstablishmentCategoryApi(data: {
+  name: string;
+  icon?: string;
+  order?: number;
+}): Promise<{
+  success: boolean;
+  category?: EstablishmentCategory;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/establishment-categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteEstablishmentCategoryApi(
+  id: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/establishment-categories/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }
 

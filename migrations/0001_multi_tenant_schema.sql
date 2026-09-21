@@ -52,11 +52,24 @@ CREATE TABLE IF NOT EXISTS products (
     image TEXT NOT NULL,
     available INTEGER NOT NULL DEFAULT 1,
     options_json TEXT DEFAULT '[]',
+    position INTEGER DEFAULT 0,
+    ordem INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 
--- 4. ORDERS TABLE (Pedidos de cada Loja)
+-- 4. CATEGORIES TABLE (Categorias personalizadas por Loja)
+CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    icon TEXT DEFAULT '🍽️',
+    order_index INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+-- 5. ORDERS TABLE (Pedidos de cada Loja)
 CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -80,4 +93,5 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id);

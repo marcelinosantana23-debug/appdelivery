@@ -39,6 +39,9 @@ export interface Tenant {
   themeMode?: "light" | "dark";
   menuLayout?: "list" | "grid";
   showFeaturedCarousel?: boolean;
+  businessType?: string;
+  rating?: number;
+  ratingCount?: number;
   status: TenantStatus;
   isOpen: boolean;
   createdAt: number;
@@ -72,6 +75,29 @@ export interface Product {
   category?: string;
   available?: boolean;
   options?: ProductOption[];
+  position?: number;
+  ordem?: number;
+  order?: number;
+  createdAt?: number;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  icon?: string;
+  tenantId?: string;
+  order?: number;
+  order_index?: number;
+  createdAt?: number;
+}
+
+export interface EstablishmentCategory {
+  id: string;
+  name: string;
+  icon: string;
+  order: number;
+  order_index?: number;
+  active?: boolean;
   createdAt?: number;
 }
 

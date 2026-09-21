@@ -3,6 +3,8 @@ import type {
   Tenant,
   User,
   Product,
+  Category,
+  EstablishmentCategory,
   Order,
   OrderStatus,
   TenantStatus,
@@ -19,7 +21,7 @@ const initialTenants: Tenant[] = [
   {
     id: "tenant-ms-preparacoes",
     name: "MS Preparações",
-    slug: "marcelino",
+    slug: "ms-preparacoes",
     email: "marcelinosantana23@gmail.com",
     phone: "11999999999",
     whatsapp: "5511999999999",
@@ -40,6 +42,9 @@ const initialTenants: Tenant[] = [
     themeMode: "light",
     menuLayout: "list",
     showFeaturedCarousel: true,
+    businessType: "Lanchonetes",
+    rating: 4.9,
+    ratingCount: 184,
     status: "active",
     isOpen: true,
     createdAt: Date.now() - 5 * 86400000,
@@ -60,7 +65,7 @@ const initialTenants: Tenant[] = [
     tagline: "Hambúrgueres artesanais na chama",
     announcement: "Entrega grátis para pedidos acima de R$ 50,00!",
     logo: "🍔",
-    bannerImage: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
+    bannerImage: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80",
     primaryColor: "#E63946",
     secondaryColor: "#1E293B",
     primaryDark: "#C1121F",
@@ -69,6 +74,9 @@ const initialTenants: Tenant[] = [
     themeMode: "light",
     menuLayout: "list",
     showFeaturedCarousel: true,
+    businessType: "Lanchonetes",
+    rating: 4.8,
+    ratingCount: 126,
     status: "active",
     isOpen: true,
     createdAt: Date.now() - 30 * 86400000,
@@ -87,15 +95,116 @@ const initialTenants: Tenant[] = [
     address: "Av. Paulista, 1500 - Bela Vista",
     hours: "18:30 - 00:00",
     tagline: "Pizzas no forno a lenha com massa fermentada",
+    announcement: "🍕 Tradicionais pizzas no forno a lenha e bordas recheadas!",
     logo: "🍕",
     bannerImage: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80",
     primaryColor: "#059669",
+    secondaryColor: "#0F172A",
     primaryDark: "#047857",
     primaryLight: "#10B981",
     accentColor: "#F59E0B",
+    businessType: "Pizzarias",
+    rating: 4.9,
+    ratingCount: 215,
     status: "active",
     isOpen: true,
     createdAt: Date.now() - 15 * 86400000,
+    updatedAt: Date.now(),
+  },
+  {
+    id: "tenant-sorvetes-imperial",
+    name: "Sorvetes & Gelatos Imperial",
+    slug: "sorvetes-imperial",
+    email: "contato@sorvetesimperial.com.br",
+    phone: "11977777777",
+    whatsapp: "5511977777777",
+    pixKey: "contato@sorvetesimperial.com.br",
+    pixKeyType: "email",
+    deliveryFee: 4.0,
+    address: "Rua das Palmeiras, 350 - Jardins",
+    hours: "13:00 - 22:30",
+    tagline: "Gelatos italianos autênticos, picolés artesanais e taças premium",
+    announcement: "🍦 Mais de 30 sabores artesanais e taças montadas na hora!",
+    logo: "🍨",
+    bannerImage: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#0284C7",
+    secondaryColor: "#0F172A",
+    primaryDark: "#0369A1",
+    primaryLight: "#38BDF8",
+    accentColor: "#F59E0B",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    businessType: "Sorveteiras",
+    rating: 4.9,
+    ratingCount: 98,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 10 * 86400000,
+    updatedAt: Date.now(),
+  },
+  {
+    id: "tenant-acai-do-vale",
+    name: "Açaí do Vale & Cia",
+    slug: "acai-do-vale",
+    email: "pedidos@acaidovale.com.br",
+    phone: "11966666666",
+    whatsapp: "5511966666666",
+    pixKey: "pedidos@acaidovale.com.br",
+    pixKeyType: "email",
+    deliveryFee: 5.0,
+    address: "Av. Brasil, 890 - Centro",
+    hours: "12:00 - 23:00",
+    tagline: "Açaí puro do Pará batido na hora, cremes e acompanhamentos",
+    announcement: "🍧 Monte sua tigela ou copo com frutas frescas e complementos à vontade!",
+    logo: "🍧",
+    bannerImage: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#7E22CE",
+    secondaryColor: "#1E1B4B",
+    primaryDark: "#6B21A8",
+    primaryLight: "#A855F7",
+    accentColor: "#EAB308",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    businessType: "Açaíterias",
+    rating: 4.9,
+    ratingCount: 167,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 8 * 86400000,
+    updatedAt: Date.now(),
+  },
+  {
+    id: "tenant-sabor-e-brasa",
+    name: "Sabor & Brasa Grill",
+    slug: "sabor-e-brasa",
+    email: "contato@saborebrasa.com.br",
+    phone: "11955555555",
+    whatsapp: "5511955555555",
+    pixKey: "contato@saborebrasa.com.br",
+    pixKeyType: "email",
+    deliveryFee: 7.0,
+    address: "Rua do Comércio, 1200 - Centro",
+    hours: "11:00 - 22:30",
+    tagline: "Cortes nobres na brasa, marmitex gourmet e refeições executivas",
+    announcement: "🥩 Almoço executivo e cortes nobres preparados na churrasqueira a carvão!",
+    logo: "🥩",
+    bannerImage: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#B91C1C",
+    secondaryColor: "#18181B",
+    primaryDark: "#991B1B",
+    primaryLight: "#EF4444",
+    accentColor: "#F59E0B",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    businessType: "Restaurantes",
+    rating: 4.8,
+    ratingCount: 312,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 20 * 86400000,
     updatedAt: Date.now(),
   },
 ];
@@ -286,7 +395,97 @@ const initialProducts: Product[] = [
       { id: "guarana", name: "Guaraná Antarctica", price: 0 },
     ],
   },
-];
+  // Sorvetes & Gelatos Imperial
+  {
+    id: "gelato-1",
+    tenantId: "tenant-sorvetes-imperial",
+    name: "Pote Gelato Artesanal 500ml",
+    description: "Gelato italiano super cremoso batido diariamente. Escolha até 2 sabores incríveis.",
+    price: 38.0,
+    image: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=600&q=80",
+    category: "sobremesas",
+    available: true,
+    options: [
+      { id: "sabor-pistache", name: "Pistache Siciliano", price: 0 },
+      { id: "sabor-ninho", name: "Ninho Trufado com Nutella", price: 0 },
+      { id: "sabor-morango", name: "Morango Silvestre", price: 0 },
+    ],
+  },
+  {
+    id: "gelato-2",
+    tenantId: "tenant-sorvetes-imperial",
+    name: "Taça Suprema Ferrero & Nutella",
+    description: "Camadas generosas de gelato de baunilha, Nutella pura, bombons Ferrero Rocher e castanhas picadas.",
+    price: 32.5,
+    image: "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=600&q=80",
+    category: "sobremesas",
+    available: true,
+    options: [
+      { id: "extra-nutella", name: "Dose extra de Nutella", price: 5.0 },
+    ],
+  },
+  // Açaí do Vale & Cia
+  {
+    id: "acai-1",
+    tenantId: "tenant-acai-do-vale",
+    name: "Tigela Tradicional Açaí 500ml",
+    description: "Açaí puro premium batido na consistência perfeita, acompanha banana fresca fatiada, leite condensado e granola crocante.",
+    price: 24.9,
+    image: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80",
+    category: "acai",
+    available: true,
+    options: [
+      { id: "leite-ninho", name: "Leite Ninho em pó", price: 3.5 },
+      { id: "morango-fresco", name: "Morangos frescos", price: 4.0 },
+      { id: "pacoca", name: "Paçoca rolha triturada", price: 2.5 },
+    ],
+  },
+  {
+    id: "acai-2",
+    tenantId: "tenant-acai-do-vale",
+    name: "Barca Especial Açaí Turbinado 750ml",
+    description: "Açaí cremoso com morango, banana, kiwi, confetes, brigadeiro de panela e calda especial à escolha.",
+    price: 42.0,
+    image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
+    category: "acai",
+    available: true,
+    options: [
+      { id: "nutella-barca", name: "Nutella na barca", price: 6.0 },
+    ],
+  },
+  // Sabor & Brasa Grill
+  {
+    id: "grill-1",
+    tenantId: "tenant-sabor-e-brasa",
+    name: "Picanha na Brasa com Fritas e Arroz",
+    description: "Corte nobre de picanha maturada grelhada na brasa (350g in natura), arroz branco soltinho, feijão tropeiro e fritas crocantes.",
+    price: 59.9,
+    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80",
+    category: "pratos",
+    available: true,
+    options: [
+      { id: "ponto-carne-mal", name: "Ponto: Mal passada", price: 0 },
+      { id: "ponto-carne-ao-ponto", name: "Ponto: Ao ponto", price: 0 },
+      { id: "ponto-carne-bem", name: "Ponto: Bem passada", price: 0 },
+      { id: "vinagrete-extra", name: "Porção de vinagrete da casa", price: 5.0 },
+    ],
+  },
+  {
+    id: "grill-2",
+    tenantId: "tenant-sabor-e-brasa",
+    name: "Marmitex Executivo Bife Ancho",
+    description: "Bife ancho grelhado, arroz, feijão caseiro temperado, farofa crocante e salada mista.",
+    price: 36.0,
+    image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=600&q=80",
+    category: "pratos",
+    available: true,
+    options: [],
+  },
+].map((p, idx) => ({
+  ...p,
+  position: p.position ?? p.ordem ?? idx,
+  ordem: p.position ?? p.ordem ?? idx,
+}));
 
 const initialOrders: Order[] = [
   {
@@ -688,11 +887,34 @@ const initialCustomers: Customer[] = [
   },
 ];
 
+export const defaultCategories: Category[] = [
+  { id: "lanches", name: "Lanches", icon: "🍔", order: 1, order_index: 1 },
+  { id: "combos", name: "Combos", icon: "🍟", order: 2, order_index: 2 },
+  { id: "porcoes", name: "Porções", icon: "🍗", order: 3, order_index: 3 },
+  { id: "bebidas", name: "Bebidas", icon: "🥤", order: 4, order_index: 4 },
+  { id: "sobremesas", name: "Sobremesas", icon: "🍰", order: 5, order_index: 5 },
+  { id: "pizzas", name: "Pizzas", icon: "🍕", order: 6, order_index: 6 },
+  { id: "pasteis", name: "Pastéis", icon: "🥟", order: 7, order_index: 7 },
+  { id: "acai", name: "Açaí", icon: "🍧", order: 8, order_index: 8 },
+];
+
+export const defaultEstablishmentCategories: EstablishmentCategory[] = [
+  { id: "lanchonetes", name: "Lanchonetes", icon: "🍔", order: 1, order_index: 1, active: true },
+  { id: "pizzarias", name: "Pizzarias", icon: "🍕", order: 2, order_index: 2, active: true },
+  { id: "sorveteiras", name: "Sorveteiras", icon: "🍨", order: 3, order_index: 3, active: true },
+  { id: "acaiterias", name: "Açaíterias", icon: "🍧", order: 4, order_index: 4, active: true },
+  { id: "restaurantes", name: "Restaurantes", icon: "🥩", order: 5, order_index: 5, active: true },
+  { id: "docerias", name: "Docerias", icon: "🍰", order: 6, order_index: 6, active: true },
+  { id: "distribuidoras", name: "Distribuidoras", icon: "🍺", order: 7, order_index: 7, active: true },
+];
+
 // In-memory data store for Node.js / preview runtime (with persistence)
 class MemoryStore {
   tenants: Tenant[] = [...initialTenants];
   users: User[] = [...initialUsers];
   products: Product[] = [...initialProducts];
+  categories: Category[] = [...defaultCategories];
+  establishmentCategories: EstablishmentCategory[] = [...defaultEstablishmentCategories];
   orders: Order[] = [...initialOrders];
   customers: Customer[] = [...initialCustomers];
 
@@ -782,6 +1004,24 @@ export class Database {
           image TEXT NOT NULL DEFAULT '',
           available INTEGER NOT NULL DEFAULT 1,
           options_json TEXT DEFAULT '[]',
+          position INTEGER DEFAULT 0,
+          ordem INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS categories (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          icon TEXT DEFAULT '🍽️',
+          order_index INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS establishment_categories (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          icon TEXT NOT NULL DEFAULT '🍽️',
+          order_index INTEGER DEFAULT 0,
+          active INTEGER DEFAULT 1,
           created_at INTEGER NOT NULL
         )`,
         `CREATE TABLE IF NOT EXISTS orders (
@@ -855,8 +1095,13 @@ export class Database {
         "ALTER TABLE tenants ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE products ADD COLUMN options_json TEXT DEFAULT '[]'",
         "ALTER TABLE products ADD COLUMN available INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE products ADD COLUMN position INTEGER DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN ordem INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN tenant_id TEXT",
-        "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+        "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+        "ALTER TABLE tenants ADD COLUMN business_type TEXT DEFAULT 'Lanchonetes'",
+        "ALTER TABLE establishment_categories ADD COLUMN order_index INTEGER DEFAULT 0",
+        "ALTER TABLE establishment_categories ADD COLUMN active INTEGER DEFAULT 1"
       ];
 
       for (const alter of alterQueries) {
@@ -872,6 +1117,8 @@ export class Database {
         "CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug)",
         "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
         "CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_establishment_categories_order ON establishment_categories(order_index)",
         "CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id)"
       ];
 
@@ -895,6 +1142,14 @@ export class Database {
           }
           for (const p of initialProducts) {
             await this.insertProductRow(p);
+          }
+        }
+
+        // Seed establishment categories se estiver vazia
+        const catCountRes = await db.prepare("SELECT count(*) as total FROM establishment_categories").first<{ total: number }>();
+        if (!catCountRes || Number(catCountRes.total) === 0) {
+          for (const ec of defaultEstablishmentCategories) {
+            await this.insertEstablishmentCategoryRow(ec);
           }
         }
       } catch (e) {
@@ -995,6 +1250,27 @@ export class Database {
           p.available ? 1 : 0,
           JSON.stringify(p.options || []),
           p.createdAt
+        )
+        .run();
+    } catch {
+      // ignore
+    }
+  }
+
+  private async insertEstablishmentCategoryRow(ec: EstablishmentCategory): Promise<void> {
+    if (!this.env?.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO establishment_categories (id, name, icon, order_index, active, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          ec.id,
+          ec.name,
+          ec.icon || "🍽️",
+          ec.order ?? ec.order_index ?? 0,
+          ec.active !== false ? 1 : 0,
+          ec.createdAt || Date.now()
         )
         .run();
     } catch {
@@ -1120,6 +1396,7 @@ export class Database {
     logo?: string;
     tagline?: string;
     description?: string;
+    businessType?: string;
   }): Promise<Tenant> {
     const slug = data.slug
       ? globalStore.slugify(data.slug)
@@ -1169,6 +1446,7 @@ export class Database {
       primaryDark: "#C1121F",
       primaryLight: "#F77F00",
       accentColor: "#FCBF49",
+      businessType: data.businessType?.trim() || "Lanchonetes",
       status: "active",
       isOpen: true,
       createdAt: Date.now(),
@@ -1183,9 +1461,9 @@ export class Database {
             id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
             delivery_fee, min_order, estimated_time, address, hours, tagline,
             announcement, logo, banner, banner_image, primary_color, secondary_color,
-            primary_dark, primary_light, accent_color, status, is_open,
+            primary_dark, primary_light, accent_color, business_type, status, is_open,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newTenant.id,
@@ -1211,6 +1489,7 @@ export class Database {
             newTenant.primaryDark,
             newTenant.primaryLight,
             newTenant.accentColor,
+            newTenant.businessType || "Lanchonetes",
             newTenant.status,
             newTenant.isOpen ? 1 : 0,
             newTenant.createdAt,
@@ -1227,8 +1506,8 @@ export class Database {
             `INSERT OR REPLACE INTO tenants (
               id, name, slug, email, phone, whatsapp, pix_key,
               delivery_fee, address, hours, tagline, logo,
-              primary_color, status, is_open, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              primary_color, business_type, status, is_open, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
             .bind(
               newTenant.id,
@@ -1244,6 +1523,7 @@ export class Database {
               newTenant.tagline,
               newTenant.logo,
               newTenant.primaryColor,
+              newTenant.businessType || "Lanchonetes",
               newTenant.status,
               newTenant.isOpen ? 1 : 0,
               newTenant.createdAt,
@@ -1288,7 +1568,7 @@ export class Database {
             name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
             delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
             logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-            accent_color = ?, status = ?, is_open = ?, updated_at = ?
+            accent_color = ?, business_type = ?, status = ?, is_open = ?, updated_at = ?
           WHERE id = ?`
         )
           .bind(
@@ -1306,6 +1586,7 @@ export class Database {
             updated.primaryDark,
             updated.primaryLight,
             updated.accentColor,
+            updated.businessType || "Lanchonetes",
             updated.status,
             updated.isOpen ? 1 : 0,
             updated.updatedAt,
@@ -1320,7 +1601,7 @@ export class Database {
               name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
               delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
               logo = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-              accent_color = ?, status = ?, is_open = ?, updated_at = ?
+              accent_color = ?, business_type = ?, status = ?, is_open = ?, updated_at = ?
             WHERE id = ?`
           )
             .bind(
@@ -1337,6 +1618,7 @@ export class Database {
               updated.primaryDark,
               updated.primaryLight,
               updated.accentColor,
+              updated.businessType || "Lanchonetes",
               updated.status,
               updated.isOpen ? 1 : 0,
               updated.updatedAt,
@@ -1398,6 +1680,130 @@ export class Database {
     globalStore.products = globalStore.products.filter((p) => p.tenantId !== tenant.id);
     globalStore.orders = globalStore.orders.filter((o) => o.tenantId !== tenant.id);
     globalStore.users = globalStore.users.filter((u) => u.tenantId !== tenant.id);
+    return true;
+  }
+
+  // ===================== ESTABLISHMENT CATEGORIES =====================
+
+  async getEstablishmentCategories(): Promise<EstablishmentCategory[]> {
+    await this.ensureTables();
+    let d1Categories: EstablishmentCategory[] = [];
+
+    if (this.env?.DB) {
+      try {
+        const res = await this.env.DB.prepare(
+          "SELECT * FROM establishment_categories WHERE active = 1 ORDER BY order_index ASC, created_at ASC"
+        ).all<any>();
+        if (res.results && res.results.length > 0) {
+          d1Categories = res.results.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            icon: r.icon || "🍽️",
+            order: Number(r.order_index) || 0,
+            order_index: Number(r.order_index) || 0,
+            active: r.active !== 0,
+            createdAt: Number(r.created_at) || Date.now(),
+          }));
+        }
+      } catch (e) {
+        console.warn("D1 getEstablishmentCategories error:", e);
+      }
+    }
+
+    // Merge default, memory and D1 categories
+    const combinedMap = new Map<string, EstablishmentCategory>();
+
+    defaultEstablishmentCategories.forEach((cat) => {
+      combinedMap.set(cat.id.toLowerCase(), { ...cat });
+    });
+
+    (globalStore.establishmentCategories || []).forEach((cat) => {
+      combinedMap.set(cat.id.toLowerCase(), { ...cat });
+    });
+
+    d1Categories.forEach((cat) => {
+      combinedMap.set(cat.id.toLowerCase(), { ...cat });
+    });
+
+    return Array.from(combinedMap.values()).sort(
+      (a, b) => (a.order ?? a.order_index ?? 0) - (b.order ?? b.order_index ?? 0)
+    );
+  }
+
+  async createEstablishmentCategory(data: {
+    name: string;
+    icon?: string;
+    order?: number;
+  }): Promise<EstablishmentCategory> {
+    await this.ensureTables();
+    const cleanName = data.name.trim();
+    if (!cleanName) {
+      throw new Error("O nome da categoria não pode ser vazio.");
+    }
+
+    const id = globalStore.slugify(cleanName);
+    const existingList = await this.getEstablishmentCategories();
+    const existing = existingList.find(
+      (c) => c.name.toLowerCase() === cleanName.toLowerCase() || c.id === id
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const maxOrder = existingList.reduce((max, c) => Math.max(max, c.order ?? 0), 0);
+    const newCat: EstablishmentCategory = {
+      id,
+      name: cleanName,
+      icon: data.icon?.trim() || "🍽️",
+      order: data.order !== undefined ? Number(data.order) : maxOrder + 1,
+      order_index: data.order !== undefined ? Number(data.order) : maxOrder + 1,
+      active: true,
+      createdAt: Date.now(),
+    };
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          `INSERT INTO establishment_categories (id, name, icon, order_index, active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            newCat.id,
+            newCat.name,
+            newCat.icon,
+            newCat.order,
+            newCat.active ? 1 : 0,
+            newCat.createdAt
+          )
+          .run();
+      } catch (err: any) {
+        console.error("D1 createEstablishmentCategory error:", err);
+      }
+    }
+
+    globalStore.establishmentCategories = (globalStore.establishmentCategories || []).filter(
+      (c) => c.id !== newCat.id
+    );
+    globalStore.establishmentCategories.push(newCat);
+
+    return newCat;
+  }
+
+  async deleteEstablishmentCategory(id: string): Promise<boolean> {
+    await this.ensureTables();
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          "DELETE FROM establishment_categories WHERE id = ?"
+        ).bind(id).run();
+      } catch (e) {
+        console.warn("D1 deleteEstablishmentCategory error:", e);
+      }
+    }
+
+    globalStore.establishmentCategories = (globalStore.establishmentCategories || []).filter(
+      (c) => c.id !== id
+    );
     return true;
   }
 
@@ -1826,7 +2232,7 @@ export class Database {
     if (this.env?.DB) {
       try {
         const res = await this.env.DB.prepare(
-          "SELECT * FROM products WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC"
+          "SELECT * FROM products WHERE tenant_id = ? OR tenant_id = ? ORDER BY COALESCE(position, ordem, 0) ASC, created_at DESC"
         )
           .bind(resolvedId, resolvedSlug)
           .all<any>();
@@ -1842,26 +2248,35 @@ export class Database {
     const memId = memTenant ? memTenant.id : resolvedId;
     const memSlug = memTenant ? memTenant.slug : resolvedSlug;
 
-    return globalStore.products.filter(
-      (p) => p.tenantId === memId || p.tenantId === memSlug
-    );
+    return globalStore.products
+      .filter((p) => p.tenantId === memId || p.tenantId === memSlug)
+      .sort((a, b) => (a.position ?? a.ordem ?? 0) - (b.position ?? b.ordem ?? 0));
   }
 
   async createProduct(tenantId: string, product: Omit<Product, "id" | "tenantId">): Promise<Product> {
     await this.ensureTables();
+    const currentProducts = await this.getProductsByTenant(tenantId);
+    const maxPosition = currentProducts.reduce(
+      (max, p) => Math.max(max, p.position ?? p.ordem ?? 0),
+      -1
+    );
+    const assignedPosition = product.position ?? product.ordem ?? maxPosition + 1;
+
     const newProduct: Product = {
       ...product,
       id: `prod-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tenantId,
       available: product.available !== undefined ? Boolean(product.available) : true,
+      position: assignedPosition,
+      ordem: assignedPosition,
       createdAt: Date.now(),
     };
 
     if (this.env?.DB) {
       try {
         await this.env.DB.prepare(
-          `INSERT INTO products (id, tenant_id, name, description, price, category, image, available, options_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO products (id, tenant_id, name, description, price, category, image, available, options_json, position, ordem, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newProduct.id,
@@ -1873,11 +2288,35 @@ export class Database {
             newProduct.image || "",
             newProduct.available ? 1 : 0,
             JSON.stringify(newProduct.options || []),
+            newProduct.position ?? 0,
+            newProduct.ordem ?? 0,
             newProduct.createdAt
           )
           .run();
       } catch (e) {
         console.warn("D1 createProduct error:", e);
+        try {
+          await this.env.DB.prepare(
+            `INSERT INTO products (id, tenant_id, name, description, price, category, image, available, options_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+            .bind(
+              newProduct.id,
+              newProduct.tenantId,
+              newProduct.name,
+              newProduct.description,
+              newProduct.price,
+              newProduct.category,
+              newProduct.image || "",
+              newProduct.available ? 1 : 0,
+              JSON.stringify(newProduct.options || []),
+              newProduct.createdAt
+            )
+            .run();
+        } catch {
+          /* ignore */
+          void 0;
+        }
       }
     }
 
@@ -1926,7 +2365,7 @@ export class Database {
       try {
         await this.ensureTables();
         await this.env.DB.prepare(
-          `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ? WHERE id = ?`
+          `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ?, position = ?, ordem = ? WHERE id = ?`
         )
           .bind(
             updated.name,
@@ -1936,11 +2375,32 @@ export class Database {
             updated.image,
             updated.available ? 1 : 0,
             JSON.stringify(updated.options || []),
+            updated.position ?? updated.ordem ?? 0,
+            updated.ordem ?? updated.position ?? 0,
             productId
           )
           .run();
       } catch (e) {
-        console.warn("D1 updateProduct error:", e);
+        console.warn("D1 updateProduct error with position, trying legacy:", e);
+        try {
+          await this.env.DB.prepare(
+            `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ? WHERE id = ?`
+          )
+            .bind(
+              updated.name,
+              updated.description,
+              updated.price,
+              updated.category,
+              updated.image,
+              updated.available ? 1 : 0,
+              JSON.stringify(updated.options || []),
+              productId
+            )
+            .run();
+        } catch {
+          /* ignore */
+          void 0;
+        }
       }
     }
 
@@ -1957,6 +2417,190 @@ export class Database {
     }
 
     return updated;
+  }
+
+  async reorderProducts(tenantId: string, orderedIds: string[]): Promise<boolean> {
+    await this.ensureTables();
+    const tenant = await this.getTenantByIdOrSlug(tenantId);
+    const resolvedId = tenant ? tenant.id : tenantId;
+    const resolvedSlug = tenant ? tenant.slug : tenantId;
+
+    for (let i = 0; i < orderedIds.length; i++) {
+      const prodId = orderedIds[i];
+      // Atualiza memória
+      const prod = globalStore.products.find((p) => p.id === prodId);
+      if (prod) {
+        prod.position = i;
+        prod.ordem = i;
+        prod.order = i;
+      }
+      // Atualiza Cloudflare D1
+      if (this.env?.DB) {
+        try {
+          await this.env.DB.prepare(
+            "UPDATE products SET position = ?, ordem = ? WHERE id = ?"
+          )
+            .bind(i, i, prodId)
+            .run();
+        } catch (e) {
+          console.warn("D1 reorderProduct error:", e);
+        }
+      }
+    }
+
+    // Invalida cache do KV
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.delete(`products:${resolvedId}`);
+        await kv.delete(`products:${resolvedSlug}`);
+      } catch (e) {
+        console.warn("KV invalidate products error:", e);
+      }
+    }
+
+    return true;
+  }
+
+  // ===================== CATEGORIES =====================
+
+  async getCategoriesByTenant(tenantId: string): Promise<Category[]> {
+    await this.ensureTables();
+    const tenant = await this.getTenantByIdOrSlug(tenantId);
+    const resolvedId = tenant ? tenant.id : tenantId;
+    const resolvedSlug = tenant ? tenant.slug : tenantId;
+
+    let d1Categories: Category[] = [];
+    if (this.env?.DB) {
+      try {
+        const res = await this.env.DB.prepare(
+          "SELECT * FROM categories WHERE tenant_id = ? OR tenant_id = ? OR tenant_id IS NULL OR tenant_id = '' ORDER BY order_index ASC, created_at ASC"
+        )
+          .bind(resolvedId, resolvedSlug)
+          .all<any>();
+        if (res.results && res.results.length > 0) {
+          d1Categories = res.results.map((r: any) => ({
+            id: r.id,
+            tenantId: r.tenant_id,
+            name: r.name,
+            icon: r.icon || "🍽️",
+            order: Number(r.order_index) || 0,
+            order_index: Number(r.order_index) || 0,
+            createdAt: Number(r.created_at) || Date.now(),
+          }));
+        }
+      } catch (e) {
+        console.warn("D1 getCategories error:", e);
+      }
+    }
+
+    // Combinar categorias em memória e categorias padrões
+    const memCategories = globalStore.categories || [];
+    const tenantMemCats = memCategories.filter(
+      (c: Category) => !c.tenantId || c.tenantId === resolvedId || c.tenantId === resolvedSlug
+    );
+
+    const combinedMap = new Map<string, Category>();
+
+    // 1. Categorias padrões
+    defaultCategories.forEach((dc) => {
+      combinedMap.set(dc.id.toLowerCase(), { ...dc });
+    });
+
+    // 2. Categorias do memory store
+    tenantMemCats.forEach((mc: Category) => {
+      combinedMap.set(mc.id.toLowerCase(), { ...mc });
+    });
+
+    // 3. Categorias vindas do banco de dados D1
+    d1Categories.forEach((dc: Category) => {
+      combinedMap.set(dc.id.toLowerCase(), { ...dc });
+    });
+
+    // 4. Categorias referenciadas em produtos existentes
+    const products = await this.getProductsByTenant(tenantId);
+    products.forEach((p) => {
+      if (p.category && !combinedMap.has(p.category.toLowerCase())) {
+        combinedMap.set(p.category.toLowerCase(), {
+          id: p.category.toLowerCase(),
+          name: p.category.charAt(0).toUpperCase() + p.category.slice(1),
+          icon: "🍽️",
+          tenantId: resolvedId,
+          order: 99,
+          createdAt: Date.now(),
+        });
+      }
+    });
+
+    return Array.from(combinedMap.values()).sort(
+      (a, b) => (a.order ?? a.order_index ?? 0) - (b.order ?? b.order_index ?? 0)
+    );
+  }
+
+  async createCategory(
+    tenantId: string,
+    data: { name: string; icon?: string }
+  ): Promise<Category> {
+    await this.ensureTables();
+    const tenant = await this.getTenantByIdOrSlug(tenantId);
+    const resolvedId = tenant ? tenant.id : tenantId;
+    const cleanName = data.name.trim();
+
+    if (!cleanName) {
+      throw new Error("O nome da categoria não pode ser vazio.");
+    }
+
+    // Verificar se já existe categoria com o mesmo nome (evitando duplicatas se já existir)
+    const existingList = await this.getCategoriesByTenant(tenantId);
+    const existing = existingList.find(
+      (c) => c.name.toLowerCase() === cleanName.toLowerCase()
+    );
+    if (existing) {
+      return existing;
+    }
+
+    // Gerar ID seguro
+    const slugBase = globalStore.slugify(cleanName) || `cat-${Date.now()}`;
+    const id = existingList.some((c) => c.id === slugBase)
+      ? `${slugBase}-${Date.now().toString(36).slice(-4)}`
+      : slugBase;
+
+    const newCategory: Category = {
+      id,
+      tenantId: resolvedId,
+      name: cleanName,
+      icon: data.icon || "🍽️",
+      order: existingList.length + 1,
+      order_index: existingList.length + 1,
+      createdAt: Date.now(),
+    };
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          `INSERT INTO categories (id, tenant_id, name, icon, order_index, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            newCategory.id,
+            newCategory.tenantId,
+            newCategory.name,
+            newCategory.icon,
+            newCategory.order_index,
+            newCategory.createdAt
+          )
+          .run();
+      } catch (e) {
+        console.warn("D1 createCategory error:", e);
+      }
+    }
+
+    if (!globalStore.categories) {
+      globalStore.categories = [...defaultCategories];
+    }
+    globalStore.categories.push(newCategory);
+
+    return newCategory;
   }
 
   async deleteProduct(productId: string): Promise<boolean> {
@@ -2502,6 +3146,9 @@ export class Database {
       themeMode: row.theme_mode === "dark" ? "dark" : "light",
       menuLayout: row.menu_layout === "grid" ? "grid" : "list",
       showFeaturedCarousel: row.show_featured_carousel !== undefined ? Boolean(row.show_featured_carousel) : true,
+      businessType: row.business_type || row.category || "Lanchonetes",
+      rating: Number(row.rating) || 4.9,
+      ratingCount: Number(row.rating_count) || 120,
       status: (row.status === "inactive" ? "inactive" : "active") as TenantStatus,
       isOpen: Boolean(row.is_open !== undefined ? row.is_open : 1),
       createdAt: Number(row.created_at) || Date.now(),
@@ -2544,6 +3191,8 @@ export class Database {
           row.available === "active"
         : true;
 
+    const position = Number(row.position ?? row.ordem ?? row.order_index ?? 0);
+
     return {
       id: row.id,
       tenantId: row.tenant_id,
@@ -2554,6 +3203,9 @@ export class Database {
       image: row.image || "",
       available: isAvail,
       options: this.safeJsonParse(row.options_json, []),
+      position,
+      ordem: position,
+      order: position,
       createdAt: Number(row.created_at) || Date.now(),
     };
   }

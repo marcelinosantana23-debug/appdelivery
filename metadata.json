@@ -1,6 +1,6 @@
 {
   "name": "Top Food",
-  "description": "Faça seu pedido online no Top Food!",
+  "description": "Top Food - O Portal do Delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
