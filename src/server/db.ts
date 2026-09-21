@@ -13,6 +13,8 @@ import type {
   DailyRevenueItem,
   PaymentBreakdownItem,
   PlatformSettings,
+  TopSellingProduct,
+  FeaturedStoreRanked,
 } from "./types";
 import { mockProducts } from "../data/mockData";
 import { orderEvents } from "./events";
@@ -922,6 +924,41 @@ export const defaultPlatformSettings: PlatformSettings = {
   updatedAt: Date.now(),
 };
 
+export interface OrderItemRecord {
+  id: string;
+  orderId: string;
+  tenantId: string;
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image?: string;
+  optionsJson?: string;
+  createdAt: number;
+}
+
+function extractOrderItemsFromOrders(orders: Order[]): OrderItemRecord[] {
+  const list: OrderItemRecord[] = [];
+  for (const ord of orders) {
+    if (!ord.items || !Array.isArray(ord.items)) continue;
+    for (const it of ord.items) {
+      list.push({
+        id: it.id || `oi-${ord.id}-${list.length + 1}`,
+        orderId: ord.id,
+        tenantId: ord.tenantId || "tenant-ms-preparacoes",
+        productId: it.product?.id || `p-${list.length + 1}`,
+        name: it.product?.name || "Lanche Especial",
+        price: Number(it.product?.price) || 0,
+        quantity: Number(it.quantity) || 1,
+        image: it.product?.image || "",
+        optionsJson: JSON.stringify(it.selectedOptions || []),
+        createdAt: ord.createdAt || Date.now(),
+      });
+    }
+  }
+  return list;
+}
+
 // In-memory data store for Node.js / preview runtime (with persistence)
 class MemoryStore {
   tenants: Tenant[] = [...initialTenants];
@@ -930,6 +967,7 @@ class MemoryStore {
   categories: Category[] = [...defaultCategories];
   establishmentCategories: EstablishmentCategory[] = [...defaultEstablishmentCategories];
   orders: Order[] = [...initialOrders];
+  orderItems: OrderItemRecord[] = extractOrderItemsFromOrders(initialOrders);
   customers: Customer[] = [...initialCustomers];
   platformSettings: PlatformSettings = { ...defaultPlatformSettings };
 
@@ -1078,6 +1116,18 @@ export class Database {
           last_order_at INTEGER NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS order_items (
+          id TEXT PRIMARY KEY,
+          order_id TEXT NOT NULL,
+          tenant_id TEXT NOT NULL,
+          product_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          price REAL NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          image TEXT DEFAULT '',
+          options_json TEXT DEFAULT '[]',
+          created_at INTEGER NOT NULL
         )`
       ];
 
@@ -1145,6 +1195,9 @@ export class Database {
         "CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id)",
         "CREATE INDEX IF NOT EXISTS idx_establishment_categories_order ON establishment_categories(order_index)",
         "CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_order_items_tenant ON order_items(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)",
         "CREATE VIEW IF NOT EXISTS stores AS SELECT * FROM tenants"
       ];
 
@@ -1177,6 +1230,37 @@ export class Database {
           for (const ec of defaultEstablishmentCategories) {
             await this.insertEstablishmentCategoryRow(ec);
           }
+        }
+
+        // 5. Backfill de order_items a partir de pedidos existentes se a tabela estiver vazia
+        try {
+          const oiCountRes = await db.prepare("SELECT count(*) as total FROM order_items").first<{ total: number }>();
+          if (!oiCountRes || Number(oiCountRes.total) === 0) {
+            const ordersRes = await db.prepare("SELECT id, tenant_id, items_json, created_at FROM orders").all<{ id: string; tenant_id: string; items_json: string; created_at: number }>();
+            if (ordersRes?.results && ordersRes.results.length > 0) {
+              for (const ord of ordersRes.results) {
+                try {
+                  const items = JSON.parse(ord.items_json || "[]");
+                  for (const it of items) {
+                    const oiId = it.id || `oi-${ord.id}-${Math.random().toString(36).substring(2, 7)}`;
+                    const pId = it.product?.id || `p-${Math.random().toString(36).substring(2, 7)}`;
+                    const pName = it.product?.name || "Lanche Especial";
+                    const pPrice = Number(it.product?.price) || 0;
+                    const pImg = it.product?.image || "";
+                    const pQty = Number(it.quantity) || 1;
+                    const optJson = JSON.stringify(it.selectedOptions || []);
+                    await db.prepare(
+                      `INSERT OR IGNORE INTO order_items (
+                        id, order_id, tenant_id, product_id, name, price, quantity, image, options_json, created_at
+                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(oiId, ord.id, ord.tenant_id, pId, pName, pPrice, pQty, pImg, optJson, ord.created_at || Date.now()).run();
+                  }
+                } catch {}
+              }
+            }
+          }
+        } catch (backfillErr) {
+          console.warn("order_items backfill notice:", backfillErr);
         }
       } catch (e) {
         console.warn("D1 seed initial check warning:", e);

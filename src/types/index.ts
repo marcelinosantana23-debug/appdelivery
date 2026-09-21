@@ -228,3 +228,25 @@ export interface FinancialReportData {
   orders: Order[];
 }
 
+export interface TopSellingProduct {
+  id: string;
+  productId: string;
+  name: string;
+  price: number;
+  image?: string;
+  description?: string;
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  tenantLogo?: string;
+  tenantPrimaryColor?: string;
+  totalSold: number;
+  rank?: number;
+}
+
+export interface FeaturedStoreRanked extends Tenant {
+  completedOrdersCount: number;
+  salesCount: number;
+  rank: number;
+}
+
