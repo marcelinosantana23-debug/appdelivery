@@ -1693,6 +1693,10 @@ export class Database {
     return found || null;
   }
 
+  async getTenantBySlug(slug: string): Promise<Tenant | null> {
+    return this.getTenantByIdOrSlug(slug);
+  }
+
   async createTenant(data: {
     name: string;
     slug?: string;
@@ -4204,7 +4208,7 @@ export class Database {
     const now = Date.now();
 
     let targetTenantId = tenantIdOrSlug;
-    const tenant = await this.getTenantBySlug(tenantIdOrSlug);
+    const tenant = await this.getTenantByIdOrSlug(tenantIdOrSlug);
     if (tenant) {
       targetTenantId = tenant.id;
     }
@@ -4307,7 +4311,13 @@ export class Database {
     }
 
     // 2. Regra: Limite de no máximo 3 fotos ativas por loja simultaneamente.
-    const activeStories = await this.getStoreStories(data.tenantId, true);
+    let targetTenantId = data.tenantId;
+    const tenant = await this.getTenantByIdOrSlug(data.tenantId);
+    if (tenant) {
+      targetTenantId = tenant.id;
+    }
+
+    const activeStories = await this.getStoreStories(targetTenantId, true);
     if (activeStories.length >= 3) {
       throw new Error("Limite atingido: a loja já possui 3 stories ativos. Apague um story antigo para publicar um novo.");
     }
@@ -4317,7 +4327,7 @@ export class Database {
 
     const newStory: StoreStory = {
       id: `story-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-      tenantId: data.tenantId,
+      tenantId: targetTenantId,
       mediaUrl: url,
       mediaType: "image",
       caption: data.caption ? String(data.caption).trim() : undefined,

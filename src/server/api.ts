@@ -2856,10 +2856,16 @@ async function handleCreateStory(c: any) {
     const db = getDb(c);
     const body = await c.req.json();
 
+    const identifier = body.tenantId || body.slug;
     let tenantId = body.tenantId;
-    if (!tenantId && body.slug) {
-      const tenant = await db.getTenantBySlug(body.slug);
-      if (tenant) tenantId = tenant.id;
+
+    if (identifier) {
+      const tenant = await db.getTenantByIdOrSlug(identifier);
+      if (tenant) {
+        tenantId = tenant.id;
+      } else if (!tenantId && body.slug) {
+        tenantId = body.slug;
+      }
     }
 
     if (!tenantId) {
