@@ -13,9 +13,11 @@ interface HeaderProps {
 }
 
 export function Header(props: HeaderProps = {}) {
-  const { isStoreOpen, isStoreActive, config } = useStore();
+  const { isStoreOpen, isStoreActive, config, getStoreActiveStories, openStoreStoriesModal } = useStore();
 
   const hasBanner = Boolean(config.bannerImage);
+  const stories = getStoreActiveStories(config.id || config.slug);
+  const hasStories = stories.length > 0;
 
   return (
     <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
@@ -121,9 +123,36 @@ export function Header(props: HeaderProps = {}) {
       {/* 2. INFORMAÇÕES DA LANCHONETE (Perfil estilo Delivery com avatar sobreposto) */}
       <div className="relative mx-auto max-w-2xl px-4 sm:px-6 pb-4">
         <div className="relative flex items-end gap-3.5 sm:gap-4">
-          {/* Logo / Foto de Perfil da Loja (Apenas a logo tem sobreposição negativa sobre o banner) */}
-          <div className="relative z-10 -mt-10 sm:-mt-12 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-4xl sm:text-5xl shadow-xl">
-            <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover object-center" fallbackEmoji="🏪" />
+          {/* Logo / Foto de Perfil da Loja (com anel gradiente animado se tiver stories ativos) */}
+          <div className="relative z-10 -mt-10 sm:-mt-12 shrink-0">
+            <div
+              onClick={() => {
+                if (hasStories) {
+                  openStoreStoriesModal(config, stories);
+                }
+              }}
+              className={`group relative flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center overflow-hidden rounded-2xl bg-white dark:bg-slate-800 text-4xl sm:text-5xl shadow-xl transition-transform ${
+                hasStories
+                  ? "p-[3px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400 cursor-pointer animate-pulse hover:scale-105"
+                  : "border-4 border-white dark:border-slate-900"
+              }`}
+              title={hasStories ? "Toque para ver Stories da loja" : config.name}
+            >
+              <div className="h-full w-full overflow-hidden rounded-[13px] bg-white dark:bg-slate-800 flex items-center justify-center">
+                <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover object-center" fallbackEmoji="🏪" />
+              </div>
+            </div>
+
+            {/* Badge indicando Stories Ativos */}
+            {hasStories && (
+              <button
+                type="button"
+                onClick={() => openStoreStoriesModal(config, stories)}
+                className="absolute -bottom-2 inset-x-0 mx-auto w-max z-20 flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-500 px-2 py-0.5 text-[10px] font-black text-white shadow-md cursor-pointer hover:scale-105 active:scale-95 transition"
+              >
+                <span>Story</span>
+              </button>
+            )}
           </div>
 
           {/* Nome e Tagline da Loja (100% na área clara ao lado da logo, sem encostar na borda do banner) */}

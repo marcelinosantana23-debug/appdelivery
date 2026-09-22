@@ -15,6 +15,7 @@ import type {
   PlatformSettings,
   TopSellingProduct,
   FeaturedStoreRanked,
+  StoreStory,
 } from "./types";
 import { mockProducts } from "../data/mockData";
 import { orderEvents } from "./events";
@@ -925,6 +926,37 @@ export const defaultPlatformSettings: PlatformSettings = {
   updatedAt: Date.now(),
 };
 
+// Seed de stories ativos iniciais para teste imediato (válidos por 24h)
+export const initialStories: StoreStory[] = [
+  {
+    id: "story-ms-1",
+    tenantId: "tenant-ms-preparacoes",
+    mediaUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍔 Hambúrguer Artesanal quentinho na chapa! Peça o seu agora.",
+    createdAt: Date.now() - 2 * 3600000,
+    expiresAt: Date.now() + 22 * 3600000,
+  },
+  {
+    id: "story-ms-2",
+    tenantId: "tenant-ms-preparacoes",
+    mediaUrl: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍟 Porção de batatas rústicas douradas com tempero especial da casa!",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 23 * 3600000,
+  },
+  {
+    id: "story-burger-1",
+    tenantId: "tenant-burger-town",
+    mediaUrl: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🔥 Super combo com entrega grátis hoje! Não perca.",
+    createdAt: Date.now() - 3 * 3600000,
+    expiresAt: Date.now() + 21 * 3600000,
+  },
+];
+
 export interface OrderItemRecord {
   id: string;
   orderId: string;
@@ -971,6 +1003,7 @@ class MemoryStore {
   orderItems: OrderItemRecord[] = extractOrderItemsFromOrders(initialOrders);
   customers: Customer[] = [...initialCustomers];
   platformSettings: PlatformSettings = { ...defaultPlatformSettings };
+  stories: StoreStory[] = [...initialStories];
 
   // Helper to slugify
   slugify(text: string): string {
@@ -1132,6 +1165,15 @@ export class Database {
           image TEXT DEFAULT '',
           options_json TEXT DEFAULT '[]',
           created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS store_stories (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          media_url TEXT NOT NULL,
+          media_type TEXT NOT NULL DEFAULT 'image',
+          caption TEXT,
+          created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL
         )`
       ];
 
@@ -4151,5 +4193,187 @@ export class Database {
         rank: idx + 1,
       };
     });
+  }
+
+  // ==========================================
+  // STORIES DA LOJA (APENAS FOTOS - EXPIRAÇÃO 24H - MÁX 3)
+  // ==========================================
+
+  async getStoreStories(tenantIdOrSlug: string, onlyActive = true): Promise<StoreStory[]> {
+    await this.ensureTables();
+    const now = Date.now();
+
+    let targetTenantId = tenantIdOrSlug;
+    const tenant = await this.getTenantBySlug(tenantIdOrSlug);
+    if (tenant) {
+      targetTenantId = tenant.id;
+    }
+
+    if (this.env?.DB) {
+      try {
+        let query = "SELECT * FROM store_stories WHERE tenant_id = ?";
+        const params: any[] = [targetTenantId];
+        if (onlyActive) {
+          query += " AND expires_at > ?";
+          params.push(now);
+        }
+        query += " ORDER BY created_at ASC";
+
+        const { results } = await this.env.DB.prepare(query).bind(...params).all<any>();
+        if (results && Array.isArray(results)) {
+          return results.map((r) => ({
+            id: String(r.id),
+            tenantId: String(r.tenant_id),
+            mediaUrl: String(r.media_url),
+            mediaType: "image",
+            caption: r.caption ? String(r.caption) : undefined,
+            createdAt: Number(r.created_at),
+            expiresAt: Number(r.expires_at),
+          }));
+        }
+      } catch (err) {
+        console.warn("D1 getStoreStories error, using memory fallback:", err);
+      }
+    }
+
+    return globalStore.stories
+      .filter((s) => s.tenantId === targetTenantId && (!onlyActive || s.expiresAt > now))
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  async getAllActiveStoriesGrouped(): Promise<Record<string, StoreStory[]>> {
+    await this.ensureTables();
+    const now = Date.now();
+    const map: Record<string, StoreStory[]> = {};
+
+    if (this.env?.DB) {
+      try {
+        const query = "SELECT * FROM store_stories WHERE expires_at > ? ORDER BY created_at ASC";
+        const { results } = await this.env.DB.prepare(query).bind(now).all<any>();
+        if (results && Array.isArray(results)) {
+          for (const r of results) {
+            const tId = String(r.tenant_id);
+            if (!map[tId]) map[tId] = [];
+            if (map[tId].length < 3) {
+              map[tId].push({
+                id: String(r.id),
+                tenantId: tId,
+                mediaUrl: String(r.media_url),
+                mediaType: "image",
+                caption: r.caption ? String(r.caption) : undefined,
+                createdAt: Number(r.created_at),
+                expiresAt: Number(r.expires_at),
+              });
+            }
+          }
+          return map;
+        }
+      } catch (err) {
+        console.warn("D1 getAllActiveStoriesGrouped warning:", err);
+      }
+    }
+
+    for (const story of globalStore.stories) {
+      if (story.expiresAt > now) {
+        if (!map[story.tenantId]) map[story.tenantId] = [];
+        if (map[story.tenantId].length < 3) {
+          map[story.tenantId].push(story);
+        }
+      }
+    }
+    return map;
+  }
+
+  async createStoreStory(data: {
+    tenantId: string;
+    mediaUrl: string;
+    mediaType?: string;
+    caption?: string;
+  }): Promise<StoreStory> {
+    await this.ensureTables();
+
+    // 1. Regra: APENAS FOTOS (JPG, PNG, WEBP). Bloqueie envio de vídeos.
+    const mediaType = data.mediaType || "image";
+    if (mediaType !== "image") {
+      throw new Error("Apenas fotos (JPG, PNG, WEBP) são permitidas nos stories. Envio de vídeos está bloqueado.");
+    }
+    const url = String(data.mediaUrl || "").trim();
+    if (!url) {
+      throw new Error("A imagem do story é obrigatória.");
+    }
+    const isVideo = url.startsWith("data:video") || /\.(mp4|mov|avi|webm|mkv)(\?.*)?$/i.test(url);
+    if (isVideo) {
+      throw new Error("Formato não suportado. A funcionalidade aceita apenas fotos (JPG, PNG, WEBP). Vídeos estão bloqueados.");
+    }
+
+    // 2. Regra: Limite de no máximo 3 fotos ativas por loja simultaneamente.
+    const activeStories = await this.getStoreStories(data.tenantId, true);
+    if (activeStories.length >= 3) {
+      throw new Error("Limite atingido: a loja já possui 3 stories ativos. Apague um story antigo para publicar um novo.");
+    }
+
+    const now = Date.now();
+    const expiresAt = now + 24 * 60 * 60 * 1000; // 24 horas
+
+    const newStory: StoreStory = {
+      id: `story-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+      tenantId: data.tenantId,
+      mediaUrl: url,
+      mediaType: "image",
+      caption: data.caption ? String(data.caption).trim() : undefined,
+      createdAt: now,
+      expiresAt: expiresAt,
+    };
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          `INSERT INTO store_stories (id, tenant_id, media_url, media_type, caption, created_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            newStory.id,
+            newStory.tenantId,
+            newStory.mediaUrl,
+            newStory.mediaType,
+            newStory.caption || null,
+            newStory.createdAt,
+            newStory.expiresAt
+          )
+          .run();
+      } catch (err) {
+        console.warn("D1 insert store_stories error:", err);
+      }
+    }
+
+    globalStore.stories.push(newStory);
+    return newStory;
+  }
+
+  async deleteStoreStory(id: string, tenantId?: string): Promise<boolean> {
+    await this.ensureTables();
+
+    if (this.env?.DB) {
+      try {
+        let query = "DELETE FROM store_stories WHERE id = ?";
+        const params: any[] = [id];
+        if (tenantId) {
+          query += " AND tenant_id = ?";
+          params.push(tenantId);
+        }
+        await this.env.DB.prepare(query).bind(...params).run();
+      } catch (err) {
+        console.warn("D1 delete store_stories error:", err);
+      }
+    }
+
+    const initialLen = globalStore.stories.length;
+    globalStore.stories = globalStore.stories.filter((s) => {
+      if (s.id !== id) return true;
+      if (tenantId && s.tenantId !== tenantId) return true;
+      return false;
+    });
+
+    return globalStore.stories.length < initialLen;
   }
 }

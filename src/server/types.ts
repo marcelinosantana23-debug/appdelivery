@@ -285,3 +285,13 @@ export interface FeaturedStoreRanked extends Tenant {
   salesCount: number;
   rank: number;
 }
+
+export interface StoreStory {
+  id: string;
+  tenantId: string;
+  mediaUrl: string; // Base64 data URL ou URL de imagem (JPG, PNG, WEBP)
+  mediaType: "image"; // APENAS FOTOS
+  caption?: string;
+  createdAt: number;
+  expiresAt: number; // created_at + 24 * 60 * 60 * 1000
+}

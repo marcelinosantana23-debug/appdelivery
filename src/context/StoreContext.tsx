@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings, TopSellingProduct, FeaturedStoreRanked } from "@/types";
+import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings, TopSellingProduct, FeaturedStoreRanked, StoreStory } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
 import {
@@ -34,7 +34,9 @@ import {
   updateTenantFeaturedApi,
   fetchFeaturedStoresRankedApi,
   fetchTopSellingProductsApi,
+  fetchAllActiveStoriesApi,
 } from "@/services/api";
+import { StoreStoriesModal } from "@/components/common/StoreStoriesModal";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { playNewOrderChime } from "@/utils/audio";
 import {
@@ -168,6 +170,18 @@ interface StoreContextValue {
     isFeatured?: boolean,
     priorityOrder?: number
   ) => Promise<{ success: boolean; error?: string }>;
+
+  // Store Stories (APENAS FOTOS - EXPIRAÇÃO 24H - MÁX 3)
+  activeStoriesMap: Record<string, StoreStory[]>;
+  refreshActiveStories: () => Promise<void>;
+  getStoreActiveStories: (tenantIdOrSlug: string) => StoreStory[];
+  openStoreStoriesModal: (tenant: Partial<Tenant>, stories?: StoreStory[]) => void;
+  closeStoreStoriesModal: () => void;
+  storiesModal: {
+    isOpen: boolean;
+    tenant: Partial<Tenant> | null;
+    stories: StoreStory[];
+  };
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -247,7 +261,7 @@ const CART_GENERIC_KEY = "topfood_cart_items";
  * Carrega itens do carrinho salvos no localStorage/sessionStorage.
  * Prioriza o carrinho específico da loja atual; caso não haja, tenta o carrinho geral.
  */
-export function loadSavedCart(storeSlug?: string): CartItem[] {
+function loadSavedCart(storeSlug?: string): CartItem[] {
   if (typeof window === "undefined") return [];
   try {
     // 1. Tenta carregar carrinho específico desta lanchonete
@@ -1741,6 +1755,75 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const isAdminAuthed = Boolean(currentUser);
   const isSuperAdmin = currentUser?.role === "super_admin";
 
+  // ==========================================
+  // STORIES DA LOJA (ESTADO GLOBAL E MODAL)
+  // ==========================================
+  const [activeStoriesMap, setActiveStoriesMap] = useState<Record<string, StoreStory[]>>({});
+  const [storiesModal, setStoriesModal] = useState<{
+    isOpen: boolean;
+    tenant: Partial<Tenant> | null;
+    stories: StoreStory[];
+  }>({
+    isOpen: false,
+    tenant: null,
+    stories: [],
+  });
+
+  const refreshActiveStories = useCallback(async () => {
+    try {
+      const res = await fetchAllActiveStoriesApi();
+      if (res.success && res.storiesByTenant) {
+        setActiveStoriesMap(res.storiesByTenant);
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar stories ativos:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshActiveStories();
+  }, [refreshActiveStories]);
+
+  const getStoreActiveStories = useCallback(
+    (tenantIdOrSlug: string): StoreStory[] => {
+      if (!tenantIdOrSlug) return [];
+      if (activeStoriesMap[tenantIdOrSlug] && activeStoriesMap[tenantIdOrSlug].length > 0) {
+        return activeStoriesMap[tenantIdOrSlug];
+      }
+      const matched = tenants.find(
+        (t) => t.slug === tenantIdOrSlug || t.id === tenantIdOrSlug
+      );
+      if (matched && activeStoriesMap[matched.id]) {
+        return activeStoriesMap[matched.id];
+      }
+      return [];
+    },
+    [activeStoriesMap, tenants]
+  );
+
+  const openStoreStoriesModal = useCallback(
+    (targetTenant: Partial<Tenant>, explicitStories?: StoreStory[]) => {
+      const tenantStories =
+        explicitStories ||
+        (targetTenant.id ? activeStoriesMap[targetTenant.id] : undefined) ||
+        (targetTenant.slug ? getStoreActiveStories(targetTenant.slug) : undefined) ||
+        [];
+
+      if (tenantStories.length > 0) {
+        setStoriesModal({
+          isOpen: true,
+          tenant: targetTenant,
+          stories: tenantStories,
+        });
+      }
+    },
+    [activeStoriesMap, getStoreActiveStories]
+  );
+
+  const closeStoreStoriesModal = useCallback(() => {
+    setStoriesModal((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
   return (
     <StoreContext.Provider
       value={{
@@ -1811,8 +1894,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         refreshPlatformSettings,
         updatePlatformSettings,
         toggleTenantFeatured,
+        activeStoriesMap,
+        refreshActiveStories,
+        getStoreActiveStories,
+        openStoreStoriesModal,
+        closeStoreStoriesModal,
+        storiesModal,
       }}
     >
+      {storiesModal.isOpen && (
+        <StoreStoriesModal
+          isOpen={storiesModal.isOpen}
+          onClose={closeStoreStoriesModal}
+          stories={storiesModal.stories}
+          tenant={storiesModal.tenant}
+          onGoToMenu={(slug) => {
+            selectTenant(slug);
+          }}
+        />
+      )}
       {children}
     </StoreContext.Provider>
   );

@@ -13,10 +13,13 @@ interface StoreCardProps {
 }
 
 export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: StoreCardProps) {
-  const { establishmentCategories } = useStore();
+  const { establishmentCategories, getStoreActiveStories, openStoreStoriesModal } = useStore();
   const allCategories = establishmentCategories && establishmentCategories.length > 0
     ? establishmentCategories
     : DEFAULT_ESTABLISHMENT_CATEGORIES;
+
+  const stories = getStoreActiveStories(tenant.id || tenant.slug);
+  const hasStories = stories.length > 0;
 
   const matchedCat = matchStoreCategory(tenant, allCategories);
   const catInfo = {
@@ -97,9 +100,22 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
             </span>
           </div>
 
-          {/* Logo da Loja sobreposta */}
-          <div className="absolute -bottom-2 left-2.5 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border-2 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-lg shadow-md">
-            <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover" />
+          {/* Logo da Loja sobreposta (com anel vibrante estilo Instagram quando tiver Stories) */}
+          <div
+            onClick={(e) => {
+              if (hasStories) {
+                e.stopPropagation();
+                openStoreStoriesModal(tenant, stories);
+              }
+            }}
+            className={`absolute -bottom-2 left-2.5 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-lg shadow-md transition-transform ${
+              hasStories
+                ? "p-[2px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400/80 cursor-pointer animate-pulse hover:scale-110"
+                : "border-2 border-white dark:border-slate-900"
+            }`}
+            title={hasStories ? "Ver stories desta loja" : getSafeDisplayName(tenant.name, "Loja")}
+          >
+            <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[10px]" />
           </div>
         </div>
 
@@ -198,9 +214,22 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
           </div>
         )}
 
-        {/* Logo Avatar sobreposta */}
-        <div className="absolute bottom-2.5 left-2.5 sm:bottom-auto sm:top-2.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border-2 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-xl shadow-md">
-          <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover" />
+        {/* Logo Avatar sobreposta (com anel vibrante estilo Instagram quando tiver Stories) */}
+        <div
+          onClick={(e) => {
+            if (hasStories) {
+              e.stopPropagation();
+              openStoreStoriesModal(tenant, stories);
+            }
+          }}
+          className={`absolute bottom-2.5 left-2.5 sm:bottom-auto sm:top-2.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-xl shadow-md transition-transform ${
+            hasStories
+              ? "p-[2.5px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400/80 cursor-pointer animate-pulse hover:scale-110"
+              : "border-2 border-white dark:border-slate-900"
+          }`}
+          title={hasStories ? "Ver stories desta loja" : getSafeDisplayName(tenant.name, "Loja")}
+        >
+          <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[9px]" />
         </div>
 
         {/* Status Chip */}

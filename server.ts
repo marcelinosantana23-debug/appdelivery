@@ -7,7 +7,7 @@ import { injectStorePwaMetaTags } from "./src/server/pwaMeta";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Global CORS middleware for all endpoints and external origins
   app.use((req, res, next) => {

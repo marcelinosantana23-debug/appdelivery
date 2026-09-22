@@ -20,6 +20,9 @@ import {
 import { useStore } from "@/context/StoreContext";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
 import { StoreQrCodePlate } from "./StoreQrCodePlate";
+import { AdminStoriesSection } from "./AdminStoriesSection";
+import { StoreStoriesModal } from "@/components/common/StoreStoriesModal";
+import type { StoreStory } from "@/types";
 import type { PixKeyType } from "@/config/store";
 
 const PRESET_COLORS = [
@@ -62,6 +65,8 @@ export function AdminSettings() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [isQrPlateModalOpen, setIsQrPlateModalOpen] = useState(false);
   const [isProcessingBanner, setIsProcessingBanner] = useState(false);
+  const [storiesModalOpen, setStoriesModalOpen] = useState(false);
+  const [storiesToPreview, setStoriesToPreview] = useState<StoreStory[]>([]);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const stats = {
@@ -293,6 +298,16 @@ export function AdminSettings() {
           <span>Abrir Gerador de Placa</span>
         </button>
       </div>
+
+      {/* Stories / Status da Loja (APENAS FOTOS - EXPIRAÇÃO 24H - MÁX 3) */}
+      <AdminStoriesSection
+        tenantId={config.id}
+        slug={config.slug}
+        onPreviewStories={(st) => {
+          setStoriesToPreview(st);
+          setStoriesModalOpen(true);
+        }}
+      />
 
       {/* Editable store settings form */}
       <div className="rounded-2xl bg-white p-5 shadow-sm">
@@ -532,6 +547,16 @@ export function AdminSettings() {
             />
           </div>
         </div>
+      )}
+
+      {/* Modal de Pré-visualização de Stories */}
+      {storiesModalOpen && (
+        <StoreStoriesModal
+          isOpen={storiesModalOpen}
+          onClose={() => setStoriesModalOpen(false)}
+          stories={storiesToPreview}
+          tenant={config}
+        />
       )}
     </div>
   );

@@ -12,6 +12,7 @@ import type {
   PlatformSettings,
   TopSellingProduct,
   FeaturedStoreRanked,
+  StoreStory,
 } from "@/types";
 
 const BASE_URL = "/api";
@@ -713,6 +714,99 @@ export async function fetchTopSellingProductsApi(
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };
+  }
+}
+
+// ==========================================
+// STORE STORIES API (APENAS FOTOS - EXPIRAÇÃO 24H)
+// ==========================================
+
+export async function fetchStoreStoriesApi(tenantIdOrSlug: string): Promise<{
+  success: boolean;
+  stories?: StoreStory[];
+  error?: string;
+}> {
+  try {
+    const timestamp = Date.now();
+    const res = await fetch(`${BASE_URL}/stories?slug=${encodeURIComponent(tenantIdOrSlug)}&_t=${timestamp}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao carregar stories" };
+  }
+}
+
+export async function fetchAllActiveStoriesApi(): Promise<{
+  success: boolean;
+  storiesByTenant?: Record<string, StoreStory[]>;
+  error?: string;
+}> {
+  try {
+    const timestamp = Date.now();
+    const res = await fetch(`${BASE_URL}/stories/active?_t=${timestamp}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao carregar stories ativos" };
+  }
+}
+
+export async function createStoreStoryApi(data: {
+  tenantId?: string;
+  slug?: string;
+  mediaUrl: string;
+  mediaType: "image";
+  caption?: string;
+}): Promise<{
+  success: boolean;
+  story?: StoreStory;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${BASE_URL}/stories`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao publicar story" };
+  }
+}
+
+export async function deleteStoreStoryApi(
+  id: string,
+  tenantId?: string
+): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : "";
+    const res = await fetch(`${BASE_URL}/stories/${encodeURIComponent(id)}${query}`, {
+      method: "DELETE",
+      headers: {
+        ...getAuthHeaders(),
+      },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao remover story" };
   }
 }
 

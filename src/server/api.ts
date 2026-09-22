@@ -2818,5 +2818,132 @@ api.get("/api/settings", handleGetSettings);
 api.put("/admin/settings", handlePutAdminSettings);
 api.put("/api/admin/settings", handlePutAdminSettings);
 
+// ==========================================
+// ROTAS DE STORIES DA LOJA (APENAS FOTOS - EXPIRAÇÃO 24H - MÁX 3)
+// ==========================================
+
+async function handleGetStories(c: any) {
+  try {
+    const db = getDb(c);
+    const tenantId = c.req.query("tenantId");
+    const slug = c.req.query("slug");
+    const onlyActive = c.req.query("active") !== "false";
+
+    if (tenantId || slug) {
+      const stories = await db.getStoreStories(tenantId || slug, onlyActive);
+      return c.json({ success: true, stories });
+    }
+
+    const storiesByTenant = await db.getAllActiveStoriesGrouped();
+    return c.json({ success: true, storiesByTenant });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao listar stories" }, 500);
+  }
+}
+
+async function handleGetAllActiveStories(c: any) {
+  try {
+    const db = getDb(c);
+    const storiesByTenant = await db.getAllActiveStoriesGrouped();
+    return c.json({ success: true, storiesByTenant });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao listar stories ativos" }, 500);
+  }
+}
+
+async function handleCreateStory(c: any) {
+  try {
+    const db = getDb(c);
+    const body = await c.req.json();
+
+    let tenantId = body.tenantId;
+    if (!tenantId && body.slug) {
+      const tenant = await db.getTenantBySlug(body.slug);
+      if (tenant) tenantId = tenant.id;
+    }
+
+    if (!tenantId) {
+      return c.json({ success: false, error: "Identificador da loja (tenantId ou slug) não fornecido." }, 400);
+    }
+
+    // Validação estrita: APENAS FOTOS (bloquear vídeos)
+    const mediaType = body.mediaType || "image";
+    if (mediaType !== "image") {
+      return c.json(
+        {
+          success: false,
+          error: "Apenas fotos (JPG, PNG, WEBP) são permitidas nos stories. O envio de vídeos está bloqueado.",
+        },
+        400
+      );
+    }
+
+    const mediaUrl = String(body.mediaUrl || "").trim();
+    if (!mediaUrl) {
+      return c.json({ success: false, error: "A imagem do story é obrigatória." }, 400);
+    }
+
+    if (mediaUrl.startsWith("data:video") || /\.(mp4|mov|avi|webm|mkv)(\?.*)?$/i.test(mediaUrl)) {
+      return c.json(
+        {
+          success: false,
+          error: "Vídeos não são permitidos. A funcionalidade aceita exclusivamente fotos (JPG, PNG, WEBP).",
+        },
+        400
+      );
+    }
+
+    const story = await db.createStoreStory({
+      tenantId,
+      mediaUrl,
+      mediaType: "image",
+      caption: body.caption,
+    });
+
+    return c.json(
+      {
+        success: true,
+        message: "Story publicado com sucesso! Válido por 24 horas.",
+        story,
+      },
+      201
+    );
+  } catch (err: any) {
+    return c.json(
+      {
+        success: false,
+        error: err.message || "Erro ao publicar story",
+      },
+      400
+    );
+  }
+}
+
+async function handleDeleteStory(c: any) {
+  try {
+    const db = getDb(c);
+    const id = c.req.param("id");
+    const tenantId = c.req.query("tenantId");
+
+    const deleted = await db.deleteStoreStory(id, tenantId);
+    if (!deleted) {
+      return c.json({ success: false, error: "Story não encontrado ou já expirado." }, 404);
+    }
+
+    return c.json({ success: true, message: "Story removido com sucesso." });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || "Erro ao excluir story" }, 500);
+  }
+}
+
+api.get("/stories", handleGetStories);
+api.get("/api/stories", handleGetStories);
+api.get("/stories/active", handleGetAllActiveStories);
+api.get("/api/stories/active", handleGetAllActiveStories);
+api.post("/stories", handleCreateStory);
+api.post("/api/stories", handleCreateStory);
+api.delete("/stories/:id", handleDeleteStory);
+api.delete("/api/stories/:id", handleDeleteStory);
+
 export default api;
 
