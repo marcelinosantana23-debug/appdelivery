@@ -19,6 +19,7 @@ import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
 import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
+import { getActiveOrderData } from "@/utils/orderStorage";
 
 type View = "portal" | "menu" | "checkout" | "tracking" | "admin" | "superadmin";
 
@@ -38,14 +39,134 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
     storeNotFound,
     cartCount,
   } = useStore();
+  const getInitialCustomerState = (): {
+    view: "menu" | "checkout" | "tracking";
+    cartOpen: boolean;
+  } => {
+    if (typeof window === "undefined") return { view: "menu", cartOpen: false };
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes("/checkout")) {
+      return { view: "checkout", cartOpen: false };
+    }
+    if (path.includes("/rastreio") || path.includes("/acompanhamento") || path.includes("/tracking")) {
+      return { view: "tracking", cartOpen: false };
+    }
+    if (path.includes("/carrinho") || path === "/carrinho") {
+      return { view: "menu", cartOpen: true };
+    }
+    return { view: "menu", cartOpen: false };
+  };
+
+  const initialCust = getInitialCustomerState();
   const [activeCategory, setActiveCategory] = useState("lanches");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [cartOpen, setCartOpen] = useState(false);
-  const [customerView, setCustomerView] = useState<"menu" | "checkout" | "tracking">("menu");
-  const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
+  const [cartOpen, setCartOpen] = useState(initialCust.cartOpen);
+  const [customerView, setCustomerView] = useState<"menu" | "checkout" | "tracking">(initialCust.view);
+  const [trackedOrder, setTrackedOrder] = useState<Order | null>(() => {
+    const active = getActiveOrderData();
+    if (active && active.orderId) {
+      return {
+        id: active.orderId,
+        customerName: "Cliente",
+        customerPhone: "",
+        items: [],
+        total: active.total || 0,
+        status: active.status || "received",
+        orderType: active.orderType || "delivery",
+        paymentMethod: "pix",
+        createdAt: new Date(active.timestamp || Date.now()).toISOString(),
+      };
+    }
+    return null;
+  });
   const observerRef = useRef<IntersectionObserver | null>(null);
   const isManualScrollRef = useRef(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const getStoreSlug = () => config.slug || "ms-preparacoes";
+
+  const handleOpenCart = () => {
+    setCartOpen(true);
+    if (typeof window !== "undefined") {
+      const slug = getStoreSlug();
+      const newPath = `/loja/${slug}/carrinho`;
+      if (window.location.pathname !== newPath) {
+        window.history.pushState({ view: "carrinho" }, "", newPath);
+      }
+    }
+  };
+
+  const handleCloseCart = () => {
+    setCartOpen(false);
+    if (typeof window !== "undefined") {
+      const slug = getStoreSlug();
+      const newPath = `/loja/${slug}`;
+      if (window.location.pathname.includes("/carrinho")) {
+        window.history.pushState({ view: "menu" }, "", newPath);
+      }
+    }
+  };
+
+  const handleGoToCheckout = () => {
+    setCartOpen(false);
+    setCustomerView("checkout");
+    if (typeof window !== "undefined") {
+      const slug = getStoreSlug();
+      const newPath = `/loja/${slug}/checkout`;
+      window.history.pushState({ view: "checkout" }, "", newPath);
+    }
+  };
+
+  const handleCloseCheckout = () => {
+    setCustomerView("menu");
+    if (typeof window !== "undefined") {
+      const slug = getStoreSlug();
+      const newPath = `/loja/${slug}`;
+      window.history.pushState({ view: "menu" }, "", newPath);
+    }
+  };
+
+  const handleGoToTracking = (order: Order) => {
+    setTrackedOrder(order);
+    setCustomerView("tracking");
+    if (typeof window !== "undefined") {
+      const slug = getStoreSlug();
+      const newPath = `/loja/${slug}/rastreio`;
+      window.history.pushState({ view: "tracking" }, "", newPath);
+    }
+  };
+
+  const handleCloseTracking = () => {
+    setCustomerView("menu");
+    if (typeof window !== "undefined") {
+      const slug = getStoreSlug();
+      const newPath = `/loja/${slug}`;
+      window.history.pushState({ view: "menu" }, "", newPath);
+    }
+  };
+
+  // Sincroniza sub-rotas (/carrinho, /checkout, /rastreio) ao usar voltar/avançar no navegador
+  useEffect(() => {
+    const handleSubPopState = () => {
+      if (typeof window === "undefined") return;
+      const path = window.location.pathname.toLowerCase();
+      if (path.includes("/checkout")) {
+        setCustomerView("checkout");
+        setCartOpen(false);
+      } else if (path.includes("/rastreio") || path.includes("/acompanhamento") || path.includes("/tracking")) {
+        setCustomerView("tracking");
+        setCartOpen(false);
+      } else if (path.includes("/carrinho")) {
+        setCustomerView("menu");
+        setCartOpen(true);
+      } else {
+        setCustomerView("menu");
+        setCartOpen(false);
+      }
+    };
+    window.addEventListener("popstate", handleSubPopState);
+    return () => window.removeEventListener("popstate", handleSubPopState);
+  }, []);
 
   // Sincroniza categoria ativa com as categorias disponíveis da loja
   useEffect(() => {
@@ -221,10 +342,9 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
   if (customerView === "checkout") {
     return (
       <Checkout
-        onClose={() => setCustomerView("menu")}
+        onClose={handleCloseCheckout}
         onOrderPlaced={(order) => {
-          setTrackedOrder(order);
-          setCustomerView("menu");
+          handleGoToTracking(order);
         }}
       />
     );
@@ -234,8 +354,8 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
     return (
       <OrderTracking
         order={trackedOrder}
-        onBack={() => setCustomerView("menu")}
-        onHome={() => setCustomerView("menu")}
+        onBack={handleCloseTracking}
+        onHome={handleCloseTracking}
       />
     );
   }
@@ -275,12 +395,12 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
           onClose={() => setSelectedProduct(null)}
           onAdded={() => {
             setSelectedProduct(null);
-            setCartOpen(true);
+            handleOpenCart();
           }}
         />
       )}
 
-      <FloatingCart onClick={() => setCartOpen(true)} />
+      <FloatingCart onClick={handleOpenCart} />
 
       {/* Card Flutuante de Acompanhamento de Pedido em Tempo Real */}
       <FloatingOrderTracker
@@ -290,11 +410,8 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
 
       <CartDrawer
         open={cartOpen}
-        onClose={() => setCartOpen(false)}
-        onCheckout={() => {
-          setCartOpen(false);
-          setCustomerView("checkout");
-        }}
+        onClose={handleCloseCart}
+        onCheckout={handleGoToCheckout}
       />
 
       {/* Banner de instalação PWA discreto (oculta automaticamente se já instalado) */}
@@ -350,7 +467,12 @@ function AppContent() {
       return "superadmin";
     }
 
-    if (path === "/admin" || path.startsWith("/admin/")) {
+    if (
+      path === "/admin" ||
+      path.startsWith("/admin/") ||
+      path === "/painel" ||
+      path.startsWith("/painel/")
+    ) {
       return "admin";
     }
 
@@ -366,7 +488,7 @@ function AppContent() {
       return "portal";
     }
 
-    // Caso contrário, é uma rota direta de vitrine (ex: /ms-preparacoes, /loja/:slug, /burger-town)
+    // Caso contrário, é uma rota de vitrine (ex: /ms-preparacoes, /loja/:slug, /carrinho, /checkout, /rastreio)
     return "menu";
   };
 
@@ -380,12 +502,12 @@ function AppContent() {
           if (targetView === "superadmin") {
             window.history.pushState({ view: "superadmin" }, "", "/super-admin");
           } else if (targetView === "admin") {
-            window.history.pushState({ view: "admin" }, "", "/admin");
+            window.history.pushState({ view: "admin" }, "", "/painel");
           } else if (targetView === "portal") {
             window.history.pushState({ view: "portal" }, "", "/");
           } else {
             const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
-            window.history.pushState({ view: "menu", slug }, "", `/${slug}`);
+            window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
           }
         } catch (err) {
           console.warn("History pushState error:", err);
@@ -409,7 +531,12 @@ function AppContent() {
         path.startsWith("/superadmin/")
       ) {
         setView("superadmin");
-      } else if (path === "/admin" || path.startsWith("/admin/")) {
+      } else if (
+        path === "/admin" ||
+        path.startsWith("/admin/") ||
+        path === "/painel" ||
+        path.startsWith("/painel/")
+      ) {
         setView("admin");
       } else {
         const clean = path.replace(/\/+$/, "");
@@ -423,13 +550,19 @@ function AppContent() {
             setView("portal");
           }
         } else {
-          // É uma rota de loja direta (ex: /ms-preparacoes ou /loja/:slug)
+          // É uma rota de loja direta (ex: /loja/:slug ou /ms-preparacoes)
           let slug = "";
           const match = path.match(/^\/loja\/([^/?#]+)/i);
           if (match && match[1]) {
             slug = decodeURIComponent(match[1]).toLowerCase();
           } else {
-            slug = path.replace(/^\/+|\/+$/g, "");
+            const firstSeg = path.replace(/^\/+|\/+$/g, "").split("/")[0];
+            if (
+              firstSeg &&
+              !["admin", "painel", "superadmin", "super-admin", "api", "health", "carrinho", "checkout", "rastreio"].includes(firstSeg)
+            ) {
+              slug = firstSeg;
+            }
           }
           if (slug) {
             selectTenant(slug);

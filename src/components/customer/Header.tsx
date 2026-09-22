@@ -3,6 +3,7 @@ import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName } from "@/utils/storeFormat";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 
 interface HeaderProps {
   onAdminClick?: () => void;
@@ -70,8 +71,9 @@ export function Header(props: HeaderProps = {}) {
               </div>
             </div>
 
-            {/* Status chip & Install button */}
+            {/* Status chip, Reload button & Install button */}
             <div className="flex items-center gap-2">
+              <GlobalReloadButton variant="glass" />
               <PWAInstallButton variant="header" />
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold backdrop-blur-md ${

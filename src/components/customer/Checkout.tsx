@@ -24,6 +24,7 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl } from "@/utils/order";
 import { broadcastNewOrder } from "@/utils/ordersChannel";
 import {
@@ -477,6 +478,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
             </span>
           )}
         </div>
+        <GlobalReloadButton variant="light" />
       </div>
 
       <div className="mx-auto max-w-lg space-y-5 px-4 py-5">

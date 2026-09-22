@@ -7,6 +7,7 @@ import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
 import { playOrderStatusUpdateChime } from "@/utils/audio";
 import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 
 interface OrderTrackingProps {
   order: Order;
@@ -199,18 +200,22 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
           </div>
         </div>
 
-        {/* Botão Atualizar Status no Topo */}
-        <button
-          id="btn-refresh-order-status-header"
-          type="button"
-          onClick={handleRefreshStatus}
-          disabled={isRefreshing}
-          className="flex items-center gap-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-500/30 px-3 py-1.5 text-xs font-bold transition shadow-xs disabled:opacity-60 cursor-pointer shrink-0"
-          title="Clique para buscar o status mais recente do pedido no banco D1"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} />
-          <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <GlobalReloadButton variant="light" />
+
+          {/* Botão Atualizar Status no Topo */}
+          <button
+            id="btn-refresh-order-status-header"
+            type="button"
+            onClick={handleRefreshStatus}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-500/30 px-3 py-1.5 text-xs font-bold transition shadow-xs disabled:opacity-60 cursor-pointer shrink-0"
+            title="Clique para buscar o status mais recente do pedido no banco D1"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} />
+            <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
+          </button>
+        </div>
       </div>
 
       <div className="mx-auto max-w-lg px-4 py-6 space-y-6">

@@ -1,5 +1,6 @@
 import { Search, Sparkles, Store, UtensilsCrossed, ShieldCheck } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { useStore } from "@/context/StoreContext";
 
 interface PortalHeaderProps {
@@ -52,6 +53,7 @@ export function PortalHeader({
 
             {/* Ações da barra */}
             <div className="flex items-center gap-2">
+              <GlobalReloadButton variant="glass" />
               <PWAInstallButton variant="header" />
               {onStoreAdminClick && (
                 <button

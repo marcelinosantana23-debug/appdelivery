@@ -28,6 +28,7 @@ import { AdminFinancialReport } from "./AdminFinancialReport";
 import { SuperAdminPanel } from "./SuperAdminPanel";
 import { StoreQrCodePlate } from "./StoreQrCodePlate";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import type { Tenant } from "@/types";
 
 interface AdminPanelProps {
@@ -207,8 +208,10 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
           </div>
         </div>
 
-        {/* Right: Status "Loja Aberta" + Ponto Verde + Sininho + Sair */}
+        {/* Right: Status "Loja Aberta" + Ponto Verde + Sininho + Recarga + Sair */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 ml-auto sm:ml-0">
+          <GlobalReloadButton variant="dark" />
+
           {/* Status "Loja Aberta" com ponto verde */}
           <button
             id="admin-header-store-status-btn"

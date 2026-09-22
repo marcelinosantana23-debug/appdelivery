@@ -43,6 +43,7 @@ import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
 import { AiMenuImportModal } from "./AiMenuImportModal";
 import { AdminVitrineAppearance } from "./AdminVitrineAppearance";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { StoreQrCodePlate } from "./StoreQrCodePlate";
 
 interface SuperAdminPanelProps {
@@ -763,6 +764,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               <span className="hidden sm:inline">Cadastrar Nova Lanchonete</span>
               <span className="sm:hidden">Nova Loja</span>
             </button>
+            <GlobalReloadButton variant="dark" />
             <button
               onClick={onExit}
               className="rounded-xl border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white sm:px-3 sm:py-2"

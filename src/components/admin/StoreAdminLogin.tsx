@@ -3,6 +3,7 @@ import { ArrowLeft, Lock, Mail, Eye, EyeOff, Store, Shield, AlertCircle, AlertTr
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName } from "@/utils/storeFormat";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 
 interface StoreAdminLoginProps {
   onBack: () => void;
@@ -77,13 +78,16 @@ export function StoreAdminLogin({ onBack, onSuccess, onGoToSuperAdmin }: StoreAd
       />
 
       <div className="relative w-full max-w-md">
-        <button
-          onClick={onBack}
-          className="mb-4 flex items-center gap-2 text-xs font-medium text-slate-400 transition hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para o cardápio
-        </button>
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-xs font-medium text-slate-400 transition hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para o cardápio
+          </button>
+          <GlobalReloadButton variant="dark" />
+        </div>
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/95 p-6 sm:p-8 shadow-2xl backdrop-blur-md text-slate-100">
           <div className="mb-6 text-center">

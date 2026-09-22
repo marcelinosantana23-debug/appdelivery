@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Lock, Mail, Eye, EyeOff, Shield, AlertCircle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 
 interface SuperAdminLoginProps {
   onBack: () => void;
@@ -57,13 +58,16 @@ export function SuperAdminLogin({ onBack, onSuccess }: SuperAdminLoginProps) {
       />
 
       <div className="relative w-full max-w-md">
-        <button
-          onClick={onBack}
-          className="mb-4 flex items-center gap-2 text-xs font-medium text-slate-400 transition hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para a vitrine
-        </button>
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-xs font-medium text-slate-400 transition hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para a vitrine
+          </button>
+          <GlobalReloadButton variant="dark" />
+        </div>
 
         <div className="rounded-3xl border border-amber-500/30 bg-slate-900/95 p-6 sm:p-8 shadow-2xl backdrop-blur-md text-slate-100">
           <div className="mb-6 text-center">

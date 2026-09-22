@@ -214,54 +214,101 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
   };
 }
 
+const RESERVED_SLUGS = new Set([
+  "admin",
+  "painel",
+  "superadmin",
+  "super-admin",
+  "portal",
+  "topfood",
+  "carrinho",
+  "cart",
+  "checkout",
+  "rastreio",
+  "acompanhamento",
+  "tracking",
+  "api",
+  "health",
+  "manifest",
+  "sw",
+  "assets",
+  "favicon",
+  "favicon.ico",
+  "icon-192.png",
+  "icon-512.png",
+]);
+
+const CART_STORAGE_PREFIX = "topfood_cart_";
+const CART_GENERIC_KEY = "topfood_cart_items";
+
+/**
+ * Carrega itens do carrinho salvos no localStorage/sessionStorage.
+ * Prioriza o carrinho específico da loja atual; caso não haja, tenta o carrinho geral.
+ */
+export function loadSavedCart(storeSlug?: string): CartItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    // 1. Tenta carregar carrinho específico desta lanchonete
+    if (storeSlug) {
+      const savedStore =
+        localStorage.getItem(`${CART_STORAGE_PREFIX}${storeSlug}`) ||
+        sessionStorage.getItem(`${CART_STORAGE_PREFIX}${storeSlug}`);
+      if (savedStore) {
+        const parsed = JSON.parse(savedStore);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    }
+    // 2. Tenta carregar do storage genérico
+    const savedGeneric =
+      localStorage.getItem(CART_GENERIC_KEY) ||
+      sessionStorage.getItem(CART_GENERIC_KEY);
+    if (savedGeneric) {
+      const parsed = JSON.parse(savedGeneric);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.warn("Erro ao restaurar carrinho do storage:", err);
+  }
+  return [];
+}
+
 function getInitialUrlSlug(): string {
   if (typeof window === "undefined") return "";
   const path = window.location.pathname;
 
-  // 1. /loja/:slug
+  // 1. /loja/:slug (incluindo sub-rotas como /loja/:slug/carrinho, /loja/:slug/checkout, /loja/:slug/rastreio)
   const match = path.match(/^\/loja\/([^/?#]+)/i);
-  if (match && match[1]) return decodeURIComponent(match[1]).toLowerCase();
+  if (match && match[1]) {
+    const rawSlug = decodeURIComponent(match[1]).toLowerCase();
+    if (!RESERVED_SLUGS.has(rawSlug)) {
+      return rawSlug;
+    }
+  }
 
   // 2. Hash routing fallback #/loja/:slug
   if (window.location.hash) {
     const hashMatch = window.location.hash.match(/#\/?loja\/([^/?#]+)/i);
-    if (hashMatch && hashMatch[1]) return decodeURIComponent(hashMatch[1]).toLowerCase();
+    if (hashMatch && hashMatch[1]) {
+      const rawSlug = decodeURIComponent(hashMatch[1]).toLowerCase();
+      if (!RESERVED_SLUGS.has(rawSlug)) return rawSlug;
+    }
   }
 
   // 3. Query string (?loja=slug ou ?tenant=slug ou ?store=slug)
   const params = new URLSearchParams(window.location.search);
   const qSlug = params.get("loja") || params.get("tenant") || params.get("store");
-  if (qSlug) return decodeURIComponent(qSlug).toLowerCase();
-
-  // 4. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
-  const clean = path.replace(/\/+$/, "").toLowerCase();
-  if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
-    return "";
+  if (qSlug) {
+    const rawSlug = decodeURIComponent(qSlug).toLowerCase();
+    if (!RESERVED_SLUGS.has(rawSlug)) return rawSlug;
   }
 
-  // 5. Direct single-segment path /:slug (quando não for /admin, /super-admin, etc)
-  if (
-    path &&
-    path !== "/" &&
-    !path.startsWith("/admin") &&
-    !path.startsWith("/superadmin") &&
-    !path.startsWith("/super-admin") &&
-    !path.startsWith("/api") &&
-    !path.startsWith("/health")
-  ) {
-    const direct = path.replace(/^\/+|\/+$/g, "");
-    if (direct && !direct.includes("/")) {
-      return decodeURIComponent(direct).toLowerCase();
-    }
-  }
-
-  // 6. Se o lojista estiver logado ou recarregando (F5) no painel /admin, recupera a loja da sessão
-  if (path.startsWith("/admin")) {
+  // 4. Se o lojista estiver logado ou recarregando (F5) no painel /admin ou /painel, recupera a loja da sessão
+  if (path.startsWith("/admin") || path.startsWith("/painel")) {
     try {
       const savedTenant = localStorage.getItem("delivery_tenant_session");
       if (savedTenant) {
         const parsed = JSON.parse(savedTenant);
-        if (parsed?.slug) return parsed.slug;
+        if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug)) return parsed.slug;
       }
       const savedUser = localStorage.getItem("delivery_user_session");
       if (savedUser) {
@@ -270,8 +317,53 @@ function getInitialUrlSlug(): string {
           return "ms-preparacoes";
         }
       }
+      const last = localStorage.getItem("topfood_last_store_slug");
+      if (last && !RESERVED_SLUGS.has(last)) return last;
     } catch {
       // ignore
+    }
+    return "";
+  }
+
+  // 5. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
+  const clean = path.replace(/\/+$/, "").toLowerCase();
+  if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+    return "";
+  }
+
+  // 6. Sub-rotas do cliente sem prefixo /loja/ (/carrinho, /checkout, /rastreio)
+  if (
+    clean === "carrinho" ||
+    clean === "cart" ||
+    clean === "checkout" ||
+    clean === "rastreio" ||
+    clean === "acompanhamento" ||
+    clean === "tracking"
+  ) {
+    try {
+      const last = localStorage.getItem("topfood_last_store_slug");
+      if (last && !RESERVED_SLUGS.has(last)) return last;
+      const savedTenant = localStorage.getItem("delivery_tenant_session");
+      if (savedTenant) {
+        const parsed = JSON.parse(savedTenant);
+        if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug)) return parsed.slug;
+      }
+    } catch {
+      // ignore
+    }
+    return "ms-preparacoes";
+  }
+
+  // 7. Direct single-segment path /:slug (quando não for rota reservada)
+  if (
+    path &&
+    path !== "/" &&
+    !path.startsWith("/api") &&
+    !path.startsWith("/health")
+  ) {
+    const direct = path.replace(/^\/+|\/+$/g, "");
+    if (direct && !direct.includes("/") && !RESERVED_SLUGS.has(direct.toLowerCase())) {
+      return decodeURIComponent(direct).toLowerCase();
     }
   }
 
@@ -330,7 +422,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [storeCategories, setStoreCategories] = useState<Category[]>(defaultMockCategories);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  // Inicializa o carrinho com os itens salvos para esta loja/sessão
+  const [cart, setCart] = useState<CartItem[]>(() => loadSavedCart(initialSlug));
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
@@ -575,9 +668,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setIsLoadingStore(true);
       setStoreNotFound(false);
 
-      // Total isolation: clear products, cart, and orders immediately so no previous store data remains
+      // Total isolation: clear products and orders immediately so no previous store data remains
       setProducts([]);
-      setCart([]);
+      // Restaura itens salvos no carrinho para este estabelecimento sem esvaziá-lo na recarga
+      setCart(loadSavedCart(slug));
       setOrders([]);
 
       const tenantRes = await fetchTenantDetailsApi(slug);
@@ -671,10 +765,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [loadStoreBySlug]);
 
+  // Sincroniza continuamente o carrinho do cliente com o localStorage e sessionStorage
+  useEffect(() => {
+    try {
+      const activeSlug = currentTenant?.slug || config?.slug || initialSlug;
+      const dataStr = JSON.stringify(cart);
+      if (cart.length > 0) {
+        if (activeSlug) {
+          localStorage.setItem(`${CART_STORAGE_PREFIX}${activeSlug}`, dataStr);
+          sessionStorage.setItem(`${CART_STORAGE_PREFIX}${activeSlug}`, dataStr);
+        }
+        localStorage.setItem(CART_GENERIC_KEY, dataStr);
+        sessionStorage.setItem(CART_GENERIC_KEY, dataStr);
+      } else {
+        if (activeSlug) {
+          localStorage.removeItem(`${CART_STORAGE_PREFIX}${activeSlug}`);
+          sessionStorage.removeItem(`${CART_STORAGE_PREFIX}${activeSlug}`);
+        }
+        localStorage.removeItem(CART_GENERIC_KEY);
+        sessionStorage.removeItem(CART_GENERIC_KEY);
+      }
+    } catch (err) {
+      console.warn("Erro ao salvar carrinho no storage:", err);
+    }
+  }, [cart, currentTenant?.slug, config?.slug, initialSlug]);
+
+  // Salva última loja visualizada para manter a rota após refresh
+  useEffect(() => {
+    const slug = currentTenant?.slug || config?.slug || currentSlug;
+    if (slug && !RESERVED_SLUGS.has(slug)) {
+      try {
+        localStorage.setItem("topfood_last_store_slug", slug);
+      } catch {
+        // ignore
+      }
+    }
+  }, [currentTenant?.slug, config?.slug, currentSlug]);
+
   const selectTenant = useCallback(
     async (slugOrId: string) => {
       setCurrentSlug(slugOrId);
-      setCart([]); // Clear cart when switching store
+      try {
+        localStorage.setItem("topfood_last_store_slug", slugOrId);
+      } catch {
+        // ignore
+      }
+      setCart(loadSavedCart(slugOrId));
 
       // Update URL without reload
       if (typeof window !== "undefined") {
@@ -1046,7 +1182,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCart((prev) => prev.filter((item) => item.id !== cartItemId));
   }, []);
 
-  const clearCart = useCallback(() => setCart([]), []);
+  const clearCart = useCallback(() => {
+    setCart([]);
+    try {
+      const activeSlug = currentTenant?.slug || config?.slug || initialSlug;
+      if (activeSlug) {
+        localStorage.removeItem(`${CART_STORAGE_PREFIX}${activeSlug}`);
+        sessionStorage.removeItem(`${CART_STORAGE_PREFIX}${activeSlug}`);
+      }
+      localStorage.removeItem(CART_GENERIC_KEY);
+      sessionStorage.removeItem(CART_GENERIC_KEY);
+    } catch {
+      // ignore
+    }
+  }, [currentTenant?.slug, config?.slug, initialSlug]);
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartSubtotal = cart.reduce(

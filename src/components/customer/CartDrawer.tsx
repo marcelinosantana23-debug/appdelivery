@@ -2,6 +2,7 @@ import { Minus, Plus, Trash2, X, ShoppingBag, ArrowRight } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice } from "@/utils/order";
 import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
+import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 
 interface CartDrawerProps {
   open: boolean;
@@ -23,12 +24,15 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
             <ShoppingBag className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-bold text-gray-800">Seu carrinho</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <GlobalReloadButton variant="light" />
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {cart.length === 0 ? (
