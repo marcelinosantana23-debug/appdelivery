@@ -52,7 +52,7 @@ export function FeaturedStoresCarousel({
 
   const scroll = (direction: "left" | "right") => {
     if (containerRef.current) {
-      const scrollAmount = direction === "left" ? -320 : 320;
+      const scrollAmount = direction === "left" ? -230 : 230;
       containerRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
   };

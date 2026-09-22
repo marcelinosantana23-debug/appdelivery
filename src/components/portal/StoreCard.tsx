@@ -40,14 +40,14 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
       <div
         id={`store-card-carousel-${tenant.slug}`}
         onClick={handleCardClick}
-        className={`group relative flex w-[280px] sm:w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer ${
+        className={`group relative flex w-[210px] sm:w-[220px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${
           tenant.isFeatured
             ? "border-amber-400/60 dark:border-amber-500/40 shadow-amber-500/5 ring-1 ring-amber-500/20"
             : "border-gray-200/80 dark:border-slate-800"
         }`}
       >
-        {/* Banner com Foto da Loja */}
-        <div className="relative aspect-16/9 w-full overflow-hidden bg-slate-900">
+        {/* Banner com Foto da Loja (Compacto, max-h-36 com object-fit cover) */}
+        <div className="relative h-28 sm:h-32 max-h-36 w-full overflow-hidden bg-slate-900">
           {tenant.bannerImage ? (
             <img
               src={tenant.bannerImage}
@@ -64,31 +64,31 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
 
           {/* Badges no topo do Banner */}
-          <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+          <div className="absolute top-2 left-2 flex items-center gap-1 z-10">
             {tenant.isFeatured && (
-              <div className="flex items-center gap-1 rounded-full bg-amber-500 text-slate-950 px-2.5 py-0.5 text-[10px] font-extrabold shadow-md backdrop-blur-xs">
-                <Sparkles className="h-3 w-3 fill-slate-950" />
+              <div className="flex items-center gap-1 rounded-full bg-amber-500 text-slate-950 px-2 py-0.5 text-[9px] font-extrabold shadow-md backdrop-blur-xs">
+                <Sparkles className="h-2.5 w-2.5 fill-slate-950" />
                 <span>Patrocinado</span>
               </div>
             )}
             {rank !== undefined && (
               <div
-                className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black shadow-md backdrop-blur-xs ${
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black shadow-md backdrop-blur-xs ${
                   rank === 1
                     ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 ring-1 ring-white/50"
                     : "bg-red-600/95 text-white"
                 }`}
               >
                 <span>#{rank}</span>
-                {rank === 1 && <span>Líder de Vendas</span>}
+                {rank === 1 && <span>Líder</span>}
               </div>
             )}
           </div>
 
           {/* Status Badge */}
-          <div className="absolute top-2.5 right-2.5">
+          <div className="absolute top-2 right-2">
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold backdrop-blur-md ${
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold backdrop-blur-md ${
                 isOpen ? "bg-emerald-500/90 text-white" : "bg-gray-800/85 text-gray-200"
               }`}
             >
@@ -98,59 +98,52 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
           </div>
 
           {/* Logo da Loja sobreposta */}
-          <div className="absolute -bottom-3 left-3 z-10 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-2xl shadow-md">
+          <div className="absolute -bottom-2 left-2.5 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border-2 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-lg shadow-md">
             <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover" />
           </div>
         </div>
 
-        {/* Informações da Loja */}
-        <div className="flex flex-1 flex-col justify-between p-3.5 pt-4">
+        {/* Informações da Loja (Paddings reduzidos e layout verticalmente compacto) */}
+        <div className="flex flex-1 flex-col justify-between p-2.5 pt-3">
           <div>
             <div className="flex items-center justify-between gap-1">
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="inline-flex items-center gap-0.5 rounded-md bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
                   <span>{catInfo.icon}</span>
-                  <span>{catInfo.label}</span>
+                  <span className="truncate">{catInfo.label}</span>
                 </span>
-                {tenant.isFeatured && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                    <Sparkles className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
-                    <span>⭐ Destaque</span>
-                  </span>
-                )}
                 {tenant.completedOrdersCount !== undefined && tenant.completedOrdersCount > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
-                    <span>🔥 {tenant.completedOrdersCount} {tenant.completedOrdersCount === 1 ? "venda" : "vendas"}</span>
+                  <span className="inline-flex items-center rounded-md bg-emerald-500/15 border border-emerald-500/30 px-1 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
+                    <span>🔥 {tenant.completedOrdersCount}</span>
                   </span>
                 )}
               </div>
 
               {/* Avaliação */}
-              <div className="flex items-center gap-1 text-xs font-bold text-amber-500 dark:text-amber-400">
-                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+              <div className="flex items-center gap-0.5 text-[11px] font-bold text-amber-500 dark:text-amber-400 shrink-0">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                 <span>{rating.toFixed(1)}</span>
-                <span className="text-[10px] font-normal text-gray-400">({ratingCount})</span>
               </div>
             </div>
 
-            <h3 className="mt-1.5 text-base font-bold text-gray-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">
+            <h3 className="mt-1 text-sm font-bold text-gray-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">
               {getSafeDisplayName(tenant.name, "Estabelecimento")}
             </h3>
 
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
+            <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1">
               {tenant.tagline || "Cardápio exclusivo no Top Food"}
             </p>
           </div>
 
-          <div className="mt-3 border-t border-gray-100 dark:border-slate-800 pt-2.5">
-            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
-              <span className="flex items-center gap-1">
-                <Bike className="h-3.5 w-3.5 text-primary" />
-                {deliveryText}
+          <div className="mt-2 border-t border-gray-100 dark:border-slate-800 pt-2">
+            <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1.5">
+              <span className="flex items-center gap-1 truncate">
+                <Bike className="h-3 w-3 text-primary shrink-0" />
+                <span>{deliveryText}</span>
               </span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-primary" />
-                {tenant.hours?.split("-")[0]?.trim() || "Hoje"}
+              <span className="flex items-center gap-1 shrink-0">
+                <Clock className="h-3 w-3 text-primary shrink-0" />
+                <span>{tenant.hours?.split("-")[0]?.trim() || "Hoje"}</span>
               </span>
             </div>
 
@@ -161,10 +154,10 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
                 e.stopPropagation();
                 onSelectStore(tenant.slug);
               }}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark px-3 py-2 text-xs font-bold text-white shadow-xs transition active:scale-95 cursor-pointer"
+              className="flex w-full items-center justify-center gap-1 rounded-lg bg-primary hover:bg-primary-dark px-2.5 py-1.5 text-[11px] font-bold text-white shadow-2xs transition active:scale-95 cursor-pointer"
             >
               <span>Ver Cardápio</span>
-              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
             </button>
           </div>
         </div>
