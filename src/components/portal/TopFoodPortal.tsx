@@ -109,7 +109,7 @@ export function TopFoodPortal({
       />
 
       {/* Conteúdo Principal do Marketplace */}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 pb-12">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 pt-4 sm:pt-6 pb-12">
         {/* Carrosséis do Topo da Vitrine Principal */}
         {!searchQuery && activeCategory === "todos" && (
           <>

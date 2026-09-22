@@ -25,6 +25,7 @@ export interface StoreConfig {
   showFeaturedCarousel?: boolean;
   status?: "active" | "inactive";
   isOpen?: boolean;
+  businessType?: string;
   geminiApiKey?: string;
 }
 

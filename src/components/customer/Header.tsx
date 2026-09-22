@@ -118,36 +118,24 @@ export function Header(props: HeaderProps = {}) {
         </div>
       </div>
 
-      {/* 2. INFORMAÇÕES DA LANCHONETE (Perfil iFood com avatar sobreposto) */}
+      {/* 2. INFORMAÇÕES DA LANCHONETE (Perfil estilo Delivery com avatar sobreposto) */}
       <div className="relative mx-auto max-w-2xl px-4 sm:px-6 pb-4">
-        {/* Link discreto de retorno acima das informações */}
-        {props.onBackToPortal && (
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={props.onBackToPortal}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline transition cursor-pointer group"
-            >
-              <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
-              <span>Ver todas as lojas no Top Food</span>
-            </button>
-          </div>
-        )}
-
-        <div className="relative -mt-10 sm:-mt-12 flex items-end gap-3.5 sm:gap-4">
-          {/* Logo / Foto de Perfil da Loja */}
-          <div className="relative z-10 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-4xl sm:text-5xl shadow-xl">
+        <div className="relative flex items-end gap-3.5 sm:gap-4">
+          {/* Logo / Foto de Perfil da Loja (Apenas a logo tem sobreposição negativa sobre o banner) */}
+          <div className="relative z-10 -mt-10 sm:-mt-12 flex h-20 w-20 sm:h-24 sm:w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white dark:border-slate-900 bg-white dark:bg-slate-800 text-4xl sm:text-5xl shadow-xl">
             <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover object-center" fallbackEmoji="🏪" />
           </div>
 
-          {/* Nome e Tagline da Loja */}
-          <div className="flex-1 min-w-0 pb-1">
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white truncate">
+          {/* Nome e Tagline da Loja (100% na área clara ao lado da logo, sem encostar na borda do banner) */}
+          <div className="flex-1 min-w-0 pt-3 sm:pt-4 pb-1 sm:pb-2">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-950 dark:text-white leading-tight break-words sm:truncate drop-shadow-xs">
               {getSafeDisplayName(config.name, "Burger Town")}
             </h1>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
-              {config.tagline && !config.tagline.startsWith("data:") ? config.tagline : ""}
-            </p>
+            {config.tagline && !config.tagline.startsWith("data:") && (
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium truncate mt-0.5">
+                {config.tagline}
+              </p>
+            )}
           </div>
         </div>
 
