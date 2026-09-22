@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, ShoppingBag } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, ShoppingBag, RefreshCw } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
@@ -17,6 +17,11 @@ interface OrderTrackingProps {
 export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrackingProps) {
   const { config } = useStore();
   const [order, setOrder] = useState<Order>(initialOrder);
+  const [lastCheckTime, setLastCheckTime] = useState<string>(() => {
+    return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
 
   const statusRef = useRef<OrderStatus>(initialOrder.status);
   statusRef.current = order.status;
@@ -50,43 +55,52 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     }
   }, []);
 
-  // Sincronização em tempo real entre redes (4G/5G, Wi-Fi) via Cloudflare API + SSE + BroadcastChannel
+  // Busca manual sob demanda no banco D1 ao clicar no botão "Atualizar Status" (economiza requisições Cloudflare/D1)
+  const handleRefreshStatus = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshSuccess(false);
+    const cleanId = initialOrder.id.replace(/^#/, "");
+
+    try {
+      const res = await fetchOrderDetailsApi(cleanId, config.slug);
+      const now = new Date();
+      setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+
+      if (res.success && res.order) {
+        applyStatus(res.order.status, res.order);
+      }
+      setRefreshSuccess(true);
+      setTimeout(() => setRefreshSuccess(false), 3000);
+    } catch (err) {
+      console.warn("Erro ao buscar status mais recente no D1:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [initialOrder.id, config.slug, applyStatus, isRefreshing]);
+
+  // Sincronização inicial pontual + eventos sob demanda (SEM intervalos periódicos de polling automático)
   useEffect(() => {
     let isMounted = true;
     const cleanId = initialOrder.id.replace(/^#/, "");
 
-    // Consulta de status diretamente na API do Cloudflare Workers (D1/KV)
-    const syncFromCloud = async () => {
-      // Se já finalizado ou cancelado, interrompe a consulta periódica
-      if (statusRef.current === "done" || statusRef.current === "cancelled") {
-        return;
-      }
+    // Carga inicial pontual única ao abrir a tela
+    const loadInitialStatus = async () => {
       try {
         const res = await fetchOrderDetailsApi(cleanId, config.slug);
         if (isMounted && res.success && res.order) {
           applyStatus(res.order.status, res.order);
+          const now = new Date();
+          setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
         }
       } catch (err) {
-        console.warn("Sync from cloud warning:", err);
+        console.warn("Aviso na carga inicial de status:", err);
       }
     };
 
-    // Consulta imediata na montagem
-    syncFromCloud();
+    loadInitialStatus();
 
-    // Intervalo adaptativo de verificação a cada 3 segundos enquanto na tela de rastreamento
-    const interval = setInterval(syncFromCloud, 3000);
-
-    // Consulta imediata ao focar ou retornar para a aba do navegador no celular
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        syncFromCloud();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("focus", handleVisibility);
-
-    // Conexão Server-Sent Events (SSE) para entrega instantânea
+    // Conexão Server-Sent Events (SSE) para entrega instantânea baseada em eventos
     let eventSource: EventSource | null = null;
     try {
       const sseUrl = `/api/orders/${encodeURIComponent(cleanId)}/stream`;
@@ -97,6 +111,8 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
           const payload = JSON.parse(e.data);
           if (payload && payload.status) {
             applyStatus(payload.status, payload.order);
+            const now = new Date();
+            setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
           }
         } catch (err) {
           console.warn("Erro ao ler evento SSE em OrderTracking:", err);
@@ -104,7 +120,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       });
 
       eventSource.onerror = () => {
-        // SSE pode desconectar em redes móveis 4G/5G; o timer periódico garante a sincronização contínua
+        // SSE error handled silently
       };
     } catch (err) {
       console.warn("EventSource SSE não disponível:", err);
@@ -121,6 +137,8 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
             const incomingId = (data.orderId || "").replace(/^#/, "");
             if (incomingId === cleanId && data.status) {
               applyStatus(data.status, data.order || data.orderData);
+              const now = new Date();
+              setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
             }
           }
         };
@@ -139,6 +157,8 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       ) {
         if (detail.status) {
           applyStatus(detail.status, detail.order || detail.orderData);
+          const now = new Date();
+          setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
         }
       }
     };
@@ -147,9 +167,6 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("focus", handleVisibility);
       if (eventSource) {
         eventSource.close();
       }
@@ -165,26 +182,35 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50">
-      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/95 px-4 py-4 backdrop-blur-md">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-4 py-3.5 backdrop-blur-md">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={onBack}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition hover:bg-gray-200 cursor-pointer"
+            title="Voltar"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-gray-800 truncate">Pedido {order.id}</h1>
+            <p className="text-xs text-gray-400 truncate">
+              {new Date(order.createdAt).toLocaleString("pt-BR")}
+            </p>
+          </div>
+        </div>
+
+        {/* Botão Atualizar Status no Topo */}
         <button
-          onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition hover:bg-gray-200"
+          id="btn-refresh-order-status-header"
+          type="button"
+          onClick={handleRefreshStatus}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-500/30 px-3 py-1.5 text-xs font-bold transition shadow-xs disabled:opacity-60 cursor-pointer shrink-0"
+          title="Clique para buscar o status mais recente do pedido no banco D1"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} />
+          <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
         </button>
-        <div className="flex-1">
-          <h1 className="text-lg font-bold text-gray-800">Pedido {order.id}</h1>
-          <p className="text-xs text-gray-400">
-            {new Date(order.createdAt).toLocaleString("pt-BR")}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-          </span>
-          <span>Ao vivo (Tempo Real)</span>
-        </div>
       </div>
 
       <div className="mx-auto max-w-lg px-4 py-6 space-y-6">
@@ -197,13 +223,56 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
               </div>
               <h2 className="text-lg font-bold text-gray-800">Pedido cancelado</h2>
               <p className="text-sm text-gray-400">O pedido foi cancelado pela loja.</p>
+
+              <div className="mt-2 flex flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleRefreshStatus}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-2 rounded-xl bg-gray-100 hover:bg-gray-200 px-4 py-2 text-xs font-bold text-gray-700 transition cursor-pointer"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} />
+                  <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
+                </button>
+                <span className="text-[11px] text-gray-500 font-medium">
+                  Última atualização às <strong>{lastCheckTime}</strong>
+                </span>
+              </div>
             </div>
           ) : (
             <>
-              <div className="mb-6 flex items-center gap-2">
-                <Clock className="h-4 w-4 text-primary" />
-                <span className="text-sm font-semibold text-gray-700">Acompanhe seu pedido</span>
+              {/* Cabeçalho do Card de Status com Botão de Atualizar e Horário da Última Checagem */}
+              <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600">
+                    <Clock className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-gray-800">Acompanhe seu pedido</h2>
+                    <p className="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
+                      <span>Última atualização às <strong className="text-gray-700 font-semibold">{lastCheckTime}</strong></span>
+                      {refreshSuccess && (
+                        <span className="text-emerald-600 font-semibold inline-flex items-center gap-0.5">
+                          • Atualizado agora!
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  id="btn-refresh-order-status"
+                  type="button"
+                  onClick={handleRefreshStatus}
+                  disabled={isRefreshing}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3.5 py-2 text-xs font-bold transition shadow-xs disabled:opacity-70 cursor-pointer shrink-0"
+                  title="Buscar status mais recente do pedido no banco D1"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+                  <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
+                </button>
               </div>
+
               <div className="relative">
                 {statusSteps.map((step, i) => {
                   const isComplete = i <= currentIndex;

@@ -12,6 +12,7 @@ import {
   MapPin,
   CreditCard,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { fetchOrderDetailsApi } from "@/services/api";
@@ -42,6 +43,11 @@ export function FloatingOrderTracker({
   const [isDismissed, setIsDismissed] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCompletedCelebration, setIsCompletedCelebration] = useState(false);
+  const [lastCheckTime, setLastCheckTime] = useState<string>(() => {
+    return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
 
   // Referência para controlar alterações reais de status e evitar alertas repetidos
   const statusRef = useRef<OrderStatus>(status);
@@ -151,6 +157,8 @@ export function FloatingOrderTracker({
       if (normStatus !== prevStatus) {
         statusRef.current = normStatus;
         setStatus(normStatus);
+        const now = new Date();
+        setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
 
         // 2. Alerta sonoro agradável e instantâneo no celular do cliente
         if (playSound) {
@@ -204,6 +212,8 @@ export function FloatingOrderTracker({
       .then((res) => {
         if (!isMounted || !res.success || !res.order) return;
         const norm = normalizeOrderStatus(res.order.status);
+        const now = new Date();
+        setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
         setOrder(res.order);
         setIsPickup(
           res.order.orderType === "pickup" || (res.order as any).delivery_type === "pickup"
@@ -241,6 +251,34 @@ export function FloatingOrderTracker({
       isMounted = false;
     };
   }, [orderId, currentTenantSlug]);
+
+  // Busca manual no banco D1 ao clicar no botão "Atualizar Status" (economiza requisições Cloudflare/D1)
+  const handleRefreshStatus = useCallback(
+    async (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (!orderId || isRefreshing) return;
+      setIsRefreshing(true);
+      setRefreshSuccess(false);
+      const cleanId = orderId.replace(/^#/, "");
+
+      try {
+        const res = await fetchOrderDetailsApi(cleanId, currentTenantSlug);
+        const now = new Date();
+        setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+
+        if (res.success && res.order) {
+          applyStatusUpdate(res.order.status, res.order);
+        }
+        setRefreshSuccess(true);
+        setTimeout(() => setRefreshSuccess(false), 3000);
+      } catch (err) {
+        console.warn("Erro ao buscar status mais recente no D1:", err);
+      } finally {
+        setIsRefreshing(false);
+      }
+    },
+    [orderId, currentTenantSlug, applyStatusUpdate, isRefreshing]
+  );
 
   // Inicialização e listeners de eventos do localStorage e StoreContext
   useEffect(() => {
@@ -529,11 +567,30 @@ export function FloatingOrderTracker({
                   <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300 font-medium truncate">
                     {details.description}
                   </p>
+                  <p className="mt-0.5 text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 font-medium flex items-center gap-1 flex-wrap">
+                    <span>Última atualização às <strong className="text-gray-700 dark:text-gray-200 font-semibold">{lastCheckTime}</strong></span>
+                    {refreshSuccess && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">• Atualizado!</span>
+                    )}
+                  </p>
                 </div>
               </div>
 
-              {/* Ações da direita: Resumo, expandir e fechar */}
+              {/* Ações da direita: Botão Atualizar Status, Resumo, expandir e fechar */}
               <div className="flex items-center gap-1.5 shrink-0">
+                {/* Botão Atualizar Status */}
+                <button
+                  type="button"
+                  id="floating-tracker-refresh-btn"
+                  onClick={handleRefreshStatus}
+                  disabled={isRefreshing}
+                  className="flex h-8 items-center gap-1.5 px-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-xs font-bold transition cursor-pointer shadow-2xs disabled:opacity-60 shrink-0"
+                  title="Clique para buscar o status mais recente do pedido no banco D1"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} />
+                  <span className="hidden sm:inline">{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
+                  <span className="sm:hidden">{isRefreshing ? "..." : "Atualizar"}</span>
+                </button>
                 {order?.total ? (
                   <span className="hidden sm:inline-block text-xs font-bold text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
                     {formatPrice(order.total, config)}

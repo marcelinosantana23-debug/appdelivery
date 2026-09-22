@@ -1473,10 +1473,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const cloudSyncInterval = setInterval(syncOrdersWithCloud, 3000);
+    // Polling contínuo em nuvem APENAS se for lojista/admin autenticado no painel
+    // Para telas de clientes (cardápio e rastreamento), remove qualquer polling automático para economizar requisições Cloudflare/D1
+    const cloudSyncInterval = currentUser ? setInterval(syncOrdersWithCloud, 6000) : null;
 
     const handleWindowFocus = () => {
-      if (document.visibilityState === "visible") {
+      if (currentUser && document.visibilityState === "visible") {
         syncOrdersWithCloud();
       }
     };
@@ -1485,7 +1487,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
-      clearInterval(cloudSyncInterval);
+      if (cloudSyncInterval) {
+        clearInterval(cloudSyncInterval);
+      }
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
       unsubscribeBroadcast();
@@ -1493,7 +1497,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         eventSource.close();
       }
     };
-  }, [currentTenant?.id, currentTenant?.slug, currentSlug, soundEnabled]);
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug, soundEnabled, currentUser]);
 
   // ---------------- SUPER ADMIN ACTIONS ----------------
   const createNewTenant = useCallback(
