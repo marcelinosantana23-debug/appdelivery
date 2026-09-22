@@ -16,10 +16,6 @@ import {
   Copy,
   ExternalLink,
   Share2,
-  Sparkles,
-  Key,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
@@ -61,12 +57,7 @@ export function AdminSettings() {
     primaryDark: config.primaryDark,
     primaryLight: config.primaryLight,
     accentColor: config.accentColor,
-    geminiApiKey:
-      (typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "") ||
-      config.geminiApiKey ||
-      "",
   });
-  const [showApiKey, setShowApiKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isQrPlateModalOpen, setIsQrPlateModalOpen] = useState(false);
@@ -154,17 +145,7 @@ export function AdminSettings() {
       primaryDark: form.primaryDark,
       primaryLight: form.primaryLight,
       accentColor: form.accentColor,
-      geminiApiKey: form.geminiApiKey.trim(),
     });
-    try {
-      if (form.geminiApiKey.trim()) {
-        localStorage.setItem("topfood_gemini_api_key", form.geminiApiKey.trim());
-      } else {
-        localStorage.removeItem("topfood_gemini_api_key");
-      }
-    } catch (e) {
-      console.warn("Falha ao salvar geminiApiKey no localStorage", e);
-    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -514,62 +495,6 @@ export function AdminSettings() {
           <ColorInput label="Escura" value={form.primaryDark} onChange={(v) => set("primaryDark", v)} />
           <ColorInput label="Clara" value={form.primaryLight} onChange={(v) => set("primaryLight", v)} />
           <ColorInput label="Destaque" value={form.accentColor} onChange={(v) => set("accentColor", v)} />
-        </div>
-      </div>
-
-      {/* Inteligência Artificial (Gemini API) */}
-      <div className="rounded-2xl border border-purple-200/80 bg-gradient-to-br from-purple-50/50 to-indigo-50/40 p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-600" />
-            <h2 className="text-sm font-bold text-gray-800">Inteligência Artificial (Google Gemini)</h2>
-          </div>
-          <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-bold text-purple-800 border border-purple-200">
-            IA Gastronômica
-          </span>
-        </div>
-        <p className="text-xs text-gray-600 mb-3">
-          Sua chave de API do Gemini é utilizada para a Leitura e Importação de fotos de Cardápios e para a <strong>geração automática de fotos profissionais e realistas</strong> dos produtos cadastrados.
-        </p>
-
-        <div>
-          <label className="mb-1.5 flex items-center justify-between text-xs font-semibold text-gray-700">
-            <span className="flex items-center gap-1.5">
-              <Key className="h-3.5 w-3.5 text-purple-600" />
-              Chave de API do Gemini (GEMINI_API_KEY)
-            </span>
-            <a
-              href="https://aistudio.google.com/app/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] font-semibold text-purple-700 hover:underline flex items-center gap-1"
-            >
-              <span>Obter chave gratuita no Google AI Studio</span>
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </label>
-          <div className="relative">
-            <input
-              type={showApiKey ? "text" : "password"}
-              value={form.geminiApiKey}
-              onChange={(e) => set("geminiApiKey", e.target.value)}
-              className="form-input pr-10 font-mono text-xs"
-              placeholder="AIzaSy..."
-            />
-            <button
-              type="button"
-              onClick={() => setShowApiKey(!showApiKey)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-              title={showApiKey ? "Ocultar chave" : "Mostrar chave"}
-            >
-              {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-          <p className="mt-1 text-[11px] text-gray-500">
-            {form.geminiApiKey
-              ? "✓ Chave configurada. A geração de fotos por IA e importação de cardápios estão prontas para uso."
-              : "Caso deixe em branco, o sistema utilizará a chave padrão do servidor ou geradores gastronômicos inteligentes."}
-          </p>
         </div>
       </div>
 

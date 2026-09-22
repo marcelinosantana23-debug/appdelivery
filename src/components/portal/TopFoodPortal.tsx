@@ -6,6 +6,7 @@ import { DEFAULT_ESTABLISHMENT_CATEGORIES, matchStoreCategory } from "./portalUt
 import { FeaturedStoresCarousel } from "./FeaturedStoresCarousel";
 import { TopSellingProductsCarousel } from "./TopSellingProductsCarousel";
 import { CategoryStoreSection } from "./CategoryStoreSection";
+import { PortalCarouselSkeleton, PortalStoreListSkeleton } from "./PortalSkeleton";
 import type { EstablishmentCategory, Tenant } from "@/types";
 import { Store, SearchX } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
@@ -21,9 +22,11 @@ export function TopFoodPortal({
   onStoreAdminClick,
   onSuperAdminClick,
 }: TopFoodPortalProps) {
-  const { tenants, establishmentCategories } = useStore();
+  const { tenants, establishmentCategories, isLoadingTenants, isLoadingPortal } = useStore();
   const [activeCategory, setActiveCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const isLoading = isLoadingTenants || isLoadingPortal;
 
   // Apenas lojas ativas no marketplace, com destaque/patrocinadas primeiro por prioridade decrescente
   const activeTenants = useMemo(() => {
@@ -113,16 +116,25 @@ export function TopFoodPortal({
         {/* Carrosséis do Topo da Vitrine Principal */}
         {!searchQuery && activeCategory === "todos" && (
           <>
-            {/* Carrossel 1: Lojas em Destaque (ordenado automaticamente pelo histórico de pedidos concluídos no D1) */}
-            <FeaturedStoresCarousel
-              tenants={activeTenants}
-              onSelectStore={onSelectStore}
-            />
+            {isLoading ? (
+              <div className="space-y-6">
+                <PortalCarouselSkeleton title="Lojas em Destaque" badge="⭐ Top Destaques" />
+                <PortalCarouselSkeleton title="Mais Pedidos" badge="🔥 Ranking Geral" icon="🔥" />
+              </div>
+            ) : (
+              <>
+                {/* Carrossel 1: Lojas em Destaque (ordenado automaticamente pelo histórico de pedidos concluídos no D1) */}
+                <FeaturedStoresCarousel
+                  tenants={activeTenants}
+                  onSelectStore={onSelectStore}
+                />
 
-            {/* Carrossel 2: Mais Pedidos (diretamente ABAIXO do carrossel de Lojas em Destaque) */}
-            <TopSellingProductsCarousel
-              onSelectStore={onSelectStore}
-            />
+                {/* Carrossel 2: Mais Pedidos (diretamente ABAIXO do carrossel de Lojas em Destaque) */}
+                <TopSellingProductsCarousel
+                  onSelectStore={onSelectStore}
+                />
+              </>
+            )}
           </>
         )}
 
@@ -139,24 +151,35 @@ export function TopFoodPortal({
                     }`}
               </span>
             </h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {totalFilteredCount}{" "}
-              {totalFilteredCount === 1 ? "opção disponível" : "opções disponíveis"} no Top Food
-              {activeCategory !== "todos" && (
-                <button
-                  type="button"
-                  onClick={() => setActiveCategory("todos")}
-                  className="ml-2 font-bold text-primary hover:underline cursor-pointer"
-                >
-                  (Mostrar todas as categorias)
-                </button>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {isLoading ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block h-3.5 w-24 bg-gray-200 dark:bg-slate-800 animate-pulse rounded" />
+                  <span className="text-gray-400 dark:text-gray-500 text-[11px]">Buscando estabelecimentos...</span>
+                </span>
+              ) : (
+                <>
+                  {totalFilteredCount}{" "}
+                  {totalFilteredCount === 1 ? "opção disponível" : "opções disponíveis"} no Top Food
+                  {activeCategory !== "todos" && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategory("todos")}
+                      className="ml-2 font-bold text-primary hover:underline cursor-pointer"
+                    >
+                      (Mostrar todas as categorias)
+                    </button>
+                  )}
+                </>
               )}
-            </p>
+            </div>
           </div>
         </div>
 
         {/* Listagem Agrupada em Carrosséis Horizontais por Categoria */}
-        {displayedGroups.length > 0 ? (
+        {isLoading ? (
+          <PortalStoreListSkeleton />
+        ) : displayedGroups.length > 0 ? (
           <div className="space-y-6">
             {displayedGroups.map((group) => (
               <CategoryStoreSection

@@ -16,7 +16,7 @@ export function PortalHeader({
   onStoreAdminClick,
   totalStores,
 }: PortalHeaderProps) {
-  const { platformSettings } = useStore();
+  const { platformSettings, isLoadingTenants } = useStore();
 
   const bannerImg =
     platformSettings?.bannerUrl?.trim() ||
@@ -184,7 +184,11 @@ export function PortalHeader({
           <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
             <span className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
               <Sparkles className="h-3.5 w-3.5" style={{ color: primaryColor }} />
-              {totalStores} {totalStores === 1 ? "loja parceira" : "lojas parceiras"}
+              {isLoadingTenants ? (
+                <span className="inline-block h-3.5 w-20 bg-gray-200 dark:bg-slate-700 animate-pulse rounded" />
+              ) : (
+                `${totalStores} ${totalStores === 1 ? "loja parceira" : "lojas parceiras"}`
+              )}
             </span>
           </div>
         </div>

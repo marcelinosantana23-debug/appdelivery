@@ -61,6 +61,7 @@ export interface PlatformSettings {
   heroTitle?: string;
   heroSubtitle?: string;
   primaryColor?: string;
+  geminiApiKey?: string;
   updatedAt?: number;
 }
 

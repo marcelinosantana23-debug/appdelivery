@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo } from "react";
 import type { Tenant, EstablishmentCategory } from "@/types";
 import { useStore } from "@/context/StoreContext";
 import { DEFAULT_ESTABLISHMENT_CATEGORIES, matchStoreCategory } from "./portalUtils";
+import { CategoryPillsSkeleton } from "./PortalSkeleton";
 
 interface EstablishmentCategoriesProps {
   activeCategory: string;
@@ -17,7 +18,7 @@ export function EstablishmentCategories({
   customCategories,
 }: EstablishmentCategoriesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { establishmentCategories: storeCategoriesFromDb } = useStore();
+  const { establishmentCategories: storeCategoriesFromDb, isLoadingTenants } = useStore();
 
   // Consolida as categorias vindas do banco de dados D1 com fallback padrão
   const allCategories = useMemo<EstablishmentCategory[]>(() => {
@@ -86,34 +87,38 @@ export function EstablishmentCategories({
         ref={scrollRef}
         className="no-scrollbar mx-auto flex max-w-5xl gap-2 overflow-x-auto px-4 py-3 scrollbar-none"
       >
-        {visibleCategories.map((cat) => {
-          const count = categoryCounts[cat.id] ?? 0;
-          const isActive = activeCategory === cat.id;
+        {isLoadingTenants ? (
+          <CategoryPillsSkeleton />
+        ) : (
+          visibleCategories.map((cat) => {
+            const count = categoryCounts[cat.id] ?? 0;
+            const isActive = activeCategory === cat.id;
 
-          return (
-            <button
-              key={cat.id}
-              id={`portal-cat-btn-${cat.id}`}
-              data-category={cat.id}
-              onClick={() => onSelectCategory(cat.id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all cursor-pointer ${
-                isActive
-                  ? "bg-primary text-white shadow-md shadow-primary/20 scale-[1.02]"
-                  : "bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700"
-              }`}
-            >
-              <span className="text-base">{cat.icon || "🍽️"}</span>
-              <span>{cat.name}</span>
-              <span
-                className={`text-xs ${
-                  isActive ? "text-white/85" : "text-gray-400 dark:text-gray-400"
+            return (
+              <button
+                key={cat.id}
+                id={`portal-cat-btn-${cat.id}`}
+                data-category={cat.id}
+                onClick={() => onSelectCategory(cat.id)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-primary text-white shadow-md shadow-primary/20 scale-[1.02]"
+                    : "bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700"
                 }`}
               >
-                ({count})
-              </span>
-            </button>
-          );
-        })}
+                <span className="text-base">{cat.icon || "🍽️"}</span>
+                <span>{cat.name}</span>
+                <span
+                  className={`text-xs ${
+                    isActive ? "text-white/85" : "text-gray-400 dark:text-gray-400"
+                  }`}
+                >
+                  ({count})
+                </span>
+              </button>
+            );
+          })
+        )}
       </div>
     </div>
   );

@@ -298,11 +298,13 @@ const handleImportarCardapio = async (c: any) => {
         : ""
     ).trim();
 
-    // Prioridade da chave: body.apiKey -> body.geminiApiKey -> header x-gemini-api-key -> c.env.GEMINI_API_KEY -> process.env.GEMINI_API_KEY
+    // Prioridade da chave: body.apiKey -> body.geminiApiKey -> header x-gemini-api-key -> platformSettings.geminiApiKey -> c.env.GEMINI_API_KEY -> process.env.GEMINI_API_KEY
+    const platformSettings = await db.getPlatformSettings();
     const apiKey =
       (typeof bodyApiKey === "string" && bodyApiKey.trim()) ||
       (typeof body.geminiApiKey === "string" && body.geminiApiKey.trim()) ||
       c.req.header("x-gemini-api-key")?.trim() ||
+      platformSettings?.geminiApiKey ||
       c.env?.GEMINI_API_KEY ||
       (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
         ? process.env.GEMINI_API_KEY
@@ -525,12 +527,15 @@ const handleGerarFotoIa = async (c: any) => {
     // Prioridade da chave da API do Gemini:
     // 1. Chave enviada no corpo da requisição (body.apiKey ou body.geminiApiKey)
     // 2. Header HTTP 'x-gemini-api-key'
-    // 3. Variável de ambiente c.env.GEMINI_API_KEY (Cloudflare)
-    // 4. process.env.GEMINI_API_KEY (Node/Dev)
+    // 3. Chave global da plataforma salva no banco (platformSettings.geminiApiKey)
+    // 4. Variável de ambiente c.env.GEMINI_API_KEY (Cloudflare)
+    // 5. process.env.GEMINI_API_KEY (Node/Dev)
+    const platformSettings = await db.getPlatformSettings();
     const apiKey =
       (typeof bodyApiKey === "string" && bodyApiKey.trim()) ||
       (typeof geminiApiKey === "string" && geminiApiKey.trim()) ||
       c.req.header("x-gemini-api-key")?.trim() ||
+      platformSettings?.geminiApiKey ||
       c.env?.GEMINI_API_KEY ||
       (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY
         ? process.env.GEMINI_API_KEY
@@ -2782,13 +2787,14 @@ async function handlePutAdminSettings(c: any) {
       );
     }
 
-    const { logoUrl, bannerUrl, heroTitle, heroSubtitle, primaryColor } = body;
+    const { logoUrl, bannerUrl, heroTitle, heroSubtitle, primaryColor, geminiApiKey } = body;
     const updated = await db.updatePlatformSettings({
       logoUrl: logoUrl !== undefined ? String(logoUrl).trim() : undefined,
       bannerUrl: bannerUrl !== undefined ? String(bannerUrl).trim() : undefined,
       heroTitle: heroTitle !== undefined ? String(heroTitle).trim() : undefined,
       heroSubtitle: heroSubtitle !== undefined ? String(heroSubtitle).trim() : undefined,
       primaryColor: primaryColor !== undefined ? String(primaryColor).trim() : undefined,
+      geminiApiKey: geminiApiKey !== undefined ? String(geminiApiKey).trim() : undefined,
     });
 
     return c.json(

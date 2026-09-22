@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
   Upload,
@@ -25,6 +25,7 @@ import {
   Key,
   MessageSquare,
 } from "lucide-react";
+import { useStore } from "@/context/StoreContext";
 import type { Tenant, Product } from "@/types";
 import { copyTextToClipboard, getStoreUrl } from "@/utils/url";
 
@@ -53,21 +54,35 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
   const [fileItems, setFileItems] = useState<FileItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Chave da API do Gemini salva em localStorage
+  const { platformSettings, updatePlatformSettings } = useStore();
+
+  // Chave da API do Gemini obtida da configuração global do Super Admin ou localStorage
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
     try {
-      return localStorage.getItem("topfood_gemini_api_key") || "";
+      return (
+        platformSettings?.geminiApiKey ||
+        (typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "") ||
+        ""
+      );
     } catch {
-      return "";
+      return platformSettings?.geminiApiKey || "";
     }
   });
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isEditingKey, setIsEditingKey] = useState(false);
   const [keySavedFeedback, setKeySavedFeedback] = useState(false);
 
-  const handleApiKeyChange = (value: string) => {
+  // Sincroniza se platformSettings for atualizado ou carregado
+  useEffect(() => {
+    if (platformSettings?.geminiApiKey && !geminiApiKey) {
+      setGeminiApiKey(platformSettings.geminiApiKey);
+    }
+  }, [platformSettings?.geminiApiKey, geminiApiKey]);
+
+  const handleApiKeyChange = async (value: string) => {
     setGeminiApiKey(value);
+    const trimmed = value.trim();
     try {
-      const trimmed = value.trim();
       if (trimmed) {
         localStorage.setItem("topfood_gemini_api_key", trimmed);
         setKeySavedFeedback(true);
@@ -75,8 +90,10 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
       } else {
         localStorage.removeItem("topfood_gemini_api_key");
       }
+      // Sincroniza diretamente na configuração global do Super Admin
+      await updatePlatformSettings({ geminiApiKey: trimmed });
     } catch (e) {
-      console.warn("Falha ao salvar no localStorage", e);
+      console.warn("Falha ao salvar no localStorage/settings", e);
     }
   };
 
@@ -204,6 +221,23 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
       return;
     }
 
+    const activeKey =
+      geminiApiKey.trim() ||
+      (platformSettings?.geminiApiKey || "").trim() ||
+      (typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "");
+
+    if (!activeKey) {
+      setErrorMessage(
+        "⚠️ Chave GEMINI_API_KEY necessária: Nenhuma chave global do Gemini está configurada. Por favor, cole a sua chave de API do Gemini no campo abaixo para habilitar o processamento por IA."
+      );
+      setIsEditingKey(true);
+      setTimeout(() => {
+        const el = document.getElementById("gemini-api-key-input");
+        if (el) el.focus();
+      }, 100);
+      return;
+    }
+
     setErrorMessage("");
     setStep("uploading");
     setProgressMsg(
@@ -246,7 +280,7 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
         )
       );
 
-      const trimmedKey = geminiApiKey.trim();
+      const trimmedKey = activeKey.trim();
 
       const response = await fetch("/api/admin/lojas/importar-cardapio", {
         method: "POST",
@@ -357,71 +391,97 @@ export const AiMenuImportModal: React.FC<AiMenuImportModalProps> = ({
           {/* ESTADO 1: FORMULÁRIO DE UPLOAD */}
           {step === "idle" && (
             <div className="space-y-4">
-              {/* Campo da Chave de API do Gemini */}
-              <div className="rounded-2xl border border-violet-500/30 bg-violet-950/25 p-4 space-y-2.5 transition">
-                <div className="flex flex-wrap items-center justify-between gap-1">
-                  <label
-                    htmlFor="gemini-api-key-input"
-                    className="text-xs font-bold text-violet-200 flex items-center gap-1.5"
-                  >
-                    <Key className="h-3.5 w-3.5 text-amber-400" />
-                    Chave da API do Gemini
+              {/* Campo da Chave de API do Gemini (Super Admin Global) */}
+              <div className="rounded-2xl border border-violet-500/30 bg-violet-950/25 p-4 space-y-3 transition">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Key className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs font-bold text-violet-200">
+                      Chave Global de IA (Google Gemini)
+                    </span>
                     {keySavedFeedback ? (
-                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
-                        <Check className="h-3 w-3" /> Salva no navegador!
+                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                        <Check className="h-3 w-3" /> Salva no sistema!
                       </span>
                     ) : geminiApiKey ? (
-                      <span className="text-[10px] font-medium text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Check className="h-3 w-3" /> Salva no navegador
+                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Check className="h-3 w-3" /> Ativa no Super Admin
                       </span>
-                    ) : null}
-                  </label>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                        <AlertCircle className="h-3 w-3" /> Chave Não Configurada
+                      </span>
+                    )}
+                  </div>
 
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-amber-400 hover:text-amber-300 underline font-medium flex items-center gap-1"
-                  >
-                    Criar chave grátis no Google AI Studio
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-
-                <div className="relative flex items-center">
-                  <input
-                    id="gemini-api-key-input"
-                    type={showApiKey ? "text" : "password"}
-                    value={geminiApiKey}
-                    onChange={(e) => handleApiKeyChange(e.target.value)}
-                    placeholder="Cole sua Chave de API do Gemini aqui (AIzaSy...)"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-20 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono transition"
-                  />
-                  <div className="absolute right-2 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition"
-                      title={showApiKey ? "Ocultar chave" : "Mostrar chave"}
-                    >
-                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                  <div className="flex items-center gap-2">
                     {geminiApiKey && (
                       <button
                         type="button"
-                        onClick={() => handleApiKeyChange("")}
-                        className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-slate-800 transition"
-                        title="Limpar chave"
+                        onClick={() => setIsEditingKey(!isEditingKey)}
+                        className="text-[11px] text-violet-300 hover:text-white underline font-medium"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        {isEditingKey ? "Ocultar Campo" : "Alterar Chave"}
                       </button>
                     )}
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-amber-400 hover:text-amber-300 underline font-medium flex items-center gap-1"
+                    >
+                      <span>Obter chave no Google AI Studio</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-400">
-                  🔒 Salva automaticamente no seu navegador (<span className="text-slate-300 font-mono">localStorage</span>). Você não precisa colar toda vez.
-                </p>
+                {!geminiApiKey && (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Atenção:</strong> Nenhuma chave do Gemini está configurada. Cole sua chave <strong>GEMINI_API_KEY</strong> abaixo para processar o cardápio e salvar nas configurações globais do sistema.
+                    </span>
+                  </div>
+                )}
+
+                {(isEditingKey || !geminiApiKey) && (
+                  <div className="space-y-2">
+                    <div className="relative flex items-center">
+                      <input
+                        id="gemini-api-key-input"
+                        type={showApiKey ? "text" : "password"}
+                        value={geminiApiKey}
+                        onChange={(e) => handleApiKeyChange(e.target.value)}
+                        placeholder="Cole sua Chave de API do Gemini aqui (AIzaSy...)"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-20 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono transition"
+                      />
+                      <div className="absolute right-2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition"
+                          title={showApiKey ? "Ocultar chave" : "Mostrar chave"}
+                        >
+                          {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                        {geminiApiKey && (
+                          <button
+                            type="button"
+                            onClick={() => handleApiKeyChange("")}
+                            className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-slate-800 transition"
+                            title="Limpar chave"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      🔒 Ao salvar aqui, a chave é gravada nas configurações globais do Super Admin e sincronizada com o sistema.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Dropzone & Preview list */}

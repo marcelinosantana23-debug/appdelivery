@@ -70,6 +70,8 @@ interface StoreContextValue {
   refreshTenants: () => Promise<void>;
   refreshCurrentStore: () => Promise<void>;
   isLoadingStore: boolean;
+  isLoadingTenants: boolean;
+  isLoadingPortal: boolean;
   storeNotFound: boolean;
 
   // Product & Category management (Tenant Admin)
@@ -515,6 +517,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Load tenants list and ranked carousels
   const [featuredStoresRanked, setFeaturedStoresRanked] = useState<FeaturedStoreRanked[]>([]);
   const [topSellingProducts, setTopSellingProducts] = useState<TopSellingProduct[]>([]);
+  const [isLoadingTenants, setIsLoadingTenants] = useState<boolean>(true);
+  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(true);
+  const isLoadingPortal = isLoadingTenants || isLoadingCategories;
 
   const refreshFeaturedStoresRanked = useCallback(async () => {
     try {
@@ -539,6 +544,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshTenants = useCallback(async () => {
+    setIsLoadingTenants(true);
     try {
       const [tRes, fRes, pRes] = await Promise.all([
         fetchTenantsApi(),
@@ -556,6 +562,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       // ignore
+    } finally {
+      setIsLoadingTenants(false);
     }
   }, []);
 
@@ -563,9 +571,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [establishmentCategories, setEstablishmentCategories] = useState<EstablishmentCategory[]>([]);
 
   const refreshEstablishmentCategories = useCallback(async () => {
-    const res = await fetchEstablishmentCategoriesApi();
-    if (res.success && res.categories) {
-      setEstablishmentCategories(res.categories);
+    setIsLoadingCategories(true);
+    try {
+      const res = await fetchEstablishmentCategoriesApi();
+      if (res.success && res.categories) {
+        setEstablishmentCategories(res.categories);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingCategories(false);
     }
   }, []);
 
@@ -598,6 +613,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     heroTitle: "Top Food - O Portal do Delivery",
     heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
     primaryColor: "#E63946",
+    geminiApiKey: typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "",
   });
 
   const refreshPlatformSettings = useCallback(async () => {
@@ -608,6 +624,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...prev,
           ...res.settings,
         }));
+        if (typeof window !== "undefined" && res.settings.geminiApiKey) {
+          try {
+            localStorage.setItem("topfood_gemini_api_key", res.settings.geminiApiKey);
+          } catch (err) {
+            console.debug("Storage sync error:", err);
+          }
+        }
       }
     } catch (e) {
       console.warn("Erro ao buscar configurações da plataforma:", e);
@@ -617,6 +640,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updatePlatformSettings = useCallback(
     async (partial: Partial<PlatformSettings>) => {
       try {
+        if (partial.geminiApiKey !== undefined && typeof window !== "undefined") {
+          try {
+            if (partial.geminiApiKey.trim()) {
+              localStorage.setItem("topfood_gemini_api_key", partial.geminiApiKey.trim());
+            } else {
+              localStorage.removeItem("topfood_gemini_api_key");
+            }
+          } catch (err) {
+            console.debug("Storage update error:", err);
+          }
+        }
         const extraAuth = currentUser
           ? { userId: currentUser.id, email: currentUser.email, userRole: currentUser.role }
           : undefined;
@@ -1731,6 +1765,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         refreshTenants,
         refreshCurrentStore,
         isLoadingStore,
+        isLoadingTenants,
+        isLoadingPortal,
         storeNotFound,
         addProduct,
         editProduct,

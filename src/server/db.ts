@@ -921,6 +921,7 @@ export const defaultPlatformSettings: PlatformSettings = {
   heroTitle: "Top Food - O Portal do Delivery",
   heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
   primaryColor: "#E63946",
+  geminiApiKey: typeof process !== "undefined" && process?.env?.GEMINI_API_KEY ? process.env.GEMINI_API_KEY : "",
   updatedAt: Date.now(),
 };
 

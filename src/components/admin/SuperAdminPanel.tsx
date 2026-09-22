@@ -68,6 +68,8 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     deleteEstablishmentCategory,
     refreshEstablishmentCategories,
     toggleTenantFeatured,
+    platformSettings,
+    updatePlatformSettings,
   } = useStore();
 
   const [search, setSearch] = useState("");
@@ -75,6 +77,12 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const [viewMode, setViewMode] = useState<"cards" | "credentials" | "appearance">("cards");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAiImportModalOpen, setIsAiImportModalOpen] = useState(false);
+  const [isAiConfigModalOpen, setIsAiConfigModalOpen] = useState(false);
+  const [globalGeminiKeyInput, setGlobalGeminiKeyInput] = useState("");
+  const [showGlobalGeminiKey, setShowGlobalGeminiKey] = useState(false);
+  const [aiConfigSaving, setAiConfigSaving] = useState(false);
+  const [aiConfigSuccess, setAiConfigSuccess] = useState("");
+  const [aiConfigError, setAiConfigError] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [togglingFeaturedId, setTogglingFeaturedId] = useState<string | null>(null);
@@ -86,6 +94,50 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       await refreshTenants();
     } finally {
       setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  const isGlobalAiKeyConfigured = Boolean(
+    platformSettings?.geminiApiKey?.trim() ||
+      (typeof window !== "undefined" && localStorage.getItem("topfood_gemini_api_key")?.trim())
+  );
+
+  const openAiConfigModal = () => {
+    const key =
+      platformSettings?.geminiApiKey ||
+      (typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "");
+    setGlobalGeminiKeyInput(key);
+    setShowGlobalGeminiKey(false);
+    setAiConfigSuccess("");
+    setAiConfigError("");
+    setIsAiConfigModalOpen(true);
+  };
+
+  const handleSaveAiConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAiConfigSaving(true);
+    setAiConfigSuccess("");
+    setAiConfigError("");
+    try {
+      const trimmed = globalGeminiKeyInput.trim();
+      const res = await updatePlatformSettings({ geminiApiKey: trimmed });
+      if (res.success) {
+        if (typeof window !== "undefined") {
+          if (trimmed) {
+            localStorage.setItem("topfood_gemini_api_key", trimmed);
+          } else {
+            localStorage.removeItem("topfood_gemini_api_key");
+          }
+        }
+        setAiConfigSuccess("Chave de API do Google Gemini salva com sucesso nas configurações globais do sistema!");
+        setTimeout(() => setAiConfigSuccess(""), 4000);
+      } else {
+        setAiConfigError(res.error || "Erro ao salvar chave da API.");
+      }
+    } catch (err: any) {
+      setAiConfigError(err.message || "Erro inesperado ao salvar chave da API.");
+    } finally {
+      setAiConfigSaving(false);
     }
   };
 
@@ -743,6 +795,26 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               <Key className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 shrink-0" />
               <span className="hidden sm:inline">Alterar E-mail / Senha</span>
               <span className="sm:hidden">Credenciais</span>
+            </button>
+            <button
+              onClick={openAiConfigModal}
+              className="flex items-center gap-1.5 rounded-xl border border-purple-500/40 bg-purple-500/15 px-2.5 py-1.5 text-xs font-semibold text-purple-300 shadow-sm transition hover:bg-purple-500/25 active:scale-[0.98] sm:text-sm sm:px-3.5 sm:py-2"
+              title="Configuração Global da Inteligência Artificial (Google Gemini - GEMINI_API_KEY)"
+            >
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-purple-400 shrink-0" />
+              <span className="hidden sm:inline">Configurar IA (Gemini)</span>
+              <span className="sm:hidden">IA Global</span>
+              {isGlobalAiKeyConfigured ? (
+                <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+                  <CheckCircle2 className="h-2.5 w-2.5" />
+                  <span className="hidden md:inline">Ativa</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30 animate-pulse">
+                  <AlertCircle className="h-2.5 w-2.5" />
+                  <span className="hidden md:inline">Pendente</span>
+                </span>
+              )}
             </button>
             <button
               onClick={() => setIsAiImportModalOpen(true)}
@@ -3395,6 +3467,176 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Configuração Global da Inteligência Artificial (Google Gemini) */}
+      {isAiConfigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl sm:rounded-3xl border border-purple-500/30 bg-slate-900 p-4 sm:p-6 shadow-2xl text-slate-100 box-border">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-white">Inteligência Artificial (Google Gemini)</h3>
+                    <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300 border border-purple-500/30">
+                      Super Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Configuração global da chave GEMINI_API_KEY para toda a plataforma.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAiConfigModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+              >
+                <span className="text-2xl leading-none">&times;</span>
+              </button>
+            </div>
+
+            {/* Content Form */}
+            <form onSubmit={handleSaveAiConfig} className="mt-4 space-y-4">
+              <div className="rounded-xl border border-purple-500/20 bg-purple-950/20 p-3.5 text-xs text-slate-300 space-y-2">
+                <p className="font-semibold text-purple-200">
+                  🔒 Acesso Centralizado e Seguro:
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  A chave configurada aqui é gerenciada exclusivamente pelo Super Admin. Os lojistas não possuem acesso visual nem permissão para alterar esta chave.
+                </p>
+                <div className="pt-1 flex flex-col gap-1 text-[11px] text-purple-300">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                    <span>Importação e leitura de cardápios físicos (fotos e PDF) via Gemini Multimodal</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                    <span>Geração automática de fotos realistas em alta definição para produtos</span>
+                  </div>
+                </div>
+              </div>
+
+              {aiConfigError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-950/50 p-3 text-xs text-red-200 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+                  <span>{aiConfigError}</span>
+                </div>
+              )}
+
+              {aiConfigSuccess && (
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/50 p-3 text-xs text-emerald-200 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <span>{aiConfigSuccess}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="global-gemini-key" className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Key className="h-3.5 w-3.5 text-amber-400" />
+                    Chave de API do Gemini (GEMINI_API_KEY)
+                  </label>
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 underline flex items-center gap-1"
+                  >
+                    <span>Obter chave gratuita</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+
+                <div className="relative">
+                  <input
+                    id="global-gemini-key"
+                    type={showGlobalGeminiKey ? "text" : "password"}
+                    value={globalGeminiKeyInput}
+                    onChange={(e) => setGlobalGeminiKeyInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 pr-20 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono transition"
+                    placeholder="Cole aqui a chave AIzaSy..."
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowGlobalGeminiKey(!showGlobalGeminiKey)}
+                      className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+                      title={showGlobalGeminiKey ? "Ocultar chave" : "Mostrar chave"}
+                    >
+                      {showGlobalGeminiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                    {globalGeminiKeyInput && (
+                      <button
+                        type="button"
+                        onClick={() => setGlobalGeminiKeyInput("")}
+                        className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition"
+                        title="Limpar chave"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  {globalGeminiKeyInput.trim()
+                    ? "✓ Chave informada. Clique em 'Salvar Configuração Global' para gravar no sistema."
+                    : "⚠️ Sem chave configurada, os recursos de IA solicitarão a chave antes de executar a análise."}
+                </p>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                {isGlobalAiKeyConfigured ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAiConfigModalOpen(false);
+                      setIsAiImportModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto text-xs text-purple-300 hover:text-white flex items-center gap-1 underline"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>Abrir Criar Loja por IA</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsAiConfigModalOpen(false)}
+                    className="w-full sm:w-auto rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={aiConfigSaving}
+                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-600/30 hover:brightness-110 active:scale-[0.98] transition disabled:opacity-50"
+                  >
+                    {aiConfigSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Salvar Configuração Global</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
