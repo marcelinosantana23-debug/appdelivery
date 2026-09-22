@@ -49,9 +49,11 @@ export function GlobalReloadButton({
       onClick={handleReload}
       title="Atualizar aplicação (recarregar página)"
       aria-label="Atualizar aplicação"
-      className={`inline-flex h-8 w-8 sm:h-8 sm:w-auto ${
-        showLabel ? "sm:px-2.5" : ""
-      } items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 ${variantStyles[variant]} ${className}`}
+      className={`inline-flex ${
+        showLabel
+          ? "h-8 w-8 sm:h-8 sm:w-auto sm:px-2.5 gap-1.5"
+          : "h-7 w-7 sm:h-8 sm:w-8 p-0"
+      } items-center justify-center rounded-full text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 ${variantStyles[variant]} ${className}`}
     >
       <RefreshCw
         className={`h-3.5 w-3.5 text-current shrink-0 transition-transform ${

@@ -31,7 +31,7 @@ export function PortalHeader({
   return (
     <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
       {/* 1. BANNER DO PORTAL TOP FOOD (Mesmo layout e proporção das vitrines) */}
-      <div className="relative h-44 w-full overflow-hidden bg-slate-900 sm:h-56 md:h-64">
+      <div className="relative min-h-[190px] h-48 sm:h-56 md:h-64 w-full overflow-hidden bg-slate-900">
         {/* Imagem de Capa Marketplace */}
         <img
           src={bannerImg}
@@ -42,29 +42,39 @@ export function PortalHeader({
         {/* Gradiente escuro para legibilidade perfeita */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/30" />
 
-        {/* Barra superior flutuante */}
-        <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-5xl px-4 pt-3.5 sm:px-6">
-          <div className="flex items-center justify-between gap-2">
-            {/* Badge oficial Top Food */}
-            <div className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3.5 py-1.5 text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs">
-              <UtensilsCrossed className="h-3.5 w-3.5 text-amber-400" />
-              <span>Top Food • Portal Oficial</span>
+        {/* Barra superior flutuante em UMA ÚNICA LINHA horizontal */}
+        <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-5xl px-2.5 sm:px-4 pt-2.5 sm:pt-3">
+          <div className="flex flex-row flex-nowrap items-center justify-between gap-1.5 sm:gap-2 w-full">
+            {/* CANTO ESQUERDO: Badge oficial Top Food */}
+            <div className="flex items-center gap-1 rounded-full border border-white/20 bg-black/45 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs min-w-0 h-7 shrink">
+              <UtensilsCrossed className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0" />
+              <span className="truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">Top Food</span>
             </div>
 
-            {/* Ações da barra */}
-            <div className="flex items-center gap-2">
-              <GlobalReloadButton variant="glass" />
-              <PWAInstallButton variant="header" />
+            {/* MEIO: Instalar App */}
+            <div className="flex items-center justify-center shrink-0 mx-1">
+              <PWAInstallButton
+                variant="header"
+                className="h-7 px-2 py-1 text-[11px] sm:text-xs"
+              />
+            </div>
+
+            {/* CANTO DIREITO: Atualizar (🔄 circular) + Área do Lojista */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
+              <GlobalReloadButton
+                variant="glass"
+                showLabel={false}
+                className="h-7 w-7 text-white/95"
+              />
               {onStoreAdminClick && (
                 <button
                   type="button"
                   onClick={onStoreAdminClick}
-                  className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 hover:bg-black/60 px-3 py-1.5 text-xs font-bold text-white/95 backdrop-blur-md shadow-xs transition active:scale-95 cursor-pointer"
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-black/45 hover:bg-black/65 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold text-white/95 backdrop-blur-md shadow-xs transition active:scale-95 cursor-pointer h-7"
                   title="Acessar painel do lojista"
                 >
-                  <Store className="h-3.5 w-3.5 text-amber-300" />
-                  <span className="hidden sm:inline">Área do Lojista</span>
-                  <span className="sm:hidden">Lojista</span>
+                  <Store className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
+                  <span className="hidden xs:inline">Lojista</span>
                 </button>
               )}
             </div>

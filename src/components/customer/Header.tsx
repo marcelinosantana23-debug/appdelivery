@@ -28,7 +28,7 @@ export function Header(props: HeaderProps = {}) {
       )}
 
       {/* 1. FOTO DA LANCHONETE / BANNER DA VITRINE (Capa estilo iFood/Delivery) */}
-      <div className="relative h-44 w-full overflow-hidden bg-slate-900 sm:h-56 md:h-64">
+      <div className="relative min-h-[190px] h-48 sm:h-56 md:h-64 w-full overflow-hidden bg-slate-900">
         {hasBanner ? (
           <img
             src={config.bannerImage}
@@ -47,43 +47,71 @@ export function Header(props: HeaderProps = {}) {
         {/* Gradiente escuro para legibilidade perfeita dos controles e textos */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/30" />
 
-        {/* Top Floating Toolbar - Clean customer-facing interface */}
-        <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-2xl px-4 pt-3.5 sm:px-6">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              {/* Botão de retorno ao Portal Principal do Top Food */}
+        {/* Top Floating Toolbar - Clean customer-facing interface em UMA ÚNICA LINHA horizontal */}
+        <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-4xl px-2.5 sm:px-4 pt-2.5 sm:pt-3">
+          <div className="flex flex-row flex-nowrap items-center justify-between gap-1.5 sm:gap-2 w-full">
+            {/* CANTO ESQUERDO: Botão "← Início" e o nome/ícone da loja */}
+            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 shrink">
               {props.onBackToPortal && (
                 <button
                   type="button"
                   onClick={props.onBackToPortal}
-                  className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 hover:bg-black/60 px-3 py-1.5 text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs transition active:scale-95 cursor-pointer group"
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-black/45 hover:bg-black/65 px-2 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs transition active:scale-95 cursor-pointer group h-7"
                   title="Ver todas as lojas no Top Food"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5 text-amber-300 transition-transform group-hover:-translate-x-0.5" />
-                  <span>Início</span>
+                  <ArrowLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 transition-transform group-hover:-translate-x-0.5" />
+                  <span className="hidden xs:inline">Início</span>
                 </button>
               )}
 
               {/* Clean store badge with store name */}
-              <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-3.5 py-1.5 text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs">
-                <Store className="h-3.5 w-3.5 text-amber-300" />
-                <span className="max-w-[140px] truncate sm:max-w-[240px]">{config.name}</span>
+              <div
+                className="flex items-center gap-1 rounded-full border border-white/20 bg-black/45 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs min-w-0 h-7"
+                title={config.name}
+              >
+                <Store className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
+                <span className="truncate max-w-[85px] xs:max-w-[130px] sm:max-w-[220px] font-bold">
+                  {config.name}
+                </span>
               </div>
             </div>
 
-            {/* Status chip, Reload button & Install button */}
-            <div className="flex items-center gap-2">
-              <GlobalReloadButton variant="glass" />
-              <PWAInstallButton variant="header" />
+            {/* MEIO: Botão de "Instalar App" em tamanho compacto/menor (some automaticamente quando instalado) */}
+            <div className="flex items-center justify-center shrink-0 mx-1">
+              <PWAInstallButton
+                variant="header"
+                className="h-7 px-2 py-1 text-[11px] sm:text-xs"
+              />
+            </div>
+
+            {/* CANTO DIREITO: O botão de recarga (ícone circular 🔄 sem texto) colado logo ao lado da badge de status da loja */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
+              {/* Botão de recarga circular 🔄 sem texto */}
+              <GlobalReloadButton
+                variant="glass"
+                showLabel={false}
+                className="h-7 w-7 text-white/95"
+              />
+
+              {/* Badge de status da loja fixada no extremo canto direito superior */}
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold backdrop-blur-md ${
-                  isStoreOpen
-                    ? "bg-emerald-500/80 text-white"
-                    : "bg-red-500/80 text-white"
+                id="header-store-status-chip"
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-bold backdrop-blur-md border shadow-xs h-7 ${
+                  !isStoreActive
+                    ? "bg-red-600/90 text-white border-red-400/40"
+                    : isStoreOpen
+                    ? "bg-emerald-600/90 text-white border-emerald-400/40"
+                    : "bg-red-600/90 text-white border-red-400/40"
                 }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${isStoreOpen ? "bg-white animate-pulse" : "bg-white/80"}`} />
-                {isStoreOpen ? "Aberto agora" : "Fechado"}
+                <span
+                  className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                    isStoreActive && isStoreOpen ? "bg-white animate-pulse" : "bg-white/80"
+                  }`}
+                />
+                <span className="whitespace-nowrap">
+                  {!isStoreActive ? "Desativada" : isStoreOpen ? "Aberto agora" : "Fechado"}
+                </span>
               </span>
             </div>
           </div>

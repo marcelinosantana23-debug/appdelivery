@@ -21,6 +21,8 @@ export function usePWAInstall() {
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
+  const [isXiaomi, setIsXiaomi] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -43,9 +45,13 @@ export function usePWAInstall() {
       /iphone|ipad|ipod/.test(userAgent) &&
       !(window as unknown as { MSStream?: unknown }).MSStream;
     const isAndroidDevice = /android/.test(userAgent);
+    const isXiaomiDevice = /miuibrowser|xiaomi|redmi|poco/i.test(userAgent);
+    const isDesktopDevice = !isIOSDevice && !isAndroidDevice;
 
     setIsIOS(isIOSDevice);
     setIsAndroid(isAndroidDevice);
+    setIsXiaomi(isXiaomiDevice);
+    setIsDesktop(isDesktopDevice);
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault(); // Impede o banner padrão do navegador
@@ -94,7 +100,7 @@ export function usePWAInstall() {
       }
       return true;
     } catch (err) {
-      console.warn("Erro ao acionar prompt de instalação no Android/Chrome:", err);
+      console.warn("Erro ao acionar prompt de instalação:", err);
       return false;
     }
   };
@@ -104,8 +110,11 @@ export function usePWAInstall() {
     setDeferredPrompt,
     isInstallable: Boolean(deferredPrompt || (typeof window !== "undefined" && window.__pwaInstallPrompt)),
     isInstalled,
+    setIsInstalled,
     isIOS,
     isAndroid,
+    isXiaomi,
+    isDesktop,
     install,
   };
 }
