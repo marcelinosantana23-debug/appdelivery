@@ -13,6 +13,7 @@ import {
   Share2,
   Users,
   TrendingUp,
+  QrCode,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
@@ -25,6 +26,7 @@ import { AdminMenu } from "./AdminMenu";
 import { AdminSettings } from "./AdminSettings";
 import { AdminFinancialReport } from "./AdminFinancialReport";
 import { SuperAdminPanel } from "./SuperAdminPanel";
+import { StoreQrCodePlate } from "./StoreQrCodePlate";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Tenant } from "@/types";
 
@@ -34,7 +36,7 @@ interface AdminPanelProps {
   initialTab?: AdminTab;
 }
 
-type AdminTab = "orders" | "financial" | "customers" | "menu" | "settings";
+type AdminTab = "orders" | "financial" | "customers" | "menu" | "qrcode" | "settings";
 
 export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelProps) {
   const {
@@ -63,6 +65,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
       if (t === "financial" || t === "financeiro" || t === "faturamento") return "financial";
       if (t === "customers" || t === "clientes") return "customers";
       if (t === "menu" || t === "cardapio") return "menu";
+      if (t === "qrcode" || t === "qr" || t === "placa") return "qrcode";
       if (t === "settings" || t === "config") return "settings";
     }
     return "orders";
@@ -149,9 +152,9 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
   return (
     <div className="fixed inset-0 z-50 flex flex-col w-full max-w-full overflow-x-hidden bg-slate-900 text-slate-100">
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-3 sm:px-4 py-2.5 sm:py-3 gap-3 w-full shrink-0">
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-800 bg-slate-900 px-3 sm:px-4 py-2 sm:py-3 gap-2.5 sm:gap-3 w-full shrink-0">
         {/* Left: Voltar + Logo + Nome da Loja + Link */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
           <button
             onClick={onExit}
             className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white"
@@ -164,8 +167,8 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
               <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-xs sm:text-sm md:text-base font-bold text-white leading-tight truncate">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-xs sm:text-sm md:text-base font-bold text-white leading-tight break-words">
                   {getSafeDisplayName(config.name, "Minha Lanchonete")}
                 </h1>
                 <span className="hidden sm:inline-block rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400 border border-slate-700 shrink-0">
@@ -194,7 +197,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
                   ) : (
                     <>
                       <Share2 className="h-3 w-3" />
-                      <span className="truncate max-w-[120px] sm:max-w-[200px]">/loja/{getSafeSlug(config.slug, "loja")}</span>
+                      <span className="truncate max-w-[140px] sm:max-w-[200px]">/loja/{getSafeSlug(config.slug, "loja")}</span>
                       <Copy className="h-3 w-3 text-slate-400 ml-0.5 hidden sm:inline" />
                     </>
                   )}
@@ -205,7 +208,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
         </div>
 
         {/* Right: Status "Loja Aberta" + Ponto Verde + Sininho + Sair */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 ml-auto sm:ml-0">
           {/* Status "Loja Aberta" com ponto verde */}
           <button
             id="admin-header-store-status-btn"
@@ -326,6 +329,14 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
             Cardápio
           </TabButton>
           <TabButton
+            id="tab-btn-qrcode"
+            active={tab === "qrcode"}
+            onClick={() => handleTabChange("qrcode")}
+            icon={<QrCode className="h-4 w-4 text-amber-400" />}
+          >
+            QR Code & Placa
+          </TabButton>
+          <TabButton
             id="tab-btn-settings"
             active={tab === "settings"}
             onClick={() => handleTabChange("settings")}
@@ -343,6 +354,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
           {tab === "financial" && <AdminFinancialReport key={financialKey} />}
           {tab === "customers" && <AdminCustomers />}
           {tab === "menu" && <AdminMenu />}
+          {tab === "qrcode" && <StoreQrCodePlate />}
           {tab === "settings" && <AdminSettings />}
         </ErrorBoundary>
       </div>

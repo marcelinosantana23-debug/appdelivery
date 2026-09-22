@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
+import { StoreQrCodePlate } from "./StoreQrCodePlate";
 import type { PixKeyType } from "@/config/store";
 
 const PRESET_COLORS = [
@@ -68,6 +69,7 @@ export function AdminSettings() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isQrPlateModalOpen, setIsQrPlateModalOpen] = useState(false);
   const [isProcessingBanner, setIsProcessingBanner] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
@@ -280,6 +282,35 @@ export function AdminSettings() {
             </a>
           </div>
         </div>
+      </div>
+
+      {/* Card QR Code & Placa de Divulgação */}
+      <div className="rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-50 p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30">
+            <QrCode className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">QR Code & Placa de Divulgação</h2>
+              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-900 border border-amber-500/40">
+                Imprimir
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Gere o QR Code exclusivo da sua loja, personalize a frase e imprima placas profissionais para mesas ou balcão (A4).
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsQrPlateModalOpen(true)}
+          className="shrink-0 flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/25 transition active:scale-95 cursor-pointer w-full sm:w-auto justify-center"
+        >
+          <QrCode className="h-4 w-4" />
+          <span>Abrir Gerador de Placa</span>
+        </button>
       </div>
 
       {/* Editable store settings form */}
@@ -565,6 +596,18 @@ export function AdminSettings() {
       <p className="pb-4 text-center text-xs text-gray-400">
         As alterações são salvas automaticamente no navegador e aplicadas na hora.
       </p>
+
+      {/* Modal QR Code & Placa de Divulgação */}
+      {isQrPlateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl overflow-hidden my-auto max-h-[95vh] flex flex-col">
+            <StoreQrCodePlate
+              onClose={() => setIsQrPlateModalOpen(false)}
+              isModal
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

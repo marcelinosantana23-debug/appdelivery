@@ -3,7 +3,8 @@
  * Official production URL requested: https://appdelivery.marcelinosantana23.workers.dev/loja/SLUG
  */
 
-export const OFFICIAL_WORKERS_BASE = "https://appdelivery.marcelinosantana23.workers.dev";
+export const OFFICIAL_WORKERS_BASE = "https://top-food.msapp.workers.dev";
+export const LEGACY_WORKERS_BASE = "https://appdelivery.marcelinosantana23.workers.dev";
 
 export function getSafeSlugClean(slug?: string | null, fallback = "loja"): string {
   if (!slug) return fallback;

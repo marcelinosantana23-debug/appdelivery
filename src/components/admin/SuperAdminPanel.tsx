@@ -32,6 +32,7 @@ import {
   Flame,
   Tag,
   Loader2,
+  QrCode,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
@@ -42,6 +43,7 @@ import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
 import { AiMenuImportModal } from "./AiMenuImportModal";
 import { AdminVitrineAppearance } from "./AdminVitrineAppearance";
+import { StoreQrCodePlate } from "./StoreQrCodePlate";
 
 interface SuperAdminPanelProps {
   onManageStore: (tenant: Tenant) => void;
@@ -75,6 +77,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [togglingFeaturedId, setTogglingFeaturedId] = useState<string | null>(null);
+  const [selectedTenantForQrCode, setSelectedTenantForQrCode] = useState<Tenant | null>(null);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -1226,6 +1229,16 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
+                              onClick={() => setSelectedTenantForQrCode(t)}
+                              className="flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition"
+                              title="Gerar QR Code & Placa de Divulgação (Mesa e Balcão)"
+                            >
+                              <QrCode className="h-3.5 w-3.5 text-amber-400" />
+                              <span>QR Code</span>
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() => openTenantCredentialsModal(t)}
                               className="flex items-center gap-1 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
                               title="Alterar Login e Senha no Banco de Dados"
@@ -1637,6 +1650,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       >
                         <ImageIcon className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                         <span>Configurações & Banner</span>
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedTenantForQrCode(t)}
+                        className="w-full sm:w-auto justify-center flex items-center gap-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 py-2 px-2.5 sm:px-3 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25"
+                        title="Gerar QR Code & Placa de Divulgação (Mesa e Balcão)"
+                      >
+                        <QrCode className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                        <span>QR Code & Placa</span>
                       </button>
                     </div>
 
@@ -3371,6 +3393,20 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de QR Code & Placa de Divulgação */}
+      {selectedTenantForQrCode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl overflow-hidden my-auto max-h-[95vh] flex flex-col">
+            <StoreQrCodePlate
+              tenant={selectedTenantForQrCode}
+              onClose={() => setSelectedTenantForQrCode(null)}
+              isModal
+              isSuperAdmin
+            />
           </div>
         </div>
       )}
