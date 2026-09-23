@@ -6,22 +6,37 @@ interface GlobalReloadButtonProps {
   variant?: "glass" | "light" | "dark" | "outline";
   showLabel?: boolean;
   title?: string;
+  onReload?: () => Promise<void> | void;
 }
 
 /**
  * Botão discreto de recarga da aplicação Top Food.
- * Força window.location.reload() mantendo a rota e dados do storage intactos.
+ * Permite atualização suave via callback (onReload) ou fallback de window.location.reload().
  */
 export function GlobalReloadButton({
   className = "",
   variant = "glass",
   showLabel = true,
   title = "Atualizar dados",
+  onReload,
 }: GlobalReloadButtonProps) {
   const [isReloading, setIsReloading] = useState(false);
 
-  const handleReload = () => {
+  const handleReload = async () => {
+    if (isReloading) return;
     setIsReloading(true);
+
+    if (onReload) {
+      try {
+        await onReload();
+      } catch (err) {
+        console.warn("Erro ao executar onReload:", err);
+      } finally {
+        setTimeout(() => setIsReloading(false), 400);
+      }
+      return;
+    }
+
     try {
       if (typeof window !== "undefined") {
         window.location.reload();

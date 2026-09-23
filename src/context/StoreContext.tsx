@@ -99,6 +99,8 @@ interface StoreContextValue {
 
   // Orders & Real-time
   orders: Order[];
+  refreshOrders: () => Promise<Order[] | null>;
+  refreshStoreAdminData: () => Promise<void>;
   addOrder: (order: Order) => Promise<Order | null>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   newOrderIds: string[];
@@ -338,12 +340,16 @@ function getInitialUrlSlug(): string {
   // 4. Se o lojista estiver logado ou recarregando (F5) no painel /admin ou /painel, recupera a loja da sessão
   if (path.startsWith("/admin") || path.startsWith("/painel")) {
     try {
-      const savedTenant = localStorage.getItem("delivery_tenant_session");
+      const savedTenant =
+        sessionStorage.getItem("topfood_tenant_session") ||
+        localStorage.getItem("delivery_tenant_session");
       if (savedTenant) {
         const parsed = JSON.parse(savedTenant);
         if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug)) return parsed.slug;
       }
-      const savedUser = localStorage.getItem("delivery_user_session");
+      const savedUser =
+        sessionStorage.getItem("topfood_admin_session") ||
+        localStorage.getItem("delivery_user_session");
       if (savedUser) {
         const user = JSON.parse(savedUser);
         if (user?.tenantId === "tenant-ms-preparacoes" || user?.email?.includes("marcelino")) {
@@ -376,7 +382,9 @@ function getInitialUrlSlug(): string {
     try {
       const last = localStorage.getItem("topfood_last_store_slug");
       if (last && !RESERVED_SLUGS.has(last)) return last;
-      const savedTenant = localStorage.getItem("delivery_tenant_session");
+      const savedTenant =
+        sessionStorage.getItem("topfood_tenant_session") ||
+        localStorage.getItem("delivery_tenant_session");
       if (savedTenant) {
         const parsed = JSON.parse(savedTenant);
         if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug)) return parsed.slug;
@@ -407,16 +415,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const initialSlug = getInitialUrlSlug();
   
-  // Hydrate currentTenant from localStorage session ONLY if it matches the current URL slug
+  // Hydrate currentTenant from sessionStorage / localStorage session
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
     try {
-      const saved = localStorage.getItem("delivery_tenant_session");
+      const saved =
+        sessionStorage.getItem("topfood_tenant_session") ||
+        localStorage.getItem("delivery_tenant_session");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (
           parsed &&
           (parsed.slug === initialSlug ||
             parsed.id === initialSlug ||
+            !initialSlug ||
             (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
             (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
         ) {
@@ -432,7 +443,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Hydrate store configuration safely
   const [config, setConfig] = useState<StoreConfig>(() => {
     try {
-      const savedTenant = localStorage.getItem("delivery_tenant_session");
+      const savedTenant =
+        sessionStorage.getItem("topfood_tenant_session") ||
+        localStorage.getItem("delivery_tenant_session");
       if (savedTenant) {
         const parsed = JSON.parse(savedTenant);
         if (
@@ -440,6 +453,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           typeof parsed === "object" &&
           (parsed.slug === initialSlug ||
             parsed.id === initialSlug ||
+            !initialSlug ||
             (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
             (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
         ) {
@@ -877,10 +891,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setCart(loadSavedCart(slugOrId));
 
-      // Update URL without reload
+      // Update URL without reload ONLY if not currently on an admin or super-admin route
       if (typeof window !== "undefined") {
-        const newPath = `/loja/${slugOrId}`;
-        window.history.pushState({ path: newPath }, "", newPath);
+        const path = window.location.pathname.toLowerCase();
+        const isAdminRoute =
+          path.startsWith("/admin") ||
+          path.startsWith("/painel") ||
+          path.startsWith("/super-admin") ||
+          path.startsWith("/superadmin");
+
+        if (!isAdminRoute) {
+          const newPath = `/loja/${slugOrId}`;
+          window.history.pushState({ path: newPath }, "", newPath);
+        }
       }
 
       await loadStoreBySlug(slugOrId);
@@ -973,6 +996,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (
             typeof window !== "undefined" &&
             !window.location.pathname.startsWith("/admin") &&
+            !window.location.pathname.startsWith("/painel") &&
             !window.location.pathname.startsWith("/superadmin") &&
             !window.location.pathname.startsWith("/super-admin")
           ) {
@@ -1713,6 +1737,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [currentTenant?.id, currentTenant?.slug, currentSlug, soundEnabled, currentUser]);
 
+  // Recarga manual sob demanda de pedidos via API (usada pelos botões "Atualizar" no painel do lojista)
+  const refreshOrders = useCallback(async () => {
+    try {
+      const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug || undefined;
+      const res = await fetchOrdersApi(tenantParam);
+      if (res.success && res.orders) {
+        setOrders(res.orders);
+        res.orders.forEach((o) => {
+          knownOrderIdsRef.current.add(o.id);
+          knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+        });
+        return res.orders;
+      }
+    } catch (err) {
+      console.warn("Erro ao atualizar pedidos:", err);
+    }
+    return null;
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug]);
+
+  const refreshStoreAdminData = useCallback(async () => {
+    const slug = currentTenant?.slug || currentSlug;
+    await Promise.all([
+      refreshOrders(),
+      slug ? loadStoreBySlug(slug) : Promise.resolve(),
+    ]);
+  }, [refreshOrders, currentTenant?.slug, currentSlug, loadStoreBySlug]);
+
   // ---------------- SUPER ADMIN ACTIONS ----------------
   const createNewTenant = useCallback(
     async (data: {
@@ -2244,6 +2295,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         cartCount,
         cartSubtotal,
         orders,
+        refreshOrders,
+        refreshStoreAdminData,
         addOrder,
         updateOrderStatus,
         newOrderIds,

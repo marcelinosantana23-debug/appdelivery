@@ -20,6 +20,7 @@ import {
   CreditCard,
   Download,
   FileCheck,
+  RefreshCw,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice } from "@/utils/order";
@@ -39,9 +40,10 @@ const nextStatusMap: Record<string, OrderStatus> = {
 };
 
 export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
-  const { orders, updateOrderStatus, clearNewOrderFlag } = useStore();
+  const { orders, updateOrderStatus, clearNewOrderFlag, refreshOrders, showToast } = useStore();
   const [filter, setFilter] = useState<"active" | "all">("active");
   const [viewingReceiptOrder, setViewingReceiptOrder] = useState<Order | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const topAnchorRef = useRef<HTMLDivElement>(null);
 
   const activeOrdersCount = orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length;
@@ -54,6 +56,25 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const handleFilterChange = (newFilter: "active" | "all") => {
     setFilter(newFilter);
     topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleRefreshClick = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      if (typeof window !== "undefined") {
+        const p = window.location.pathname.toLowerCase();
+        if (!p.startsWith("/painel") && !p.startsWith("/admin")) {
+          window.history.replaceState({ view: "admin", tab: "orders" }, "", "/painel");
+        }
+      }
+      await refreshOrders();
+      showToast("Lista de pedidos atualizada com sucesso!", "success");
+    } catch {
+      showToast("Erro ao sincronizar pedidos", "error");
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
+    }
   };
 
   return (
@@ -104,6 +125,25 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
               }`}
             >
               {allOrdersCount}
+            </span>
+          </button>
+
+          {/* Botão Atualizar Pedidos direto na barra sticky */}
+          <button
+            id="admin-orders-sticky-refresh-btn"
+            type="button"
+            onClick={handleRefreshClick}
+            disabled={isRefreshing}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition active:scale-95 shadow-xs cursor-pointer disabled:opacity-60"
+            title="Atualizar lista de pedidos agora"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 text-slate-600 ${
+                isRefreshing ? "animate-spin text-amber-500" : ""
+              }`}
+            />
+            <span className="hidden xs:inline">
+              {isRefreshing ? "Atualizando..." : "Atualizar"}
             </span>
           </button>
         </div>

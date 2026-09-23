@@ -63,6 +63,10 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     toggleSound,
     playAlertSound,
     platformSettings,
+    refreshOrders,
+    refreshCurrentStore,
+    showToast,
+    refreshCategories,
   } = useStore();
 
   const [tab, setTab] = useState<AdminTab>(() => {
@@ -83,7 +87,53 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
   const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(null);
   const [copiedStoreLink, setCopiedStoreLink] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
   const lastOrderCount = useRef(orders.length);
+
+  // Garante que o navegador exibe estritamente a URL /painel enquanto o lojista está no painel
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const p = window.location.pathname.toLowerCase();
+      if (!p.startsWith("/painel") && !p.startsWith("/admin")) {
+        window.history.replaceState({ view: "admin", tab }, "", "/painel");
+      }
+    }
+  }, [tab]);
+
+  // Função disparada ao clicar no botão "Atualizar" no painel do lojista:
+  // Reexecuta as funções de busca na API (pedidos, dados da loja) sem alterar a rota nem recarregar a página
+  const handleRefreshPanelData = async () => {
+    if (isRefreshingData) return;
+    setIsRefreshingData(true);
+    try {
+      // 1. Assegura que o navegador mantém a URL do painel
+      if (typeof window !== "undefined") {
+        const p = window.location.pathname.toLowerCase();
+        if (!p.startsWith("/painel") && !p.startsWith("/admin")) {
+          window.history.replaceState({ view: "admin", tab }, "", "/painel");
+        }
+      }
+
+      // 2. Busca dados frescos da API em paralelo sem qualquer redirecionamento
+      await Promise.all([
+        refreshOrders(),
+        refreshCurrentStore ? refreshCurrentStore() : Promise.resolve(),
+      ]);
+
+      if (tab === "financial") {
+        setFinancialKey((k) => k + 1);
+      } else if (tab === "menu") {
+        await refreshCategories();
+      }
+
+      showToast("Pedidos e dados atualizados com sucesso!", "success");
+    } catch (err) {
+      console.warn("Erro ao atualizar dados do painel:", err);
+      showToast("Erro ao sincronizar dados. Tente novamente.", "error");
+    } finally {
+      setTimeout(() => setIsRefreshingData(false), 300);
+    }
+  };
 
   // Informações de Mensalidade e Vencimento Recorrente
   const merchantTenant = superAdminViewingStore || currentTenant;
@@ -270,7 +320,8 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
           <GlobalReloadButton
             variant="dark"
             showLabel={false}
-            title="Atualizar dados"
+            title="Atualizar pedidos e dados (permanece no painel)"
+            onReload={handleRefreshPanelData}
             className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white"
           />
 
