@@ -135,83 +135,34 @@ export const PRODUCT_FALLBACK_IMAGES = {
 };
 
 /**
- * Atribui automaticamente uma URL de imagem profissional e realista ao produto:
- * - Açaí: tigela de açaí autêntica com frutas/granola
- * - Hambúrgueres/Lanches: hambúrguer artesanal apetitoso
- * - Hot Dogs: cachorro quente gourmet prensado ou tradicional
- * - Pastéis/Batatas: porção dourada crocante de batata ou pastel
- * - Bebidas: latas/copos de refrigerante e bebidas
+ * ATRIBUIÇÃO DE IMAGENS EXATAS POR KEYWORD (FALLBACK RÍGIDO):
+ * Sanitização estrita de URL de imagem baseada em palavras-chave no nome do produto e categoria.
+ */
+export function getProductImage(productName: string, categoryName: string = ""): string {
+  const name = (productName + ' ' + categoryName).toLowerCase();
+  if (name.includes('açaí') || name.includes('acai')) {
+    return 'https://images.unsplash.com/photo-1590301157890-4810ed352733?w=800&q=80';
+  }
+  if (name.includes('hambúrguer') || name.includes('burguer') || name.includes('misto') || name.includes('x-') || name.includes('combo') || name.includes('especial')) {
+    return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80';
+  }
+  if (name.includes('hot') || name.includes('dog') || name.includes('salsicha') || name.includes('cachorro')) {
+    return 'https://images.unsplash.com/photo-1619740455993-9e612b1af08a?w=800&q=80';
+  }
+  if (name.includes('pastel') || name.includes('batata')) {
+    return 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=800&q=80';
+  }
+  if (name.includes('guaravita') || name.includes('coca') || name.includes('refrigerante') || name.includes('suco') || name.includes('água') || name.includes('agua') || name.includes('bebida') || name.includes('h2o') || name.includes('cliper')) {
+    return 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=800&q=80';
+  }
+  return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80';
+}
+
+/**
+ * Atribui automaticamente uma URL de imagem profissional e realista ao produto via getProductImage
  */
 export function generateProductImageUrl(name: string, category: string = "", description: string = ""): string {
-  const text = `${name} ${category} ${description}`.toLowerCase();
-
-  // 1. Açaí / Cremes / Tigelas
-  if (text.includes("acai") || text.includes("açaí") || text.includes("cupuaçu") || text.includes("cupuacu") || text.includes("pitaya")) {
-    return PRODUCT_FALLBACK_IMAGES.ACAI;
-  }
-
-  // 2. Hot Dogs / Cachorro Quente
-  if (text.includes("hot dog") || text.includes("hotdog") || text.includes("cachorro quente") || text.includes("dogão") || text.includes("dogao") || text.includes("salsicha")) {
-    return PRODUCT_FALLBACK_IMAGES.HOT_DOG;
-  }
-
-  // 3. Pastéis e Batatas Fritas / Porções
-  if (
-    text.includes("pastel") ||
-    text.includes("pasteis") ||
-    text.includes("pastéis") ||
-    text.includes("batata") ||
-    text.includes("fritas") ||
-    text.includes("french fries") ||
-    text.includes("nuggets") ||
-    text.includes("mandioca") ||
-    text.includes("polenta")
-  ) {
-    return PRODUCT_FALLBACK_IMAGES.PASTEL_BATATA;
-  }
-
-  // 4. Bebidas
-  if (
-    text.includes("coca") ||
-    text.includes("refrigerante") ||
-    text.includes("guarana") ||
-    text.includes("guaraná") ||
-    text.includes("fanta") ||
-    text.includes("sprite") ||
-    text.includes("suco") ||
-    text.includes("bebida") ||
-    text.includes("cerveja") ||
-    text.includes("chopp") ||
-    text.includes("agua") ||
-    text.includes("água") ||
-    text.includes("energetico") ||
-    text.includes("energético") ||
-    text.includes("schweppes") ||
-    text.includes("lata") ||
-    text.includes("2l") ||
-    text.includes("600ml")
-  ) {
-    return PRODUCT_FALLBACK_IMAGES.BEBIDAS;
-  }
-
-  // 5. Hambúrgueres e Lanches
-  if (
-    text.includes("burg") ||
-    text.includes("hamburg") ||
-    text.includes("lanche") ||
-    text.includes("sanduiche") ||
-    text.includes("sanduíche") ||
-    text.includes("x-") ||
-    text.includes("bacon") ||
-    text.includes("artesanal") ||
-    text.includes("smash") ||
-    text.includes("cheddar")
-  ) {
-    return PRODUCT_FALLBACK_IMAGES.BURGER;
-  }
-
-  // Padrão gastronômico geral
-  return PRODUCT_FALLBACK_IMAGES.BURGER;
+  return getProductImage(name, `${category} ${description}`);
 }
 
 /**
@@ -387,16 +338,21 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido (sem texto adicional fora do JSON)
   ]
 }
 
-### REGRA MANDATÓRIA: ATRIBUIÇÃO AUTOMÁTICA DE FOTOS ('image' É OBRIGATÓRIO EM CADA ITEM):
-Para CADA produto extraído, você DEVE preencher OBRIGATORIAMENTE o campo 'image' com uma URL direta, realista e de alta resolução seguindo RIGOROSAMENTE estas categorias:
+### REGRA MANDATÓRIA: NUNCA LIMITE O NÚMERO DE PRODUTOS OU CATEGORIAS:
+- Proibido resumir, omitir ou agrupar itens. Se o usuário fornecer 17 hambúrgueres, você DEVE gerar exatamente 17 objetos de produtos dentro do array da categoria Hambúrgueres.
+- Se o cardápio contiver 10 bebidas, você DEVE gerar exatamente 10 objetos de produtos na categoria Bebidas.
+- A estrutura JSON de exemplo NÃO é um limite. Extraia absolutamente TODOS os itens, porções, lanches, açaís e bebidas existentes no cardápio do início ao fim sem qualquer corte ou interrupção.
+- Se houver adicionais listados (ex: bacon extra, queijo, calda de chocolate, leite ninho, etc.), liste TODOS no array 'opcionais' com seus respectivos nomes e valores em reais.
+
+### ATRIBUIÇÃO DE IMAGENS EXATAS POR KEYWORD (FALLBACK RÍGIDO):
+Para CADA produto extraído, você DEVE preencher OBRIGATORIAMENTE o campo 'image' com uma das seguintes URLs oficiais:
 
 1. AÇAÍ, CREMES E TIGELAS:
    - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1590301157890-4810ed352733?w=800&q=80"
    - NUNCA use fotos de waffle, sorvete no palito ou doces genéricos para açaí.
 
-2. HAMBÚRGUERES, SMASH E LANCHES (X-Tudo, Artesanais, Burgers):
+2. HAMBÚRGUERES, SMASH E LANCHES (X-Tudo, Artesanais, Burgers, Mistos):
    - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80"
-   - Use para qualquer hambúrguer ou sanduíche artesanal.
 
 3. HOT DOGS E CACHORROS-QUENTES:
    - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1619740455993-9e612b1af08a?w=800&q=80"
@@ -404,13 +360,8 @@ Para CADA produto extraído, você DEVE preencher OBRIGATORIAMENTE o campo 'imag
 4. PASTÉIS, BATATAS FRITAS, PORÇÕES E PETISCOS:
    - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=800&q=80"
 
-5. BEBIDAS (Refrigerantes, Sucos, Cervejas, Água e Energéticos):
+5. BEBIDAS (Refrigerantes, Coca, Sucos, Água, Cervejas, Energéticos, Guaravita):
    - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=800&q=80"
-
-ATENÇÃO CRÍTICA PARA CARDÁPIOS GRANDES (EX: 35+ PRODUTOS COM ADICIONAIS):
-- Você NÃO PODE resumir, omitir ou cortar produtos. Extraia TODOS os itens de ponta a ponta sem interromper.
-- Em cada produto que possuir opções de adicionais (ex: bacon extra, queijo, calda de chocolate, leite ninho, etc.), liste TODOS no array 'opcionais' com seus respectivos nomes e valores em reais.
-- Nenhum produto pode ficar sem imagem, nome ou preço.
 
 Instruções fundamentais para o logo_svg:
 1. Gere OBRIGATORIAMENTE um SVG COMPLETO, moderno, vetorial, estilo flat design de aplicativo de comida/delivery, com viewBox="0 0 512 512".
@@ -622,8 +573,7 @@ Instruções para categorias e produtos:
             nome: (opt.nome || opt.name || opt.item || "Adicional").trim(),
             preco: Number(opt.preco ?? opt.price ?? opt.valor ?? 0),
           }));
-          const rawImg = (p.image || p.imagem || p.foto || p.img || "").trim();
-          const prodImg = rawImg.startsWith("http") ? rawImg : generateProductImageUrl(prodName, catName, prodDesc);
+          const prodImg = getProductImage(prodName, `${catName} ${prodDesc}`);
           return {
             nome: prodName,
             descricao: prodDesc,

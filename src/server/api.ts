@@ -7,6 +7,7 @@ import { orderEvents } from "./events";
 import {
   analyzeMenuWithGemini,
   generateProductImageUrl,
+  getProductImage,
   getGeminiClient,
   type MenuFileInput,
 } from "./geminiMenu";
@@ -425,13 +426,13 @@ const handleImportarCardapio = async (c: any) => {
         const catSlug = catName.toLowerCase();
         if (Array.isArray(cat.produtos)) {
           for (const prod of cat.produtos) {
-            const prodImg =
-              (prod.image || "").trim() ||
-              generateProductImageUrl(prod.nome, catSlug, prod.descricao);
+            const prodName = prod.nome?.trim() || "Item";
+            const prodDesc = prod.descricao?.trim() || "";
+            const prodImg = getProductImage(prodName, `${catName} ${catSlug} ${prodDesc}`);
 
             const novoProduto = await db.createProduct(novaLoja.id, {
-              name: prod.nome?.trim() || "Item",
-              description: prod.descricao?.trim() || "",
+              name: prodName,
+              description: prodDesc,
               price: Number(prod.preco) || 0,
               category: catSlug,
               image: prodImg,
