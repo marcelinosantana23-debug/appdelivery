@@ -35,6 +35,9 @@ import {
   fetchFeaturedStoresRankedApi,
   fetchTopSellingProductsApi,
   fetchAllActiveStoriesApi,
+  activateTenantSubscriptionApi,
+  confirmTenantPaymentApi,
+  updateTenantMonthlyFeeApi,
 } from "@/services/api";
 import { StoreStoriesModal } from "@/components/common/StoreStoriesModal";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
@@ -147,6 +150,17 @@ interface StoreContextValue {
     priorityOrder?: number;
   }) => Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string }>;
   toggleTenantStatus: (slugOrId: string, status: TenantStatus) => Promise<boolean>;
+  activateSubscription: (
+    slugOrId: string,
+    billingDay?: number
+  ) => Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; message?: string; error?: string }>;
+  updateMonthlyFee: (
+    slugOrId: string,
+    monthlyFee: number
+  ) => Promise<{ success: boolean; tenant?: Tenant; monthlyFee?: number; message?: string; error?: string }>;
+  confirmMonthlyPayment: (
+    slugOrId: string
+  ) => Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; paymentAt?: number; message?: string; error?: string }>;
   deleteTenant: (slugOrId: string) => Promise<boolean>;
   updateTenantCredentials: (
     slugOrId: string,
@@ -1737,6 +1751,202 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [refreshTenants, currentTenant, loadStoreBySlug]
   );
 
+  const activateSubscription = useCallback(
+    async (slugOrId: string, customBillingDay?: number) => {
+      const now = new Date();
+      const billingDay =
+        customBillingDay && customBillingDay >= 1 && customBillingDay <= 31
+          ? customBillingDay
+          : now.getDate();
+
+      // 1. Atualização otimista imediata na UI (Super Admin e Lojista sem F5)
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === slugOrId || t.slug === slugOrId
+            ? {
+                ...t,
+                subscriptionStatus: "active" as const,
+                billingDay,
+                lastPaymentAt: now.getTime(),
+                status: "active" as const,
+              }
+            : t
+        )
+      );
+
+      setCurrentTenant((prev) => {
+        if (prev && (prev.id === slugOrId || prev.slug === slugOrId)) {
+          const updated = {
+            ...prev,
+            subscriptionStatus: "active" as const,
+            billingDay,
+            lastPaymentAt: now.getTime(),
+            status: "active" as const,
+          };
+          try {
+            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        }
+        return prev;
+      });
+
+      // 2. Persistência real no Cloudflare D1
+      const res = await activateTenantSubscriptionApi(slugOrId, customBillingDay);
+      if (res.success && res.tenant) {
+        const resolvedBillingDay = res.billingDay || res.tenant.billingDay || billingDay;
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.id === res.tenant!.id || t.slug === res.tenant!.slug
+              ? {
+                  ...t,
+                  ...res.tenant!,
+                  subscriptionStatus: "active" as const,
+                  billingDay: resolvedBillingDay,
+                  lastPaymentAt: res.tenant!.lastPaymentAt || now.getTime(),
+                  status: "active" as const,
+                }
+              : t
+          )
+        );
+        setCurrentTenant((prev) => {
+          if (prev && (prev.id === res.tenant!.id || prev.slug === res.tenant!.slug)) {
+            const updated = {
+              ...prev,
+              ...res.tenant!,
+              subscriptionStatus: "active" as const,
+              billingDay: resolvedBillingDay,
+              lastPaymentAt: res.tenant!.lastPaymentAt || now.getTime(),
+              status: "active" as const,
+            };
+            try {
+              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          }
+          return prev;
+        });
+      }
+      return res;
+    },
+    []
+  );
+
+  const updateMonthlyFee = useCallback(
+    async (slugOrId: string, monthlyFee: number) => {
+      // 1. Atualização otimista imediata na UI sem F5
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === slugOrId || t.slug === slugOrId
+            ? {
+                ...t,
+                monthlyFee,
+              }
+            : t
+        )
+      );
+
+      setCurrentTenant((prev) => {
+        if (prev && (prev.id === slugOrId || prev.slug === slugOrId)) {
+          const updated = {
+            ...prev,
+            monthlyFee,
+          };
+          try {
+            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        }
+        return prev;
+      });
+
+      // 2. Persistência no Cloudflare D1
+      const res = await updateTenantMonthlyFeeApi(slugOrId, monthlyFee);
+      if (res.success && res.tenant) {
+        const resolvedFee = res.monthlyFee !== undefined ? res.monthlyFee : monthlyFee;
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.id === res.tenant!.id || t.slug === res.tenant!.slug
+              ? {
+                  ...t,
+                  ...res.tenant!,
+                  monthlyFee: resolvedFee,
+                }
+              : t
+          )
+        );
+        setCurrentTenant((prev) => {
+          if (prev && (prev.id === res.tenant!.id || prev.slug === res.tenant!.slug)) {
+            const updated = {
+              ...prev,
+              ...res.tenant!,
+              monthlyFee: resolvedFee,
+            };
+            try {
+              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          }
+          return prev;
+        });
+      }
+      return res;
+    },
+    []
+  );
+
+  const confirmMonthlyPayment = useCallback(
+    async (slugOrId: string) => {
+      const res = await confirmTenantPaymentApi(slugOrId);
+      if (res.success && res.tenant) {
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.id === res.tenant!.id || t.slug === res.tenant!.slug
+              ? {
+                  ...t,
+                  ...res.tenant!,
+                  subscriptionStatus: "active" as const,
+                  lastPaymentAt: res.paymentAt || res.tenant!.lastPaymentAt || Date.now(),
+                }
+              : t
+          )
+        );
+        setCurrentTenant((prev) => {
+          if (prev && (prev.id === res.tenant!.id || prev.slug === res.tenant!.slug)) {
+            const updated = {
+              ...prev,
+              ...res.tenant!,
+              subscriptionStatus: "active" as const,
+              lastPaymentAt: res.paymentAt || res.tenant!.lastPaymentAt || Date.now(),
+            };
+            try {
+              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          }
+          return prev;
+        });
+      }
+      return res;
+    },
+    []
+  );
+
   const deleteTenant = useCallback(
     async (slugOrId: string) => {
       const res = await deleteTenantApi(slugOrId);
@@ -1885,6 +2095,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         getAllTenantCredentials,
         createNewTenant,
         toggleTenantStatus,
+        activateSubscription,
+        updateMonthlyFee,
+        confirmMonthlyPayment,
         deleteTenant,
         establishmentCategories,
         createEstablishmentCategory,

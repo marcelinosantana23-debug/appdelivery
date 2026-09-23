@@ -33,6 +33,13 @@ import {
   Tag,
   Loader2,
   QrCode,
+  Calendar,
+  CreditCard,
+  CheckCheck,
+  Clock,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
@@ -41,6 +48,7 @@ import { DEFAULT_ESTABLISHMENT_CATEGORIES } from "@/components/portal/portalUtil
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { OFFICIAL_WORKERS_BASE, copyTextToClipboard } from "@/utils/url";
+import { getSubscriptionInfo } from "@/utils/billing";
 import { AiMenuImportModal } from "./AiMenuImportModal";
 import { AdminVitrineAppearance } from "./AdminVitrineAppearance";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
@@ -68,12 +76,54 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     deleteEstablishmentCategory,
     refreshEstablishmentCategories,
     toggleTenantFeatured,
+    activateSubscription,
+    updateMonthlyFee,
+    confirmMonthlyPayment,
     platformSettings,
     updatePlatformSettings,
   } = useStore();
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "featured">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "featured" | "demo" | "due_soon">("all");
+  const [activatingTenantId, setActivatingTenantId] = useState<string | null>(null);
+  const [confirmingPaymentTenantId, setConfirmingPaymentTenantId] = useState<string | null>(null);
+  const [subscriptionFeedback, setSubscriptionFeedback] = useState<{ id: string; message: string; type: "success" | "error" } | null>(null);
+  const [editingFeeTenantId, setEditingFeeTenantId] = useState<string | null>(null);
+  const [editingFeeValue, setEditingFeeValue] = useState<string>("");
+  const [isSavingFee, setIsSavingFee] = useState<boolean>(false);
+
+  const handleStartEditFee = (t: Tenant) => {
+    setEditingFeeTenantId(t.id);
+    setEditingFeeValue(String(t.monthlyFee ?? 49.9));
+  };
+
+  const handleSaveMonthlyFee = async (tenantId: string) => {
+    const cleanVal = editingFeeValue.replace(",", ".");
+    const parsed = parseFloat(cleanVal);
+    if (isNaN(parsed) || parsed < 0) {
+      alert("Por favor, informe um valor numérico válido para a mensalidade.");
+      return;
+    }
+    setIsSavingFee(true);
+    try {
+      const res = await updateMonthlyFee(tenantId, parsed);
+      if (res.success) {
+        setSubscriptionFeedback({
+          id: tenantId,
+          message: `Valor da mensalidade alterado para ${parsed.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês no banco D1!`,
+          type: "success",
+        });
+        setTimeout(() => setSubscriptionFeedback(null), 4000);
+        setEditingFeeTenantId(null);
+      } else {
+        alert(res.error || "Falha ao salvar valor da mensalidade.");
+      }
+    } catch (e: any) {
+      alert(e.message || "Erro ao salvar valor da mensalidade.");
+    } finally {
+      setIsSavingFee(false);
+    }
+  };
   const [viewMode, setViewMode] = useState<"cards" | "credentials" | "appearance">("cards");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAiImportModalOpen, setIsAiImportModalOpen] = useState(false);
@@ -347,6 +397,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     businessType: "Lanchonetes",
     isFeatured: false,
     priorityOrder: 0,
+    monthlyFee: 49.90,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingNewBanner, setIsProcessingNewBanner] = useState(false);
@@ -545,6 +596,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       businessType: tenant.businessType || "Lanchonetes",
       isFeatured: Boolean(tenant.isFeatured),
       priorityOrder: Number(tenant.priorityOrder) || 0,
+      monthlyFee: tenant.monthlyFee !== undefined ? tenant.monthlyFee : 49.9,
     });
     setConfigSuccessMessage("");
     setConfigErrorMessage("");
@@ -595,6 +647,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         businessType: configForm.businessType || "Lanchonetes",
         isFeatured: Boolean(configForm.isFeatured),
         priorityOrder: Number(configForm.priorityOrder) || 0,
+        monthlyFee: !isNaN(Number(configForm.monthlyFee)) ? Number(configForm.monthlyFee) : 49.9,
       });
 
       if (res.success) {
@@ -630,11 +683,16 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.slug.toLowerCase().includes(search.toLowerCase()) ||
       t.email.toLowerCase().includes(search.toLowerCase());
+    const subInfo = getSubscriptionInfo(t);
     const matchStatus =
       statusFilter === "all"
         ? true
         : statusFilter === "featured"
         ? Boolean(t.isFeatured)
+        : statusFilter === "demo"
+        ? subInfo.status === "demo"
+        : statusFilter === "due_soon"
+        ? (subInfo.isDueSoon || subInfo.isOverdue)
         : t.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -642,6 +700,11 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const totalTenants = tenants.length;
   const activeTenants = tenants.filter((t) => t.status === "active").length;
   const featuredTenantsCount = tenants.filter((t) => t.isFeatured).length;
+  const demoTenantsCount = tenants.filter((t) => getSubscriptionInfo(t).status === "demo").length;
+  const dueSoonTenantsCount = tenants.filter((t) => {
+    const info = getSubscriptionInfo(t);
+    return info.isDueSoon || info.isOverdue;
+  }).length;
   const totalOrders = tenants.reduce((sum, t) => sum + (t.orderCount || 0), 0);
   const totalRevenue = tenants.reduce((sum, t) => sum + (t.revenue || 0), 0);
 
@@ -725,6 +788,70 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const handleStatusToggle = async (tenant: Tenant) => {
     const nextStatus: TenantStatus = tenant.status === "active" ? "inactive" : "active";
     await toggleTenantStatus(tenant.id, nextStatus);
+  };
+
+  const handleActivateSubscription = async (tenant: Tenant) => {
+    const today = new Date().getDate();
+    try {
+      setActivatingTenantId(tenant.id);
+      const res = await activateSubscription(tenant.id, today);
+      if (res.success) {
+        setSubscriptionFeedback({
+          id: tenant.id,
+          message: `Mensalidade ativada com sucesso! Vencimento definido para todo dia ${res.billingDay || today}.`,
+          type: "success",
+        });
+        setTimeout(() => setSubscriptionFeedback(null), 5000);
+      } else {
+        setSubscriptionFeedback({
+          id: tenant.id,
+          message: res.error || "Falha ao ativar mensalidade.",
+          type: "error",
+        });
+        setTimeout(() => setSubscriptionFeedback(null), 5000);
+      }
+    } catch (e: any) {
+      setSubscriptionFeedback({
+        id: tenant.id,
+        message: e.message || "Erro ao ativar mensalidade.",
+        type: "error",
+      });
+      setTimeout(() => setSubscriptionFeedback(null), 5000);
+    } finally {
+      setActivatingTenantId(null);
+    }
+  };
+
+  const handleConfirmMonthlyPayment = async (tenant: Tenant) => {
+    const billingDay = tenant.billingDay || new Date().getDate();
+    try {
+      setConfirmingPaymentTenantId(tenant.id);
+      const res = await confirmMonthlyPayment(tenant.id);
+      if (res.success) {
+        setSubscriptionFeedback({
+          id: tenant.id,
+          message: `Pagamento do mês confirmado com sucesso! Loja ativa para o próximo ciclo (vencimento todo dia ${res.billingDay || billingDay}).`,
+          type: "success",
+        });
+        setTimeout(() => setSubscriptionFeedback(null), 5000);
+      } else {
+        setSubscriptionFeedback({
+          id: tenant.id,
+          message: res.error || "Falha ao confirmar pagamento.",
+          type: "error",
+        });
+        setTimeout(() => setSubscriptionFeedback(null), 5000);
+      }
+    } catch (e: any) {
+      setSubscriptionFeedback({
+        id: tenant.id,
+        message: e.message || "Erro ao confirmar pagamento.",
+        type: "error",
+      });
+      setTimeout(() => setSubscriptionFeedback(null), 5000);
+    } finally {
+      setConfirmingPaymentTenantId(null);
+    }
   };
 
   const handleDelete = async (tenant: Tenant) => {
@@ -1020,6 +1147,31 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 Ativas ({activeTenants})
               </button>
               <button
+                onClick={() => setStatusFilter("demo")}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-medium transition ${
+                  statusFilter === "demo"
+                    ? "bg-amber-500/25 text-amber-300 border border-amber-500/40"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="Lojas em período de teste / aguardando ativação de mensalidade"
+              >
+                <span>🧪 Demo ({demoTenantsCount})</span>
+              </button>
+              {dueSoonTenantsCount > 0 && (
+                <button
+                  onClick={() => setStatusFilter("due_soon")}
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-medium transition ${
+                    statusFilter === "due_soon"
+                      ? "bg-red-500/25 text-red-300 border border-red-500/40"
+                      : "text-amber-400 hover:text-amber-300"
+                  }`}
+                  title="Mensalidades vencendo em até 5 dias ou já vencidas"
+                >
+                  <Clock className="h-3 w-3" />
+                  <span>Vencendo ({dueSoonTenantsCount})</span>
+                </button>
+              )}
+              <button
                 onClick={() => setStatusFilter("featured")}
                 className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-medium transition ${
                   statusFilter === "featured"
@@ -1106,6 +1258,27 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         ) : viewMode === "credentials" ? (
           /* Tabela Completa de Credenciais dos Lojistas */
           <div className="mt-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/90 shadow-2xl">
+            {subscriptionFeedback && (
+              <div
+                className={`px-4 py-3 text-xs font-bold flex items-center justify-between border-b ${
+                  subscriptionFeedback.type === "success"
+                    ? "bg-emerald-950/80 border-emerald-500/40 text-emerald-200"
+                    : "bg-red-950/80 border-red-500/40 text-red-200"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <span>{subscriptionFeedback.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSubscriptionFeedback(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="border-b border-slate-800 bg-slate-950/80 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
@@ -1114,7 +1287,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 <div>
                   <h3 className="text-sm font-bold text-white">Credenciais de Acesso das Lanchonetes</h3>
                   <p className="text-[11px] text-slate-400">
-                    Gerenciamento direto de e-mails de login, senhas e status de patrocínio no Cloudflare D1/KV
+                    Gerenciamento direto de e-mails de login, senhas, mensalidades recorrentes no Cloudflare D1/KV
                   </p>
                 </div>
               </div>
@@ -1128,6 +1301,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 <thead className="bg-slate-950/60 uppercase text-[10px] font-bold tracking-wider text-slate-400 border-b border-slate-800">
                   <tr>
                     <th className="px-4 py-3.5">Lanchonete</th>
+                    <th className="px-4 py-3.5">Mensalidade & Vencimento</th>
                     <th className="px-4 py-3.5">Destaque (Marketing)</th>
                     <th className="px-4 py-3.5">Vitrine Pública</th>
                     <th className="px-4 py-3.5">Login (E-mail / Usuário)</th>
@@ -1142,6 +1316,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     const email = (t as any).adminEmail || t.email;
                     const pass = (t as any).adminPassword || "123456";
                     const isPassVisible = showCardPasswords[t.id];
+                    const subInfo = getSubscriptionInfo(t);
 
                     return (
                       <tr key={t.id} className="hover:bg-slate-800/40 transition">
@@ -1167,6 +1342,83 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                 <span className="font-mono text-[10px] text-amber-400/80">ID: {t.id}</span>
                               </div>
                             </div>
+                          </div>
+                        </td>
+
+                        {/* Mensalidade & Vencimento Dinâmico */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-col gap-1">
+                            {subInfo.status === "demo" ? (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-300 border border-amber-500/20 whitespace-nowrap">
+                                  🧪 Demo / Aguardando
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleActivateSubscription(t)}
+                                  disabled={activatingTenantId === t.id}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 text-xs font-bold transition shadow-sm disabled:opacity-50 whitespace-nowrap"
+                                  title={`Ativar mensalidade agora (captura o dia de hoje: ${new Date().getDate()})`}
+                                >
+                                  {activatingTenantId === t.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <CreditCard className="h-3 w-3" />
+                                  )}
+                                  <span>Ativar Mensalidade</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+                                      subInfo.isOverdue
+                                        ? "text-red-400"
+                                        : subInfo.isDueSoon
+                                        ? "text-amber-400"
+                                        : "text-emerald-400"
+                                    }`}
+                                  >
+                                    <Calendar className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Todo dia {subInfo.billingDay}</span>
+                                  </span>
+                                  <span
+                                    className={`text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap border ${
+                                      subInfo.isOverdue
+                                        ? "bg-red-500/20 text-red-300 border-red-500/40"
+                                        : subInfo.isDueToday
+                                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse"
+                                        : subInfo.isDueSoon
+                                        ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                        : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                    }`}
+                                  >
+                                    {subInfo.isOverdue
+                                      ? `Vencida (${Math.abs(subInfo.daysRemaining || 0)}d)`
+                                      : subInfo.isDueToday
+                                      ? "Vence Hoje!"
+                                      : `Faltam ${subInfo.daysRemaining}d`}
+                                  </span>
+                                </div>
+                                <div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleConfirmMonthlyPayment(t)}
+                                    disabled={confirmingPaymentTenantId === t.id}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 px-2 py-1 text-[11px] font-semibold transition disabled:opacity-50 whitespace-nowrap"
+                                    title="Confirmar pagamento do mês (mantém o dia original e renova ciclo)"
+                                  >
+                                    {confirmingPaymentTenantId === t.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
+                                    ) : (
+                                      <CheckCheck className="h-3 w-3 text-emerald-400" />
+                                    )}
+                                    <span>Confirmar Pagamento</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -1354,13 +1606,37 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
             </div>
           </div>
         ) : (
-          /* Cards Grid com Box de Credenciais */
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 w-full">
+          /* Cards Grid com Box de Credenciais e Mensalidade */
+          <div className="mt-6 space-y-4">
+            {subscriptionFeedback && (
+              <div
+                className={`px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between border ${
+                  subscriptionFeedback.type === "success"
+                    ? "bg-emerald-950/80 border-emerald-500/40 text-emerald-200"
+                    : "bg-red-950/80 border-red-500/40 text-red-200"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <span>{subscriptionFeedback.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSubscriptionFeedback(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 w-full">
             {filteredTenants.map((t) => {
               const isActive = t.status === "active";
               const adminLogin = (t as any).adminEmail || t.email;
               const adminPass = (t as any).adminPassword || "123456";
               const isPassVisible = showCardPasswords[t.id];
+              const subInfo = getSubscriptionInfo(t);
 
               return (
                 <div
@@ -1469,6 +1745,157 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           {t.pixKey}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Mensalidade & Faturamento Recorrente */}
+                    <div className="mt-3.5 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                          <CreditCard className="h-3.5 w-3.5 text-amber-400" />
+                          <span>Plano & Mensalidade</span>
+                        </span>
+
+                        {editingFeeTenantId === t.id ? (
+                          <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-amber-500/50">
+                            <span className="text-[11px] font-bold text-amber-400">R$</span>
+                            <input
+                              type="number"
+                              step="0.10"
+                              min="0"
+                              autoFocus
+                              value={editingFeeValue}
+                              onChange={(e) => setEditingFeeValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleSaveMonthlyFee(t.id);
+                                } else if (e.key === "Escape") {
+                                  setEditingFeeTenantId(null);
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 text-xs font-mono font-bold bg-slate-950 border border-slate-700 rounded text-white focus:outline-none focus:border-amber-400"
+                              title="Pressione Enter para salvar no D1 ou Esc para cancelar"
+                            />
+                            <button
+                              type="button"
+                              disabled={isSavingFee}
+                              onClick={() => handleSaveMonthlyFee(t.id)}
+                              className="p-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-50"
+                              title="Salvar valor no banco D1"
+                            >
+                              {isSavingFee ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSavingFee}
+                              onClick={() => setEditingFeeTenantId(null)}
+                              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                              title="Cancelar edição"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-mono font-bold text-slate-300 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md">
+                              {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditFee(t)}
+                              className="p-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 transition"
+                              title="Editar valor da mensalidade"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Feedback de Assinatura específico deste card */}
+                      {subscriptionFeedback?.id === t.id && (
+                        <div
+                          className={`mb-2 p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                            subscriptionFeedback.type === "success"
+                              ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                              : "bg-red-500/15 border-red-500/30 text-red-300"
+                          }`}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                          <span className="leading-tight">{subscriptionFeedback.message}</span>
+                        </div>
+                      )}
+
+                      {subInfo.status === "demo" ? (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                            <span className="text-amber-300 font-semibold flex items-center gap-1.5 text-[11px]">
+                              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                              Modo Demonstração / Aguardando Ativação
+                            </span>
+                            <span className="text-[10px] text-amber-400/80 font-mono">Aguardando Ativação</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleActivateSubscription(t)}
+                            disabled={activatingTenantId === t.id}
+                            className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white py-2 text-xs font-bold transition shadow-md shadow-emerald-900/30 disabled:opacity-50 active:scale-[0.98]"
+                          >
+                            {activatingTenantId === t.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <CreditCard className="h-3.5 w-3.5" />
+                            )}
+                            <span>Ativar Mensalidade (Capturar Dia {new Date().getDate()})</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs rounded-lg p-2 border bg-emerald-500/10 border-emerald-500/20">
+                            <div className="flex items-center gap-1.5 text-emerald-300 min-w-0">
+                              <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                              <span className="text-xs font-semibold truncate">
+                                Mensalidade Ativa (Vence todo dia <strong className="text-white font-bold">{subInfo.billingDay}</strong>)
+                              </span>
+                            </div>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap self-start sm:self-auto ${
+                                subInfo.isOverdue
+                                  ? "bg-red-500/20 text-red-300 border-red-500/40"
+                                  : subInfo.isDueToday
+                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse"
+                                  : subInfo.isDueSoon
+                                  ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                  : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                              }`}
+                            >
+                              {subInfo.isOverdue
+                                ? `Vencida (${Math.abs(subInfo.daysRemaining || 0)}d)`
+                                : subInfo.isDueToday
+                                ? "Vence Hoje!"
+                                : `Faltam ${subInfo.daysRemaining} dias para o próximo vencimento`}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmMonthlyPayment(t)}
+                            disabled={confirmingPaymentTenantId === t.id}
+                            className="w-full flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 py-1.5 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98]"
+                          >
+                            {confirmingPaymentTenantId === t.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                            ) : (
+                              <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
+                            )}
+                            <span>Confirmar Pagamento do Mês</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Stats pills */}
@@ -1748,6 +2175,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 </div>
               );
             })}
+            </div>
           </div>
         )}
       </main>
@@ -2073,10 +2501,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      WhatsApp para Receber Pedidos
+                      WhatsApp para Pedidos
                     </label>
                     <input
                       type="text"
@@ -2089,7 +2517,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Taxa de Entrega Inicial (R$)
+                      Taxa de Entrega (R$)
                     </label>
                     <input
                       type="number"
@@ -2099,6 +2527,22 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         setFormData((prev) => ({ ...prev, deliveryFee: parseFloat(e.target.value) || 0 }))
                       }
                       className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Mensalidade (R$/mês)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.10"
+                      min="0"
+                      value={formData.monthlyFee}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, monthlyFee: parseFloat(e.target.value) || 0 }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-amber-500 font-mono"
                     />
                   </div>
                 </div>
@@ -3077,6 +3521,20 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         setConfigForm((prev) => ({ ...prev, deliveryFee: parseFloat(e.target.value) || 0 }))
                       }
                       className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Valor da Mensalidade (R$/mês)</label>
+                    <input
+                      type="number"
+                      step="0.10"
+                      min="0"
+                      value={configForm.monthlyFee}
+                      onChange={(e) =>
+                        setConfigForm((prev) => ({ ...prev, monthlyFee: parseFloat(e.target.value) || 0 }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-amber-500 font-mono"
                     />
                   </div>
 

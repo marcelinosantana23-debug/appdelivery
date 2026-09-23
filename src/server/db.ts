@@ -53,6 +53,8 @@ const initialTenants: Tenant[] = [
     ratingCount: 184,
     status: "active",
     isOpen: true,
+    subscriptionStatus: "demo",
+    monthlyFee: 49.9,
     createdAt: Date.now() - 5 * 86400000,
     updatedAt: Date.now(),
   },
@@ -923,6 +925,10 @@ export const defaultPlatformSettings: PlatformSettings = {
   heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
   primaryColor: "#E63946",
   geminiApiKey: typeof process !== "undefined" && process?.env?.GEMINI_API_KEY ? process.env.GEMINI_API_KEY : "",
+  adminPixKey: "topfood.financeiro@pix.com",
+  adminPixType: "email",
+  adminWhatsapp: "5511999999999",
+  defaultMonthlyFee: 49.9,
   updatedAt: Date.now(),
 };
 
@@ -1067,6 +1073,10 @@ export class Database {
           primary_light TEXT DEFAULT '#F77F00',
           accent_color TEXT DEFAULT '#FCBF49',
           status TEXT DEFAULT 'active',
+          subscription_status TEXT DEFAULT 'demo',
+          billing_day INTEGER,
+          last_payment_at INTEGER,
+          monthly_fee REAL DEFAULT 49.90,
           is_open INTEGER DEFAULT 1,
           is_featured INTEGER DEFAULT 0,
           priority_order INTEGER DEFAULT 0,
@@ -1222,6 +1232,10 @@ export class Database {
         "ALTER TABLE tenants ADD COLUMN priority_order INTEGER DEFAULT 0",
         "ALTER TABLE establishment_categories ADD COLUMN order_index INTEGER DEFAULT 0",
         "ALTER TABLE establishment_categories ADD COLUMN active INTEGER DEFAULT 1",
+        "ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'demo'",
+        "ALTER TABLE tenants ADD COLUMN billing_day INTEGER",
+        "ALTER TABLE tenants ADD COLUMN last_payment_at INTEGER",
+        "ALTER TABLE tenants ADD COLUMN monthly_fee REAL DEFAULT 49.90",
         "ALTER TABLE orders ADD COLUMN pix_receipt_url TEXT",
         "ALTER TABLE orders ADD COLUMN card_type TEXT",
         "ALTER TABLE orders ADD COLUMN payment_details TEXT"
@@ -1883,11 +1897,42 @@ export class Database {
           ? Number((partial as any).priority_order)
           : (tenant.priorityOrder ?? 0));
 
+    const subscriptionStatusVal =
+      partial.subscriptionStatus ||
+      (partial as any).subscription_status ||
+      tenant.subscriptionStatus ||
+      "demo";
+
+    const billingDayVal =
+      partial.billingDay !== undefined
+        ? (partial.billingDay !== null ? Number(partial.billingDay) : undefined)
+        : ((partial as any).billing_day !== undefined
+            ? ((partial as any).billing_day !== null ? Number((partial as any).billing_day) : undefined)
+            : tenant.billingDay);
+
+    const lastPaymentAtVal =
+      partial.lastPaymentAt !== undefined
+        ? (partial.lastPaymentAt !== null ? Number(partial.lastPaymentAt) : undefined)
+        : ((partial as any).last_payment_at !== undefined
+            ? ((partial as any).last_payment_at !== null ? Number((partial as any).last_payment_at) : undefined)
+            : tenant.lastPaymentAt);
+
+    const monthlyFeeVal =
+      partial.monthlyFee !== undefined
+        ? Number(partial.monthlyFee)
+        : ((partial as any).monthly_fee !== undefined
+            ? Number((partial as any).monthly_fee)
+            : (tenant.monthlyFee || 49.9));
+
     const updated: Tenant = {
       ...tenant,
       ...partial,
       isFeatured: isFeaturedVal,
       priorityOrder: priorityOrderVal,
+      subscriptionStatus: subscriptionStatusVal,
+      billingDay: billingDayVal,
+      lastPaymentAt: lastPaymentAtVal,
+      monthlyFee: monthlyFeeVal,
       updatedAt: Date.now(),
     };
 
@@ -1899,7 +1944,9 @@ export class Database {
             delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
             logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
             accent_color = ?, business_type = ?, status = ?, is_open = ?,
-            is_featured = ?, priority_order = ?, updated_at = ?
+            is_featured = ?, priority_order = ?,
+            subscription_status = ?, billing_day = ?, last_payment_at = ?, monthly_fee = ?,
+            updated_at = ?
           WHERE id = ?`
         )
           .bind(
@@ -1922,12 +1969,16 @@ export class Database {
             updated.isOpen ? 1 : 0,
             updated.isFeatured ? 1 : 0,
             updated.priorityOrder || 0,
+            updated.subscriptionStatus || "demo",
+            updated.billingDay !== undefined ? updated.billingDay : null,
+            updated.lastPaymentAt !== undefined ? updated.lastPaymentAt : null,
+            updated.monthlyFee || 49.9,
             updated.updatedAt,
             tenant.id
           )
           .run();
       } catch {
-        // Fallback in case D1 table does not have banner_image or is_featured column yet
+        // Fallback in case D1 table schema migration is in progress
         try {
           await this.env.DB.prepare(
             `UPDATE tenants SET 
@@ -1982,6 +2033,93 @@ export class Database {
 
   async setTenantStatus(id: string, status: TenantStatus): Promise<Tenant | null> {
     return this.updateTenant(id, { status });
+  }
+
+  async activateSubscription(
+    idOrSlug: string,
+    customBillingDay?: number
+  ): Promise<{ success: boolean; tenant: Tenant; billingDay: number }> {
+    const tenant = await this.getTenantByIdOrSlug(idOrSlug);
+    if (!tenant) {
+      throw new Error("Lanchonete não encontrada.");
+    }
+
+    // Captura automática do dia atual (1 a 31) ou usa customizado se fornecido
+    const now = new Date();
+    const billingDay =
+      customBillingDay && customBillingDay >= 1 && customBillingDay <= 31
+        ? customBillingDay
+        : now.getDate();
+
+    const timestamp = now.getTime();
+
+    const updated = await this.updateTenant(tenant.id, {
+      subscriptionStatus: "active",
+      billingDay,
+      lastPaymentAt: timestamp,
+      status: "active",
+    });
+
+    if (!updated) {
+      throw new Error("Falha ao salvar ativação da mensalidade.");
+    }
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          "UPDATE tenants SET subscription_status = 'active', billing_day = ?, last_payment_at = ?, status = 'active', updated_at = ? WHERE id = ?"
+        )
+          .bind(billingDay, timestamp, timestamp, tenant.id)
+          .run();
+      } catch (e) {
+        console.warn("D1 direct activateSubscription warning:", e);
+      }
+    }
+
+    return { success: true, tenant: updated, billingDay };
+  }
+
+  async confirmMonthlyPayment(
+    idOrSlug: string
+  ): Promise<{ success: boolean; tenant: Tenant; billingDay: number; paymentAt: number }> {
+    const tenant = await this.getTenantByIdOrSlug(idOrSlug);
+    if (!tenant) {
+      throw new Error("Lanchonete não encontrada.");
+    }
+
+    const timestamp = Date.now();
+    // Preserva o billing_day original já salvo; se não houver, adota o dia de hoje
+    const originalBillingDay = tenant.billingDay || new Date().getDate();
+
+    const updated = await this.updateTenant(tenant.id, {
+      subscriptionStatus: "active",
+      billingDay: originalBillingDay,
+      lastPaymentAt: timestamp,
+      status: "active",
+    });
+
+    if (!updated) {
+      throw new Error("Falha ao confirmar pagamento da mensalidade.");
+    }
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          "UPDATE tenants SET subscription_status = 'active', last_payment_at = ?, status = 'active', updated_at = ? WHERE id = ?"
+        )
+          .bind(timestamp, timestamp, tenant.id)
+          .run();
+      } catch (e) {
+        console.warn("D1 direct confirmMonthlyPayment warning:", e);
+      }
+    }
+
+    return {
+      success: true,
+      tenant: updated,
+      billingDay: originalBillingDay,
+      paymentAt: timestamp,
+    };
   }
 
   async deleteTenant(id: string): Promise<boolean> {
@@ -3615,6 +3753,19 @@ export class Database {
       rating: Number(row.rating) || 4.9,
       ratingCount: Number(row.rating_count) || 120,
       status: (row.status === "inactive" ? "inactive" : "active") as TenantStatus,
+      subscriptionStatus: (row.subscription_status || "demo") as any,
+      billingDay:
+        row.billing_day !== undefined && row.billing_day !== null && row.billing_day !== ""
+          ? Number(row.billing_day)
+          : undefined,
+      lastPaymentAt:
+        row.last_payment_at !== undefined && row.last_payment_at !== null && row.last_payment_at !== ""
+          ? Number(row.last_payment_at)
+          : undefined,
+      monthlyFee:
+        row.monthly_fee !== undefined && row.monthly_fee !== null && row.monthly_fee !== ""
+          ? Number(row.monthly_fee)
+          : 49.9,
       isOpen: Boolean(row.is_open !== undefined ? row.is_open : 1),
       createdAt: Number(row.created_at) || Date.now(),
       updatedAt: Number(row.updated_at) || Date.now(),

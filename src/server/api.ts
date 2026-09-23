@@ -2036,6 +2036,86 @@ api.patch("/tenants/:slugOrId/status", async (c) => {
   }
 });
 
+// -----------------------------------------------------------------------------
+// ATUALIZAÇÃO DO VALOR DA MENSALIDADE INDIVIDUAL NO CLOUDFLARE D1
+// PATCH /api/tenants/:slugOrId/monthly-fee
+// -----------------------------------------------------------------------------
+api.patch("/tenants/:slugOrId/monthly-fee", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const body = await c.req.json().catch(() => ({}));
+    const monthlyFee = Number(body.monthlyFee);
+
+    if (isNaN(monthlyFee) || monthlyFee < 0) {
+      return c.json({ success: false, error: "Valor de mensalidade inválido (deve ser um número maior ou igual a zero)." }, 400);
+    }
+
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const updated = await db.updateTenant(tenant.id, { monthlyFee });
+    return c.json(
+      {
+        success: true,
+        message: `Valor da mensalidade alterado para R$ ${monthlyFee.toFixed(2)} e salvo no banco D1!`,
+        tenant: updated,
+        monthlyFee,
+      },
+      200
+    );
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao atualizar mensalidade" }, 500);
+  }
+});
+
+// -----------------------------------------------------------------------------
+// ATIVAÇÃO DINÂMICA DE MENSALIDADE (Captura automática do dia no D1)
+// POST /api/tenants/:slugOrId/activate-subscription
+// -----------------------------------------------------------------------------
+api.post("/tenants/:slugOrId/activate-subscription", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const body = await c.req.json().catch(() => ({}));
+    const customBillingDay = body.billingDay !== undefined ? Number(body.billingDay) : undefined;
+
+    const result = await db.activateSubscription(slugOrId, customBillingDay);
+    return c.json({
+      success: true,
+      message: `Mensalidade ativada com sucesso! Vencimento definido para todo dia ${result.billingDay}.`,
+      tenant: result.tenant,
+      billingDay: result.billingDay,
+    }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao ativar mensalidade" }, 500);
+  }
+});
+
+// -----------------------------------------------------------------------------
+// RENOVAÇÃO / CONFIRMAÇÃO DE PAGAMENTO DO MÊS (Mantém o billing_day original)
+// POST /api/tenants/:slugOrId/confirm-payment
+// -----------------------------------------------------------------------------
+api.post("/tenants/:slugOrId/confirm-payment", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+
+    const result = await db.confirmMonthlyPayment(slugOrId);
+    return c.json({
+      success: true,
+      message: `Pagamento confirmado com sucesso! Loja ativa para o próximo ciclo (vencimento todo dia ${result.billingDay}).`,
+      tenant: result.tenant,
+      billingDay: result.billingDay,
+      paymentAt: result.paymentAt,
+    }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao confirmar pagamento" }, 500);
+  }
+});
+
 api.patch("/tenants/:slugOrId/featured", async (c) => {
   try {
     const db = getDb(c);

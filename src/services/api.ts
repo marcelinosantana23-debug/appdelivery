@@ -175,6 +175,52 @@ export async function updateTenantStatusApi(
   }
 }
 
+export async function updateTenantMonthlyFeeApi(
+  slugOrId: string,
+  monthlyFee: number
+): Promise<{ success: boolean; tenant?: Tenant; monthlyFee?: number; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/monthly-fee`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ monthlyFee }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function activateTenantSubscriptionApi(
+  slugOrId: string,
+  billingDay?: number
+): Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/activate-subscription`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ billingDay }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function confirmTenantPaymentApi(
+  slugOrId: string
+): Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; paymentAt?: number; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/confirm-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 export async function deleteTenantApi(slugOrId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}`, {

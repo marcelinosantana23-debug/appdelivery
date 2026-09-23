@@ -15,11 +15,15 @@ import {
   TrendingUp,
   QrCode,
   Store,
+  Calendar,
+  AlertTriangle,
+  Send,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
+import { getSubscriptionInfo, generateProofWhatsAppUrl } from "@/utils/billing";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminCustomers } from "./AdminCustomers";
@@ -58,6 +62,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     soundEnabled,
     toggleSound,
     playAlertSound,
+    platformSettings,
   } = useStore();
 
   const [tab, setTab] = useState<AdminTab>(() => {
@@ -77,7 +82,33 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
   const [financialKey, setFinancialKey] = useState<number>(1);
   const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(null);
   const [copiedStoreLink, setCopiedStoreLink] = useState(false);
+  const [copiedPix, setCopiedPix] = useState(false);
   const lastOrderCount = useRef(orders.length);
+
+  // Informações de Mensalidade e Vencimento Recorrente
+  const merchantTenant = superAdminViewingStore || currentTenant;
+  const subInfo = merchantTenant ? getSubscriptionInfo(merchantTenant) : null;
+  const adminPixKey = platformSettings?.adminPixKey || "topfood.financeiro@pix.com";
+  const adminWhatsApp = platformSettings?.adminWhatsapp || "5511999999999";
+
+  const handleCopyPix = async () => {
+    const success = await copyTextToClipboard(adminPixKey);
+    if (success) {
+      setCopiedPix(true);
+      setTimeout(() => setCopiedPix(false), 2500);
+    }
+  };
+
+  const proofWhatsAppUrl = merchantTenant
+    ? generateProofWhatsAppUrl({
+        adminWhatsapp: adminWhatsApp,
+        adminPixKey: adminPixKey,
+        tenantName: merchantTenant.name,
+        tenantSlug: merchantTenant.slug,
+        billingDay: subInfo?.billingDay || 10,
+        monthlyFee: subInfo?.monthlyFee || 49.9,
+      })
+    : "#";
 
   const handleTabChange = (newTab: AdminTab) => {
     setTab(newTab);
@@ -383,6 +414,178 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-gray-50 text-slate-900 w-full max-w-full overflow-x-hidden flex flex-col">
+        {/* Topo do Painel do Lojista: Mensagem Dinâmica de Mensalidade */}
+        {subInfo && (
+          <div>
+            {subInfo.status === "demo" ? (
+              <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-950">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                  <span className="font-bold">Modo Demonstração / Aguardando Ativação</span>
+                  <span className="hidden sm:inline text-amber-800">
+                    • Seu cardápio e pedidos estão liberados para testes.
+                  </span>
+                </div>
+                <span className="text-[11px] font-semibold bg-amber-200/80 border border-amber-300 text-amber-950 px-2.5 py-0.5 rounded-full shrink-0">
+                  Aguardando Ativação
+                </span>
+              </div>
+            ) : (
+              <div
+                className={`border-b px-4 py-2 flex items-center justify-between gap-3 text-xs ${
+                  subInfo.isOverdue
+                    ? "bg-red-50 border-red-200 text-red-900"
+                    : subInfo.isDueSoon
+                    ? "bg-amber-50 border-amber-200 text-amber-900"
+                    : "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Calendar
+                    className={`h-3.5 w-3.5 shrink-0 ${
+                      subInfo.isOverdue
+                        ? "text-red-600"
+                        : subInfo.isDueSoon
+                        ? "text-amber-600"
+                        : "text-emerald-600"
+                    }`}
+                  />
+                  <span className="font-medium">
+                    Sua mensalidade vence todo dia{" "}
+                    <strong className="font-black text-slate-900">{subInfo.billingDay}</strong> •{" "}
+                    <strong
+                      className={
+                        subInfo.isOverdue
+                          ? "text-red-700 font-bold"
+                          : subInfo.isDueToday
+                          ? "text-amber-700 font-bold"
+                          : "text-slate-900 font-bold"
+                      }
+                    >
+                      {subInfo.isOverdue
+                        ? `Vencida há ${Math.abs(subInfo.daysRemaining || 0)} dias`
+                        : subInfo.isDueToday
+                        ? "Vence hoje!"
+                        : `Faltam ${subInfo.daysRemaining} dias`}
+                    </strong>
+                  </span>
+                </div>
+
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                    subInfo.isOverdue
+                      ? "bg-red-100 border-red-300 text-red-800"
+                      : subInfo.isDueToday
+                      ? "bg-amber-100 border-amber-300 text-amber-800 animate-pulse"
+                      : subInfo.isDueSoon
+                      ? "bg-amber-100 border-amber-300 text-amber-800"
+                      : "bg-emerald-100 border-emerald-300 text-emerald-800"
+                  }`}
+                >
+                  {subInfo.isOverdue
+                    ? "Vencida"
+                    : subInfo.isDueToday
+                    ? "Vence Hoje"
+                    : subInfo.isDueSoon
+                    ? `Faltam ${subInfo.daysRemaining}d`
+                    : "Ativa"}
+                </span>
+              </div>
+            )}
+
+            {/* Card com Chave PIX e WhatsApp se faltar <= 5 dias ou estiver vencido */}
+            {subInfo.status === "active" && (subInfo.isDueSoon || subInfo.isOverdue) && (
+              <div
+                className={`mx-3 sm:mx-6 mt-3 sm:mt-4 p-4 rounded-2xl border shadow-sm ${
+                  subInfo.isOverdue
+                    ? "bg-red-50 border-red-200 text-red-950"
+                    : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-950"
+                }`}
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`p-2.5 rounded-xl shrink-0 ${
+                        subInfo.isOverdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-bold text-sm sm:text-base">
+                          {subInfo.isOverdue
+                            ? `Atenção: Sua mensalidade venceu no dia ${subInfo.billingDay}`
+                            : subInfo.isDueToday
+                            ? `Lembrete: Sua mensalidade vence hoje (dia ${subInfo.billingDay})`
+                            : `Lembrete: Sua mensalidade vence em ${subInfo.daysRemaining} dias (todo dia ${subInfo.billingDay})`}
+                        </h4>
+                        <span
+                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                            subInfo.isOverdue
+                              ? "bg-red-200 border-red-300 text-red-950 font-mono"
+                              : "bg-amber-200 border-amber-300 text-amber-950 font-mono"
+                          }`}
+                        >
+                          Valor da Mensalidade: R$ {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                        {subInfo.isOverdue
+                          ? "Para manter sua loja online e ativa na rede sem interrupções, realize o pagamento via PIX e envie o comprovante para o nosso WhatsApp."
+                          : "Garanta a continuidade das suas vendas online sem interrupção. Copie a chave PIX abaixo e envie o comprovante pelo WhatsApp."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Chave PIX e Botão WhatsApp */}
+                  <div className="flex flex-wrap sm:flex-nowrap items-stretch gap-2 shrink-0 self-start md:self-center">
+                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 text-xs shadow-inner min-w-0">
+                      <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                        PIX:
+                      </span>
+                      <span
+                        className="font-mono text-slate-800 font-semibold truncate select-all"
+                        title={adminPixKey}
+                      >
+                        {adminPixKey}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleCopyPix}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-slate-100 text-slate-700 text-xs font-semibold transition shrink-0 border border-slate-200"
+                        title="Copiar Chave Pix"
+                      >
+                        {copiedPix ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 font-bold">Chave Pix Copiada!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5 text-slate-500" />
+                            <span>Copiar Chave Pix</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <a
+                      href={proofWhatsAppUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm whitespace-nowrap active:scale-[0.98]"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      <span>Enviar Comprovante no WhatsApp</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <ErrorBoundary fallbackTitle="Erro ao carregar conteúdo da aba">
           {tab === "orders" && <AdminOrders newOrderIds={newOrderIds} />}
           {tab === "financial" && <AdminFinancialReport key={financialKey} />}

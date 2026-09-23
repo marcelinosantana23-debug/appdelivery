@@ -1,6 +1,7 @@
 export type UserRole = "super_admin" | "tenant_admin";
 
 export type TenantStatus = "active" | "inactive";
+export type SubscriptionStatus = "demo" | "active" | "overdue" | "cancelled";
 
 export interface TenantCredential {
   tenantId: string;
@@ -45,6 +46,10 @@ export interface Tenant {
   rating?: number;
   ratingCount?: number;
   status: TenantStatus;
+  subscriptionStatus?: SubscriptionStatus;
+  billingDay?: number;
+  lastPaymentAt?: number;
+  monthlyFee?: number;
   isOpen: boolean;
   createdAt: number;
   updatedAt: number;
@@ -62,6 +67,10 @@ export interface PlatformSettings {
   heroSubtitle?: string;
   primaryColor?: string;
   geminiApiKey?: string;
+  adminPixKey?: string;
+  adminPixType?: string;
+  adminWhatsapp?: string;
+  defaultMonthlyFee?: number;
   updatedAt?: number;
 }
 
