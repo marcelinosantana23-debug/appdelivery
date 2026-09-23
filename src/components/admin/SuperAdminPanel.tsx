@@ -41,6 +41,7 @@ import {
   Pencil,
   Check,
   X,
+  ChevronDown,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
@@ -139,7 +140,30 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [togglingFeaturedId, setTogglingFeaturedId] = useState<string | null>(null);
+  const [togglingStatusTenantId, setTogglingStatusTenantId] = useState<string | null>(null);
   const [selectedTenantForQrCode, setSelectedTenantForQrCode] = useState<Tenant | null>(null);
+
+  // Controle de cards expandidos/minimizados (iniciam recolhidos por padrão no carregamento)
+  const [expandedTenantIds, setExpandedTenantIds] = useState<Record<string, boolean>>({});
+
+  const toggleCardExpanded = (tenantId: string) => {
+    setExpandedTenantIds((prev) => ({
+      ...prev,
+      [tenantId]: !prev[tenantId],
+    }));
+  };
+
+  const expandAllCards = () => {
+    const next: Record<string, boolean> = {};
+    filteredTenants.forEach((t) => {
+      next[t.id] = true;
+    });
+    setExpandedTenantIds(next);
+  };
+
+  const collapseAllCards = () => {
+    setExpandedTenantIds({});
+  };
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -789,8 +813,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   };
 
   const handleStatusToggle = async (tenant: Tenant) => {
-    const nextStatus: TenantStatus = tenant.status === "active" ? "inactive" : "active";
-    await toggleTenantStatus(tenant.id, nextStatus);
+    try {
+      setTogglingStatusTenantId(tenant.id);
+      const nextStatus: TenantStatus = tenant.status === "active" ? "inactive" : "active";
+      await toggleTenantStatus(tenant.id, nextStatus);
+    } catch (err: any) {
+      alert(err.message || "Erro ao alterar status da loja.");
+    } finally {
+      setTogglingStatusTenantId(null);
+    }
   };
 
   const handleActivateSubscription = async (tenant: Tenant) => {
@@ -1689,6 +1720,32 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               </div>
             )}
 
+            {/* Barra de Contagem e Controle de Expansão dos Cards */}
+            <div className="flex items-center justify-between text-xs text-slate-400 px-1 py-0.5">
+              <span className="flex items-center gap-1.5">
+                <span className="font-semibold text-slate-300">{filteredTenants.length}</span>
+                <span>{filteredTenants.length === 1 ? "loja cadastrada" : "lojas cadastradas"}</span>
+                <span className="text-[11px] text-slate-500 font-mono">(cards recolhidos por padrão)</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={expandAllCards}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold transition"
+                >
+                  Expandir Todos
+                </button>
+                <span className="text-slate-600">•</span>
+                <button
+                  type="button"
+                  onClick={collapseAllCards}
+                  className="text-[11px] text-slate-400 hover:text-slate-300 font-semibold transition"
+                >
+                  Recolher Todos
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 w-full">
             {filteredTenants.map((t) => {
               const isActive = t.status === "active";
@@ -1696,100 +1753,241 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               const adminPass = (t as any).adminPassword || "123456";
               const isPassVisible = showCardPasswords[t.id];
               const subInfo = getSubscriptionInfo(t);
+              const isExpanded = Boolean(expandedTenantIds[t.id]);
 
               return (
                 <div
                   key={t.id}
-                  className={`relative flex flex-col justify-between rounded-2xl border transition-all w-full min-w-0 overflow-hidden box-border ${
+                  className={`relative flex flex-col justify-between rounded-2xl border transition-all duration-200 w-full min-w-0 overflow-hidden box-border ${
                     isActive
                       ? "border-slate-800 bg-slate-900/60 hover:border-slate-700 shadow-sm"
                       : "border-red-950/60 bg-slate-900/30 opacity-80"
                   }`}
                 >
-                  {/* Top Store Info */}
-                  <div className="p-3.5 sm:p-5 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-2xl shadow-inner border border-white/10"
-                          style={{
-                            backgroundColor: `${t.primaryColor || "#E63946"}20`,
-                            color: t.primaryColor || "#E63946",
-                          }}
-                        >
-                          <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <h3 className="font-bold text-white text-base leading-tight truncate">
-                              {getSafeDisplayName(t.name, "Lanchonete")}
-                            </h3>
-                          </div>
-                          <span className="text-xs text-slate-400 block truncate">/loja/{getSafeSlug(t.slug, "loja")}</span>
-                        </div>
+                  {/* Cabeçalho Compacto (Accordion Header - Sempre Visível) */}
+                  <div
+                    onClick={() => toggleCardExpanded(t.id)}
+                    className={`p-3.5 sm:p-4 flex items-center justify-between gap-2.5 cursor-pointer select-none transition ${
+                      isExpanded
+                        ? "bg-slate-900/90 border-b border-slate-800"
+                        : "bg-slate-900/60 hover:bg-slate-800/40"
+                    }`}
+                  >
+                    {/* Ícone / Nome da Loja */}
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                      <div
+                        className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xl shadow-inner border border-white/10"
+                        style={{
+                          backgroundColor: `${t.primaryColor || "#E63946"}20`,
+                          color: t.primaryColor || "#E63946",
+                        }}
+                      >
+                        <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
                       </div>
-
-                      {/* Status and Featured Badges & Toggles */}
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          {/* Botão de Destaque / Patrocínio */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleFeatured(t)}
-                            disabled={togglingFeaturedId === t.id}
-                            title={
-                              t.isFeatured
-                                ? "Loja em destaque na vitrine (Clique para remover)"
-                                : "Destacar loja na vitrine (Marketing Pago)"
-                            }
-                            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold transition ${
-                              t.isFeatured
-                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30"
-                                : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-white hover:border-amber-500/40"
-                            }`}
-                          >
-                            {togglingFeaturedId === t.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
-                            ) : (
-                              <Sparkles
-                                className={`h-3 w-3 ${
-                                  t.isFeatured ? "text-amber-400 fill-amber-400" : "text-slate-500"
-                                }`}
-                              />
-                            )}
-                            <span>{t.isFeatured ? "Destaque" : "Destacar"}</span>
-                            {t.isFeatured && (t.priorityOrder || 0) > 0 && (
-                              <span className="text-[9px] font-mono bg-amber-500/30 px-1 rounded text-amber-200">
-                                P{t.priorityOrder}
-                              </span>
-                            )}
-                          </button>
-
-                          {/* Status Badge & Toggle */}
-                          <button
-                            onClick={() => handleStatusToggle(t)}
-                            title={isActive ? "Clique para desativar loja" : "Clique para ativar loja"}
-                            className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition ${
-                              isActive
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
-                                : "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20"
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                isActive ? "bg-emerald-400 animate-pulse" : "bg-red-500"
-                              }`}
-                            />
-                            {isActive ? "Ativa" : "Pausada"}
-                          </button>
+                          <h3 className="font-bold text-white text-sm sm:text-base leading-tight truncate">
+                            {getSafeDisplayName(t.name, "Lanchonete")}
+                          </h3>
                         </div>
+                        <span className="text-[11px] text-slate-400 block truncate">/loja/{getSafeSlug(t.slug, "loja")}</span>
                       </div>
                     </div>
 
-                    <p className="mt-3 text-xs text-slate-400 line-clamp-1">{t.tagline}</p>
+                    {/* Lado Direito: Badge Plano + Destaque + Controle Ativar/Pausar + Botão Retrátil */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                      {/* 1. Badge de Plano / Assinatura (Demo / Cancelada / Mensalidade) */}
+                      {subInfo.status === "demo" ? (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/35 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold whitespace-nowrap"
+                          title="Loja em Modo Demonstração (Aguardando Ativação de Mensalidade)"
+                        >
+                          🧪 Demo
+                        </span>
+                      ) : (subInfo.status as string) === "cancelled" ? (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/35 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold whitespace-nowrap"
+                          title="Assinatura Cancelada (Modo Demonstração)"
+                        >
+                          ❌ Cancelada
+                        </span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] sm:text-[11px] font-bold border whitespace-nowrap ${
+                            subInfo.isOverdue
+                              ? "bg-red-500/15 text-red-300 border-red-500/35"
+                              : subInfo.isDueSoon || subInfo.isDueToday
+                              ? "bg-amber-500/15 text-amber-300 border-amber-500/35"
+                              : "bg-blue-500/15 text-blue-300 border-blue-500/35"
+                          }`}
+                          title={`Mensalidade Ativa (Vencimento todo dia ${subInfo.billingDay})`}
+                        >
+                          💳 Dia {subInfo.billingDay}
+                        </span>
+                      )}
 
-                    {/* Meta info */}
-                    <div className="mt-4 space-y-1.5 border-t border-slate-800/80 pt-3 text-xs text-slate-300">
+                      {/* 2. Botão/Badge de Destaque (Marketing Pago) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleFeatured(t);
+                        }}
+                        disabled={togglingFeaturedId === t.id}
+                        title={
+                          t.isFeatured
+                            ? "Loja em destaque na vitrine (Clique para remover)"
+                            : "Destacar loja na vitrine (Marketing Pago)"
+                        }
+                        className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] sm:text-[11px] font-bold transition ${
+                          t.isFeatured
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30"
+                            : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-white hover:border-amber-500/40"
+                        }`}
+                      >
+                        {togglingFeaturedId === t.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                        ) : (
+                          <Sparkles
+                            className={`h-3 w-3 ${
+                              t.isFeatured ? "text-amber-400 fill-amber-400" : "text-slate-500"
+                            }`}
+                          />
+                        )}
+                        <span className="hidden xs:inline">{t.isFeatured ? "Destaque" : "Normal"}</span>
+                        {t.isFeatured && (t.priorityOrder || 0) > 0 && (
+                          <span className="text-[9px] font-mono bg-amber-500/30 px-1 rounded text-amber-200">
+                            P{t.priorityOrder}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* 3. Botão / Controle de Status Operacional da Loja (Ativar / Pausar Loja) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusToggle(t);
+                        }}
+                        disabled={togglingStatusTenantId === t.id}
+                        title={
+                          isActive
+                            ? "Loja ATIVA e visível na vitrine pública. Clique para pausar."
+                            : "Loja PAUSADA (oculta para clientes). Clique para ativar."
+                        }
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-bold border transition shadow-sm active:scale-95 ${
+                          isActive
+                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25"
+                            : "bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25"
+                        }`}
+                      >
+                        {togglingStatusTenantId === t.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-current" />
+                        ) : (
+                          <span
+                            className={`h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${
+                              isActive ? "bg-emerald-400 animate-pulse" : "bg-red-500"
+                            }`}
+                          />
+                        )}
+                        <span>{isActive ? "Ativa" : "Pausada"}</span>
+                      </button>
+
+                      {/* 4. Botão/Ícone retrátil de Expandir/Minimizar (setinha v / ^) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCardExpanded(t.id);
+                        }}
+                        className={`p-1 sm:p-1.5 rounded-lg border transition ${
+                          isExpanded
+                            ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+                            : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700"
+                        }`}
+                        title={isExpanded ? "Minimizar card" : "Expandir card completo"}
+                        aria-label={isExpanded ? "Minimizar card" : "Expandir card completo"}
+                      >
+                        <ChevronDown
+                          className={`h-4 w-4 transition-transform duration-200 ${
+                            isExpanded ? "rotate-180 text-amber-400" : ""
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Conteúdo Expansível (Accordion Body - Preservação Integral de Informações e Ações) */}
+                  <div
+                    className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                      isExpanded ? "max-h-[3500px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+                    }`}
+                  >
+                    <div className="p-3.5 sm:p-5 min-w-0">
+                      {/* Controle de Status Operacional da Loja (Visibilidade na Vitrine) */}
+                      <div className="mb-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-950/80 p-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={`h-3 w-3 rounded-full shrink-0 ${
+                              isActive
+                                ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]"
+                                : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                            }`}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-white">Status Operacional:</span>
+                              <span
+                                className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${
+                                  isActive
+                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                                    : "bg-red-500/15 text-red-300 border-red-500/40"
+                                }`}
+                              >
+                                {isActive ? "LOJA ATIVA (ONLINE)" : "LOJA PAUSADA (OFFLINE)"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {isActive
+                                ? "Visível na vitrine pública. Clientes podem fazer pedidos normalmente."
+                                : "Loja oculta na vitrine pública. Clientes não conseguem enviar novos pedidos."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStatusToggle(t)}
+                          disabled={togglingStatusTenantId === t.id}
+                          className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition shadow-sm shrink-0 active:scale-[0.98] ${
+                            isActive
+                              ? "bg-red-500/15 hover:bg-red-500/25 text-red-300 border-red-500/40"
+                              : "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40"
+                          }`}
+                          title={isActive ? "Pausar loja e ocultar da vitrine" : "Ativar loja e exibir na vitrine"}
+                        >
+                          {togglingStatusTenantId === t.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : isActive ? (
+                            <>
+                              <span className="h-2 w-2 rounded-full bg-red-400" />
+                              <span>Pausar Loja</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                              <span>Ativar Loja</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {t.tagline && (
+                        <p className="text-xs text-slate-400 line-clamp-1 mb-3">{t.tagline}</p>
+                      )}
+
+                      {/* Meta info */}
+                      <div className="space-y-1.5 border-t border-slate-800/80 pt-3 text-xs text-slate-300">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-500 shrink-0">E-mail de Contato:</span>
                         <span className="font-medium text-slate-200 truncate" title={t.email}>{t.email}</span>
@@ -2260,6 +2458,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       <Trash2 className="h-3.5 w-3.5 shrink-0" />
                       <span>Excluir</span>
                     </button>
+                  </div>
                   </div>
                 </div>
               );
