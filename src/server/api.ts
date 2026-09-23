@@ -511,6 +511,142 @@ api.post("/admin/lojas/importar-cardapio", handleImportarCardapio);
 api.post("/lojas/importar-cardapio", handleImportarCardapio);
 
 // -----------------------------------------------------------------------------
+// ENDPOINT: CADASTRO AUTOMÁTICO DE CARDÁPIO VIA GEMINI 2.5 FLASH
+// POST /api/loja/cadastrar-auto & POST /loja/cadastrar-auto
+// Suporta Multipart Form (File + Prompt) e JSON (Base64) compatível com Cloudflare Workers & Node.js
+// -----------------------------------------------------------------------------
+const handleCadastrarAuto = async (c: any) => {
+  try {
+    let promptTexto = "";
+    let base64Image = "";
+    let mimeType = "image/jpeg";
+
+    const contentType = c.req.header("content-type") || "";
+
+    if (contentType.includes("multipart/form-data") || contentType.includes("application/x-www-form-urlencoded")) {
+      const body = await c.req.parseBody();
+      promptTexto = (body["prompt"] as string) || "";
+      const imagemArquivo = body["file"] as any;
+
+      // Converte a imagem enviada para Base64 nativo (compatível com Cloudflare Workers e Node.js)
+      if (imagemArquivo && typeof imagemArquivo === "object") {
+        if (typeof imagemArquivo.arrayBuffer === "function") {
+          const arrayBuffer = await imagemArquivo.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          let binaryString = "";
+          for (let i = 0; i < uint8Array.byteLength; i++) {
+            binaryString += String.fromCharCode(uint8Array[i]);
+          }
+          base64Image = btoa(binaryString);
+          mimeType = imagemArquivo.type || "image/jpeg";
+        }
+      }
+    } else {
+      const jsonBody = await c.req.json().catch(() => ({}));
+      promptTexto = jsonBody.prompt || "";
+      if (jsonBody.file) {
+        const raw = String(jsonBody.file);
+        const match = raw.match(/^data:([a-zA-Z0-9/+-]+);base64,(.+)$/);
+        if (match) {
+          mimeType = match[1];
+          base64Image = match[2];
+        } else {
+          base64Image = raw;
+        }
+      }
+    }
+
+    const contentsParts: any[] = [];
+
+    if (base64Image) {
+      contentsParts.push({
+        inlineData: {
+          mimeType: mimeType || "image/jpeg",
+          data: base64Image,
+        },
+      });
+    }
+
+    // Anexa o texto/prompt se fornecido
+    if (promptTexto) {
+      contentsParts.push({ text: promptTexto });
+    }
+
+    if (contentsParts.length === 0) {
+      return c.json(
+        { error: "Envie uma foto do cardápio ou o texto com as instruções." },
+        400
+      );
+    }
+
+    // Obter a GEMINI_API_KEY do ambiente do Cloudflare Workers ou variáveis do sistema
+    const apiKey =
+      c.env?.GEMINI_API_KEY ||
+      (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
+      c.req.header("x-gemini-api-key");
+
+    if (!apiKey) {
+      return c.json(
+        { error: "GEMINI_API_KEY não configurada no ambiente." },
+        500
+      );
+    }
+
+    // Chamada à API do Gemini 2.5 Flash
+    const responseGemini = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: contentsParts }],
+          systemInstruction: {
+            parts: [
+              {
+                text: `Você é o assistente de cadastro automático do Top Food.
+Sua missão é extrair e cadastrar TODOS os produtos, categorias, opções e complementos do cardápio.
+REGRAS OBRIGATÓRIAS:
+1. Se a informação vier por FOTO DO CARDÁPIO, leia todo o texto contido na imagem com OCR.
+2. Se a informação vier por TEXTO DIGITADO, processe a lista inteira de ponta a ponta.
+3. NUNCA resuma, corte ou limite a 2 produtos por categoria. Extraia 100% dos itens presentes na foto ou no texto.`,
+              },
+            ],
+          },
+          generationConfig: {
+            responseMimeType: "application/json",
+            maxOutputTokens: 8192,
+          },
+        }),
+      }
+    );
+
+    if (!responseGemini.ok) {
+      const errorText = await responseGemini.text();
+      return c.json({ error: "Erro na API do Gemini", details: errorText }, 500);
+    }
+
+    const data: any = await responseGemini.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!responseText) {
+      return c.json({ error: "Nenhuma resposta gerada pela IA." }, 500);
+    }
+
+    const menuData = JSON.parse(responseText);
+
+    return c.json({ success: true, menu: menuData });
+  } catch (err: any) {
+    return c.json(
+      { error: "Falha ao processar requisição", message: err.message },
+      500
+    );
+  }
+};
+
+api.post("/loja/cadastrar-auto", handleCadastrarAuto);
+api.post("/api/loja/cadastrar-auto", handleCadastrarAuto);
+
+// -----------------------------------------------------------------------------
 // GERAÇÃO DE FOTO DE PRODUTO COM IA (GEMINI + POLLINATIONS AI / BRAND PHOTOS)
 // POST /api/produtos/gerar-foto-ia & POST /api/admin/produtos/gerar-foto-ia
 // -----------------------------------------------------------------------------
