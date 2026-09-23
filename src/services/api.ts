@@ -134,7 +134,7 @@ export async function createTenantApi(data: {
   try {
     const res = await fetch(`${BASE_URL}/tenants`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(data),
     });
     return await res.json();
@@ -150,7 +150,7 @@ export async function updateTenantApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(partial),
     });
     return await res.json();
@@ -166,7 +166,7 @@ export async function updateTenantStatusApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ status }),
     });
     return await res.json();
@@ -182,7 +182,7 @@ export async function updateTenantMonthlyFeeApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/monthly-fee`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ monthlyFee }),
     });
     return await res.json();
@@ -198,7 +198,7 @@ export async function activateTenantSubscriptionApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/activate-subscription`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ billingDay }),
     });
     return await res.json();
@@ -213,7 +213,7 @@ export async function confirmTenantPaymentApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/confirm-payment`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     });
     return await res.json();
   } catch (err: any) {
@@ -227,7 +227,7 @@ export async function cancelTenantSubscriptionApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/cancel-subscription`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     });
     return await res.json();
   } catch (err: any) {
@@ -239,6 +239,7 @@ export async function deleteTenantApi(slugOrId: string): Promise<{ success: bool
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}`, {
       method: "DELETE",
+      headers: { ...getAuthHeaders() },
     });
     return await res.json();
   } catch (err: any) {
@@ -279,7 +280,7 @@ export async function createTenantProductApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(product),
     });
     return await res.json();
@@ -296,7 +297,7 @@ export async function updateTenantProductApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products/${productId}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(partial),
     });
     return await res.json();
@@ -312,6 +313,7 @@ export async function deleteTenantProductApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products/${productId}`, {
       method: "DELETE",
+      headers: { ...getAuthHeaders() },
     });
     return await res.json();
   } catch (err: any) {
@@ -326,7 +328,7 @@ export async function reorderTenantProductsApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products/reorder`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ orderedIds }),
     });
     return await res.json();
@@ -354,7 +356,7 @@ export async function createTenantCategoryApi(
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/categories`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(category),
     });
     return await res.json();
@@ -469,7 +471,7 @@ export async function updateSuperAdminCredentialsApi(data: {
   try {
     const res = await fetch(`${BASE_URL}/superadmin/credentials`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(data),
     });
     return await res.json();
@@ -484,7 +486,9 @@ export async function fetchAllTenantCredentialsApi(): Promise<{
   error?: string;
 }> {
   try {
-    const res = await fetch(`${BASE_URL}/superadmin/tenants/credentials`);
+    const res = await fetch(`${BASE_URL}/superadmin/tenants/credentials`, {
+      headers: { ...getAuthHeaders() },
+    });
     return await res.json();
   } catch (err: any) {
     return { success: false, credentials: [], error: err.message || "Erro ao buscar credenciais" };
@@ -497,7 +501,9 @@ export async function fetchTenantCredentialsApi(slugOrId: string): Promise<{
   error?: string;
 }> {
   try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/credentials`);
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/credentials`, {
+      headers: { ...getAuthHeaders() },
+    });
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message || "Erro ao buscar credenciais da loja" };
@@ -521,7 +527,7 @@ export async function updateTenantCredentialsApi(
   try {
     const res = await fetch(`${BASE_URL}/superadmin/tenants/${encodeURIComponent(slugOrId)}/credentials`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(data),
     });
     return await res.json();
@@ -598,7 +604,9 @@ export async function fetchTenantFinancialReportApi(
       queryString ? `?${queryString}` : ""
     }`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { ...getAuthHeaders() },
+    });
     return await res.json();
   } catch (err: any) {
     return {
@@ -634,7 +642,7 @@ export async function createEstablishmentCategoryApi(data: {
   try {
     const res = await fetch(`${BASE_URL}/establishment-categories`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(data),
     });
     return await res.json();
@@ -649,6 +657,7 @@ export async function deleteEstablishmentCategoryApi(
   try {
     const res = await fetch(`${BASE_URL}/establishment-categories/${encodeURIComponent(id)}`, {
       method: "DELETE",
+      headers: { ...getAuthHeaders() },
     });
     return await res.json();
   } catch (err: any) {

@@ -11,9 +11,10 @@ import {
   getGeminiClient,
   type MenuFileInput,
 } from "./geminiMenu";
-import type { Env, OrderStatus, TenantStatus, OrderItem } from "./types";
+import type { Env, OrderStatus, TenantStatus, OrderItem, User } from "./types";
+import { isAllowedOrigin, sanitizeErrorMessage } from "./security";
 
-export const api = new Hono<{ Bindings: Env }>();
+export const api = new Hono<{ Bindings: Env; Variables: { user?: User } }>();
 
 // Helper para obter a chave JWT_SECRET configurada no Cloudflare Workers ou ambiente
 export function getJwtSecret(c: any): string {
@@ -24,33 +25,49 @@ export function getJwtSecret(c: any): string {
   );
 }
 
-// Helper para gerar token JWT assinado criptograficamente
+// Helper para gerar token JWT assinado criptograficamente com expiração definida
 export async function createJwtToken(payload: Record<string, any>, secret: string): Promise<string> {
-  return await sign(payload, secret, "HS256");
+  const now = Math.floor(Date.now() / 1000);
+  const claims = {
+    iat: now,
+    exp: now + 60 * 60 * 24 * 7, // 7 dias com expiração obrigatória
+    ...payload,
+  };
+  return await sign(claims, secret, "HS256");
 }
 
-// Helper para validar tokens JWT de autenticação com tratamento resiliente
+// Helper para validar tokens JWT de autenticação com validação estrita de expiração
 export async function verifyTokenSafely(token: string, secret: string): Promise<any | null> {
-  if (!token) return null;
+  if (!token || typeof token !== "string") return null;
+  const cleanToken = token.replace(/^Bearer\s+/i, "").trim();
+  if (!cleanToken) return null;
+
   try {
-    return await verify(token, secret, "HS256");
-  } catch {
-    if (token.startsWith("auth-token-")) {
-      const parts = token.split("-");
-      const userId = parts[2];
-      if (userId) {
-        return { sub: userId, userId, isLegacy: true };
-      }
+    const decoded: any = await verify(cleanToken, secret, "HS256");
+    if (!decoded) return null;
+
+    // Validação de expiração da sessão
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof decoded.exp === "number" && decoded.exp < now) {
+      return null; // Sessão expirada
     }
+
+    return decoded;
+  } catch {
     return null;
   }
 }
 
-// Habilitar CORS irrestrito para consumo do frontend Vite e clientes externos / 4G
+// 1. SEGURANÇA DE ROTAS E CORS: Permitir estritamente origens oficiais
 api.use(
   "*",
   cors({
-    origin: "*",
+    origin: (origin, c) => {
+      if (isAllowedOrigin(origin, c?.env)) {
+        return origin || "*";
+      }
+      return "";
+    },
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allowHeaders: [
       "Content-Type",
@@ -60,8 +77,10 @@ api.use(
       "Origin",
       "Cache-Control",
       "Pragma",
+      "X-Admin-Role",
     ],
     exposeHeaders: ["Content-Length", "Content-Type"],
+    credentials: true,
     maxAge: 86400,
   })
 );
@@ -70,6 +89,85 @@ api.use(
 api.options("*", (c) => {
   return c.body(null, 204);
 });
+
+// 4. TRATAMENTO DE ERROS GLOBAL: Nunca expor stack traces ou internals do D1
+api.onError((err, c) => {
+  console.error("[Top Food API Error]:", err?.stack || err);
+  const status = (err as any)?.status || (err as any)?.statusCode;
+  if (status && status >= 400 && status < 500) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, status as any);
+  }
+  return c.json(
+    {
+      success: false,
+      error: "Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde.",
+    },
+    500
+  );
+});
+
+// Helper para autenticar o usuário da requisição via Bearer Token
+export async function authenticateRequestUser(c: any): Promise<any | null> {
+  const authHeader = c.req.header("Authorization") || c.req.header("authorization");
+  const token = authHeader?.replace(/^Bearer\s+/i, "")?.trim();
+  if (!token) return null;
+
+  const secret = getJwtSecret(c);
+  const decoded = await verifyTokenSafely(token, secret);
+  if (!decoded) return null;
+
+  const userId = decoded.userId || decoded.sub;
+  if (!userId) return null;
+
+  const db = getDb(c);
+  const user = await db.getUserById(userId);
+  if (!user || user.status !== "active") return null;
+
+  return { ...user, tokenPayload: decoded };
+}
+
+// Middleware de verificação de token JWT para rotas Super Admin (/api/super-admin/* e /superadmin/*)
+export async function requireSuperAdminMiddleware(c: any, next: any) {
+  const user = await authenticateRequestUser(c);
+  if (!user) {
+    return c.json(
+      { success: false, error: "Acesso não autorizado: token JWT ausente, expirado ou inválido." },
+      401
+    );
+  }
+  if (user.role !== "super_admin") {
+    return c.json(
+      { success: false, error: "Acesso negado: privilégios de Super Administrador requeridos." },
+      403
+    );
+  }
+  c.set("user", user);
+  await next();
+}
+
+// Middleware de verificação de token JWT para rotas administrativas de lojistas (/api/merchant/*)
+export async function requireMerchantMiddleware(c: any, next: any) {
+  const user = await authenticateRequestUser(c);
+  if (!user) {
+    return c.json(
+      { success: false, error: "Acesso não autorizado: token JWT ausente, expirado ou inválido." },
+      401
+    );
+  }
+  if (user.role !== "tenant_admin" && user.role !== "super_admin") {
+    return c.json(
+      { success: false, error: "Acesso negado: privilégios de lojista ou administrador requeridos." },
+      403
+    );
+  }
+  c.set("user", user);
+  await next();
+}
+
+// Vinculação obrigatória de middleware JWT para todas as rotas administrativas
+api.use("/api/super-admin/*", requireSuperAdminMiddleware);
+api.use("/superadmin/*", requireSuperAdminMiddleware);
+api.use("/api/merchant/*", requireMerchantMiddleware);
 
 // Helper para instanciar a camada de banco de dados diretamente com o objeto env da requisição Cloudflare Workers
 function getDb(c: any): Database {
@@ -1777,8 +1875,8 @@ api.get("/tenants", async (c) => {
         salesCount: orders.filter((o) => o.status !== "cancelled").length,
         revenue: orders.reduce((sum, o) => sum + (o.total || 0), 0),
         adminEmail: creds?.email || t.email,
-        adminPassword: creds?.password || "123456",
         adminUserId: creds?.userId,
+        hasAdminAccount: Boolean(creds),
       };
     })
   );
@@ -2962,9 +3060,24 @@ async function handleGetSettings(c: any) {
     c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     const db = getDb(c);
     const settings = await db.getPlatformSettings();
-    return c.json({ success: true, settings }, 200);
+    // 3. SEGURANÇA E PRIVACIDADE: Oculta chave privada do código cliente
+    const { geminiApiKey, ...safeSettings } = (settings || {}) as any;
+    return c.json(
+      {
+        success: true,
+        settings: {
+          ...safeSettings,
+          hasServerGeminiKey: Boolean(
+            geminiApiKey ||
+            c?.env?.GEMINI_API_KEY ||
+            (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY)
+          ),
+        },
+      },
+      200
+    );
   } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao carregar configurações" }, 500);
+    return c.json({ success: false, error: sanitizeErrorMessage(e) }, 500);
   }
 }
 
@@ -2989,43 +3102,17 @@ async function handlePutAdminSettings(c: any) {
       }
     }
 
-    if (!isAuthorized && body.superAdminToken) {
-      const decoded = await verifyTokenSafely(body.superAdminToken, jwtSecret);
-      if (decoded?.role === "super_admin") isAuthorized = true;
-    }
-
-    const db = getDb(c);
-    if (!isAuthorized && body.userId) {
-      const user = await db.getUserById(body.userId);
-      if (user?.role === "super_admin") isAuthorized = true;
-    }
-
-    // Permitir se autenticar com email e senha de super_admin se enviado no payload
-    if (!isAuthorized && body.email && body.password) {
-      const authCheck = await db.authenticateUser(body.email, body.password);
-      if (authCheck && authCheck.role === "super_admin") {
-        isAuthorized = true;
-      }
-    }
-
-    // Se o header X-Admin-Role for super_admin com token presente
-    if (!isAuthorized) {
-      const xRole = c.req.header("X-Admin-Role");
-      if (xRole === "super_admin" || body.userRole === "super_admin") {
-        isAuthorized = true;
-      }
-    }
-
     if (!isAuthorized) {
       return c.json(
         {
           success: false,
-          error: "Acesso restrito. Apenas Super Administradores da plataforma podem alterar a aparência da vitrine.",
+          error: "Acesso restrito. Apenas Super Administradores da plataforma autenticados com JWT podem alterar as configurações.",
         },
         403
       );
     }
 
+    const db = getDb(c);
     const { logoUrl, bannerUrl, heroTitle, heroSubtitle, primaryColor, geminiApiKey } = body;
     const updated = await db.updatePlatformSettings({
       logoUrl: logoUrl !== undefined ? String(logoUrl).trim() : undefined,
@@ -3036,16 +3123,25 @@ async function handlePutAdminSettings(c: any) {
       geminiApiKey: geminiApiKey !== undefined ? String(geminiApiKey).trim() : undefined,
     });
 
+    const { geminiApiKey: _, ...safeUpdated } = (updated || {}) as any;
+
     return c.json(
       {
         success: true,
         message: "Configurações de aparência da vitrine salvas com sucesso no banco de dados!",
-        settings: updated,
+        settings: {
+          ...safeUpdated,
+          hasServerGeminiKey: Boolean(
+            updated.geminiApiKey ||
+            c?.env?.GEMINI_API_KEY ||
+            (typeof process !== "undefined" && process?.env?.GEMINI_API_KEY)
+          ),
+        },
       },
       200
     );
   } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao salvar configurações" }, 500);
+    return c.json({ success: false, error: sanitizeErrorMessage(e) }, 500);
   }
 }
 
@@ -3189,6 +3285,330 @@ api.post("/stories", handleCreateStory);
 api.post("/api/stories", handleCreateStory);
 api.delete("/stories/:id", handleDeleteStory);
 api.delete("/api/stories/:id", handleDeleteStory);
+
+// ==========================================
+// ROTAS ADMINISTRATIVAS BLINDADAS: SUPER ADMIN (/api/super-admin/*)
+// Protegidas obrigatoriamente por requireSuperAdminMiddleware
+// ==========================================
+
+api.get("/api/super-admin/stats", async (c) => {
+  try {
+    const db = getDb(c);
+    const stats = await db.getPlatformStats();
+    return c.json({ success: true, stats }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/super-admin/tenants", async (c) => {
+  try {
+    const db = getDb(c);
+    const tenants = await db.getTenants();
+    const enriched = await Promise.all(
+      tenants.map(async (t) => {
+        const [products, orders, creds] = await Promise.all([
+          db.getProductsByTenant(t.id),
+          db.getOrdersByTenant(t.id),
+          db.getTenantCredentials(t.id),
+        ]);
+        const completedOrders = orders.filter(
+          (o) =>
+            o.status === "done" ||
+            o.status === "Concluído" ||
+            o.status === "concluido" ||
+            o.status === "Entregue" ||
+            o.status === "entregue" ||
+            o.status === "finalizado"
+        );
+        return {
+          ...t,
+          productCount: products.length,
+          orderCount: orders.length,
+          completedOrdersCount: completedOrders.length,
+          salesCount: orders.filter((o) => o.status !== "cancelled").length,
+          revenue: orders.reduce((sum, o) => sum + (o.total || 0), 0),
+          adminEmail: creds?.email || t.email,
+          adminPassword: creds?.password || "••••••••",
+          adminUserId: creds?.userId,
+        };
+      })
+    );
+    return c.json({ success: true, tenants: enriched }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/super-admin/credentials/tenants", async (c) => {
+  try {
+    const db = getDb(c);
+    const credentials = await db.getAllTenantCredentials();
+    return c.json({ success: true, credentials }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.put("/api/super-admin/credentials", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { email, password, userId } = body;
+    if (!email || !password) {
+      return c.json({ success: false, error: "E-mail e senha são obrigatórios." }, 400);
+    }
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+    if (cleanPassword.length < 4) {
+      return c.json({ success: false, error: "A senha deve possuir no mínimo 4 caracteres." }, 400);
+    }
+    const db = getDb(c);
+    const updatedUser = await db.updateSuperAdminCredentials(userId, cleanEmail, cleanPassword);
+    if (!updatedUser) {
+      return c.json({ success: false, error: "Usuário Super Admin não encontrado." }, 404);
+    }
+    return c.json({
+      success: true,
+      message: "Credenciais do Super Admin atualizadas com sucesso!",
+      user: updatedUser,
+    }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.put("/api/super-admin/tenants/:slugOrId/credentials", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const body = await c.req.json();
+    const { email, password, name } = body;
+    if (!email || !password) {
+      return c.json({ success: false, error: "E-mail e senha são obrigatórios para a loja." }, 400);
+    }
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+    if (cleanPassword.length < 4) {
+      return c.json({ success: false, error: "A senha deve ter no mínimo 4 caracteres." }, 400);
+    }
+    const result = await db.updateTenantCredentials(slugOrId, cleanEmail, cleanPassword, name);
+    return c.json({
+      success: true,
+      message: `Credenciais da loja "${result.tenant.name}" atualizadas com sucesso!`,
+      credentials: result.credentials,
+      tenant: result.tenant,
+    }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/super-admin/settings", handleGetSettings);
+api.put("/api/super-admin/settings", handlePutAdminSettings);
+
+// ==========================================
+// ROTAS ADMINISTRATIVAS BLINDADAS: LOJISTAS (/api/merchant/*)
+// Protegidas obrigatoriamente por requireMerchantMiddleware
+// ==========================================
+
+api.get("/api/merchant/me", async (c) => {
+  try {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ success: false, error: "Sessão não encontrada." }, 401);
+    }
+    const db = getDb(c);
+    let tenant = null;
+    if (user.tenantId) {
+      tenant = await db.getTenantByIdOrSlug(user.tenantId);
+    }
+    return c.json({ success: true, user, tenant }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/merchant/store", async (c) => {
+  try {
+    const user = c.get("user");
+    const db = getDb(c);
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada a este usuário." }, 400);
+    }
+    const tenant = await db.getTenantByIdOrSlug(tenantId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Loja não encontrada." }, 404);
+    }
+    return c.json({ success: true, tenant }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.put("/api/merchant/store", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada a este usuário." }, 400);
+    }
+    const db = getDb(c);
+    const body = await c.req.json();
+    const updated = await db.updateTenant(tenantId, body);
+    if (!updated) {
+      return c.json({ success: false, error: "Loja não encontrada para atualização." }, 404);
+    }
+    return c.json({ success: true, tenant: updated, message: "Dados da loja atualizados com sucesso." }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/merchant/products", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada." }, 400);
+    }
+    const db = getDb(c);
+    const products = await db.getProductsByTenant(tenantId);
+    return c.json({ success: true, products }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.post("/api/merchant/products", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada." }, 400);
+    }
+    const db = getDb(c);
+    const body = await c.req.json();
+    const product = await db.createProduct({ ...body, tenantId });
+    return c.json({ success: true, product, message: "Produto cadastrado com sucesso." }, 201);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.put("/api/merchant/products/:id", async (c) => {
+  try {
+    const productId = c.req.param("id");
+    const db = getDb(c);
+    const body = await c.req.json();
+    const updated = await db.updateProduct(productId, body);
+    if (!updated) {
+      return c.json({ success: false, error: "Produto não encontrado." }, 404);
+    }
+    return c.json({ success: true, product: updated, message: "Produto atualizado com sucesso." }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.delete("/api/merchant/products/:id", async (c) => {
+  try {
+    const productId = c.req.param("id");
+    const db = getDb(c);
+    const deleted = await db.deleteProduct(productId);
+    if (!deleted) {
+      return c.json({ success: false, error: "Produto não encontrado para remoção." }, 404);
+    }
+    return c.json({ success: true, message: "Produto excluído com sucesso." }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.post("/api/merchant/products/reorder", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada." }, 400);
+    }
+    const body = await c.req.json();
+    const { orderedIds } = body;
+    if (!Array.isArray(orderedIds)) {
+      return c.json({ success: false, error: "Lista orderedIds inválida." }, 400);
+    }
+    const db = getDb(c);
+    await db.reorderProducts(tenantId, orderedIds);
+    return c.json({ success: true, message: "Ordem dos produtos atualizada com sucesso." }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/merchant/orders", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada." }, 400);
+    }
+    const db = getDb(c);
+    const orders = await db.getOrdersByTenant(tenantId);
+    return c.json({ success: true, orders }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.patch("/api/merchant/orders/:id/status", handleStatusUpdate);
+
+api.get("/api/merchant/financial-report", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada." }, 400);
+    }
+    const db = getDb(c);
+    const report = await db.getTenantFinancialReport(tenantId);
+    return c.json({ success: true, ...report }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/merchant/customers", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada." }, 400);
+    }
+    const db = getDb(c);
+    const customers = await db.getTenantCustomers(tenantId);
+    return c.json({ success: true, customers }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.get("/api/merchant/stories", async (c) => {
+  try {
+    const user = c.get("user");
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return c.json({ success: false, error: "Nenhuma loja vinculada." }, 400);
+    }
+    const db = getDb(c);
+    const stories = await db.getStoreStories(tenantId);
+    return c.json({ success: true, stories }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
+  }
+});
+
+api.post("/api/merchant/stories", handleCreateStory);
+api.delete("/api/merchant/stories/:id", handleDeleteStory);
 
 export default api;
 

@@ -4,16 +4,24 @@ import fs from "fs";
 import workerApp from "./src/worker";
 import { Database } from "./src/server/db";
 import { injectStorePwaMetaTags } from "./src/server/pwaMeta";
+import { isAllowedOrigin } from "./src/server/security";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Global CORS middleware for all endpoints and external origins
+  // Global CORS middleware for official domains and mobile app consumption
   app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
+    const origin = req.get("origin");
+    if (isAllowedOrigin(origin, process.env)) {
+      res.header("Access-Control-Allow-Origin", origin || "*");
+      res.header("Access-Control-Allow-Credentials", "true");
+    }
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma");
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, X-Admin-Role"
+    );
     if (req.method === "OPTIONS") {
       return res.sendStatus(204);
     }
@@ -235,6 +243,18 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // Global Express Error Handler: Never expose internal stack traces or database structures
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("[Express Error Handler]:", err?.stack || err);
+    if (res.headersSent) {
+      return next(err);
+    }
+    return res.status(500).json({
+      success: false,
+      error: "Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde.",
+    });
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);

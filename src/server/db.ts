@@ -19,6 +19,7 @@ import type {
 } from "./types";
 import { mockProducts } from "../data/mockData";
 import { orderEvents } from "./events";
+import { hashPassword, verifyPassword } from "./security";
 
 // Seed data para demonstração e inicialização
 const initialTenants: Tenant[] = [
@@ -2455,27 +2456,60 @@ export class Database {
   async authenticateUser(email: string, password: string): Promise<User | null> {
     const cleanEmail = email.trim().toLowerCase();
 
+    // 1. Consulta segura ao Cloudflare D1
     if (this.env?.DB) {
       try {
         const row = await this.env.DB.prepare(
-          "SELECT * FROM users WHERE LOWER(email) = ? AND password = ? AND status = 'active' LIMIT 1"
+          "SELECT * FROM users WHERE LOWER(email) = ? AND status = 'active' LIMIT 1"
         )
-          .bind(cleanEmail, password)
+          .bind(cleanEmail)
           .first<any>();
-        if (row) return this.mapUserRow(row);
+
+        if (row) {
+          const isValid = await verifyPassword(password, row.password);
+          if (isValid) {
+            // Se a senha armazenada ainda for texto puro pré-migração, atualiza para hash PBKDF2 transparente
+            if (row.password && !String(row.password).startsWith("pbkdf2:")) {
+              try {
+                const newHash = await hashPassword(password);
+                await this.env.DB.prepare("UPDATE users SET password = ? WHERE id = ?")
+                  .bind(newHash, row.id)
+                  .run();
+                const memU = globalStore.users.find((u) => u.id === row.id);
+                if (memU) memU.password = newHash;
+              } catch (rehashErr) {
+                console.warn("Aviso ao atualizar senha legada para PBKDF2:", rehashErr);
+              }
+            }
+            return this.mapUserRow(row);
+          }
+        }
       } catch (e) {
         console.warn("D1 authenticateUser error:", e);
       }
     }
 
+    // 2. Consulta em memória
     const user = globalStore.users.find(
       (u) =>
         u.email.toLowerCase() === cleanEmail &&
-        u.password === password &&
         u.status === "active"
     );
 
     if (!user) return null;
+
+    const isValid = await verifyPassword(password, user.password || "");
+    if (!isValid) return null;
+
+    // Atualiza senha em memória para hash PBKDF2 se ainda for texto puro
+    if (user.password && !user.password.startsWith("pbkdf2:")) {
+      try {
+        user.password = await hashPassword(password);
+      } catch {
+        // ignore
+      }
+    }
+
     // Omit password from return object
     const { password: _, ...safeUser } = user;
     return safeUser as User;
@@ -2515,10 +2549,11 @@ export class Database {
     tenantId?: string | null;
   }): Promise<User> {
     const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const hashedPassword = await hashPassword(data.password.trim());
     const newUser: User = {
       id: userId,
       email: data.email.trim().toLowerCase(),
-      password: data.password,
+      password: hashedPassword,
       name: data.name.trim(),
       role: data.role,
       tenantId: data.tenantId || null,
@@ -2607,7 +2642,9 @@ export class Database {
     }
 
     const email = user?.email || tenant.email || `admin@${tenant.slug}.com`;
-    const password = user?.password || "123456";
+    // Se a senha for hash PBKDF2, mascara para privacidade
+    const rawPass = user?.password || "123456";
+    const password = rawPass.startsWith("pbkdf2:") ? "••••••••" : rawPass;
     const userId = user?.id || `user-${tenant.id}`;
     const name = user?.name || `Admin ${tenant.name}`;
 
@@ -2645,7 +2682,7 @@ export class Database {
           tenantSlug: t.slug,
           userId: creds.userId,
           email: creds.email,
-          password: creds.password || "123456",
+          password: creds.password || "••••••••",
           name: creds.name,
           status: t.status,
         });
@@ -2680,8 +2717,9 @@ export class Database {
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
+    const hashedPassword = await hashPassword(cleanPassword);
 
-    // 1. Atualização persistente no Cloudflare D1
+    // 1. Atualização persistente no Cloudflare D1 com hash PBKDF2
     if (this.env?.DB) {
       try {
         const existing = await this.env.DB.prepare(
@@ -2694,7 +2732,7 @@ export class Database {
           await this.env.DB.prepare(
             "UPDATE users SET email = ?, password = ?, name = COALESCE(?, name) WHERE id = ?"
           )
-            .bind(cleanEmail, cleanPassword, name || null, existing.id)
+            .bind(cleanEmail, hashedPassword, name || null, existing.id)
             .run();
         } else {
           const newUserId = `user-${tenant.id}-${Date.now()}`;
@@ -2705,7 +2743,7 @@ export class Database {
             .bind(
               newUserId,
               cleanEmail,
-              cleanPassword,
+              hashedPassword,
               name || `Admin ${tenant.name}`,
               tenant.id,
               Date.now()
@@ -2735,20 +2773,20 @@ export class Database {
       }
     }
 
-    // 3. Sincronização imediata na memória (MemoryStore)
+    // 3. Sincronização imediata na memória (MemoryStore) com hash seguro
     let user = globalStore.users.find(
       (u) => u.tenantId === tenant.id && u.role === "tenant_admin"
     );
 
     if (user) {
       user.email = cleanEmail;
-      user.password = cleanPassword;
+      user.password = hashedPassword;
       if (name) user.name = name;
     } else {
       user = {
         id: `user-${tenant.id}-${Date.now()}`,
         email: cleanEmail,
-        password: cleanPassword,
+        password: hashedPassword,
         name: name || `Admin ${tenant.name}`,
         role: "tenant_admin",
         tenantId: tenant.id,
@@ -2780,7 +2818,7 @@ export class Database {
       credentials: {
         userId: user.id,
         email: cleanEmail,
-        password: cleanPassword,
+        password: "••••••••",
         name: user.name,
         tenantId: tenant.id,
         tenantSlug: tenant.slug,
@@ -2795,12 +2833,14 @@ export class Database {
     password: string
   ): Promise<User | null> {
     const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+    const hashedPassword = await hashPassword(cleanPassword);
 
-    // 1. Cloudflare D1 integration via env.DB
+    // 1. Cloudflare D1 integration via env.DB com hash seguro PBKDF2
     if (this.env?.DB) {
       try {
         let query = "UPDATE users SET email = ?, password = ? WHERE role = 'super_admin'";
-        const binds: unknown[] = [cleanEmail, password];
+        const binds: unknown[] = [cleanEmail, hashedPassword];
 
         if (userId) {
           query += " AND id = ?";
@@ -2825,7 +2865,7 @@ export class Database {
 
           if (memoryUser) {
             memoryUser.email = cleanEmail;
-            memoryUser.password = password;
+            memoryUser.password = hashedPassword;
           }
 
           return this.mapUserRow(row);
@@ -2848,7 +2888,7 @@ export class Database {
       const newUser: User = {
         id: userId || "user-superadmin",
         email: cleanEmail,
-        password: password,
+        password: hashedPassword,
         name: "Diretor da Plataforma",
         role: "super_admin",
         tenantId: null,
@@ -2861,7 +2901,7 @@ export class Database {
     }
 
     user.email = cleanEmail;
-    user.password = password;
+    user.password = hashedPassword;
     const { password: _, ...safeUser } = user;
     return safeUser as User;
   }

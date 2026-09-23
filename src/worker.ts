@@ -4,15 +4,21 @@ import api from "./server/api";
 import type { Env } from "./server/types";
 import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT } from "./server/pwaAssets";
 import { injectStorePwaMetaTags } from "./server/pwaMeta";
+import { isAllowedOrigin, sanitizeErrorMessage } from "./server/security";
 
 // Main Cloudflare Workers application
 const app = new Hono<{ Bindings: Env }>();
 
-// Habilitar CORS irrestrito globalmente para todas as rotas (incluindo redes externas e 4G)
+// 1. SEGURANÇA DE ROTAS E CORS: Permitir estritamente origens oficiais
 app.use(
   "*",
   cors({
-    origin: "*",
+    origin: (origin, c) => {
+      if (isAllowedOrigin(origin, c?.env)) {
+        return origin || "*";
+      }
+      return "";
+    },
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allowHeaders: [
       "Content-Type",
@@ -22,14 +28,32 @@ app.use(
       "Origin",
       "Cache-Control",
       "Pragma",
+      "X-Admin-Role",
     ],
     exposeHeaders: ["Content-Length", "Content-Type"],
+    credentials: true,
     maxAge: 86400,
   })
 );
 
 app.options("*", (c) => {
   return c.body(null, 204);
+});
+
+// 4. TRATAMENTO DE ERROS GLOBAL: Nunca expor stack traces ou internals do D1
+app.onError((err, c) => {
+  console.error("[Cloudflare Worker Error]:", err?.stack || err);
+  const status = (err as any)?.status || (err as any)?.statusCode;
+  if (status && status >= 400 && status < 500) {
+    return c.json({ success: false, error: sanitizeErrorMessage(err) }, status as any);
+  }
+  return c.json(
+    {
+      success: false,
+      error: "Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde.",
+    },
+    500
+  );
 });
 
 // 1. Mount all /api routes FIRST
