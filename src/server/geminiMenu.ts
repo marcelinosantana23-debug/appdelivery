@@ -124,58 +124,94 @@ export function translateDishToEnglish(name: string, category: string = "", desc
 }
 
 /**
+ * URLs de imagem padrão (fallback) de acordo com o tipo de produto
+ */
+export const PRODUCT_FALLBACK_IMAGES = {
+  ACAI: "https://images.unsplash.com/photo-1590301157890-4810ed352733?w=800&q=80",
+  BURGER: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80",
+  HOT_DOG: "https://images.unsplash.com/photo-1619740455993-9e612b1af08a?w=800&q=80",
+  PASTEL_BATATA: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=800&q=80",
+  BEBIDAS: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=800&q=80",
+};
+
+/**
  * Atribui automaticamente uma URL de imagem profissional e realista ao produto:
- * - Para bebidas industriais de marcas conhecidas: foto oficial da lata/garrafa.
- * - Para pratos, lanches, porções, pizzas e sucos: URL do Pollinations AI baseada em nome em inglês.
+ * - Açaí: tigela de açaí autêntica com frutas/granola
+ * - Hambúrgueres/Lanches: hambúrguer artesanal apetitoso
+ * - Hot Dogs: cachorro quente gourmet prensado ou tradicional
+ * - Pastéis/Batatas: porção dourada crocante de batata ou pastel
+ * - Bebidas: latas/copos de refrigerante e bebidas
  */
 export function generateProductImageUrl(name: string, category: string = "", description: string = ""): string {
   const text = `${name} ${category} ${description}`.toLowerCase();
 
-  // 1. Bebidas industriais de marcas conhecidas (fotos oficiais de lata/garrafa)
-  if (text.includes("coca") && (text.includes("zero") || text.includes("sem acucar") || text.includes("sem açúcar"))) {
-    return "https://images.unsplash.com/photo-1554866585-cd94860890b7?auto=format&fit=crop&w=600&q=80";
-  }
-  if (text.includes("coca") || text.includes("coca-cola") || text.includes("cocacola")) {
-    return "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&q=80";
-  }
-  if (text.includes("guarana") || text.includes("guaraná") || text.includes("kuat") || text.includes("antartica") || text.includes("antárctica")) {
-    return "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80";
-  }
-  if (text.includes("fanta")) {
-    return "https://images.unsplash.com/photo-1624517452488-04869289c4ca?auto=format&fit=crop&w=600&q=80";
-  }
-  if (text.includes("sprite") || text.includes("soda limonada") || text.includes("seven up") || text.includes("7up")) {
-    return "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80";
-  }
-  if (text.includes("schweppes") || text.includes("tonica") || text.includes("tônica") || text.includes("citrus")) {
-    return "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80";
-  }
-  if (
-    text.includes("heineken") ||
-    text.includes("stella") ||
-    text.includes("budweiser") ||
-    text.includes("corona") ||
-    text.includes("brahma") ||
-    text.includes("skol") ||
-    text.includes("amstel") ||
-    text.includes("cerveja") ||
-    text.includes("chopp") ||
-    text.includes("chope") ||
-    text.includes("beer")
-  ) {
-    return "https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&q=80";
-  }
-  if (text.includes("red bull") || text.includes("redbull") || text.includes("monster") || text.includes("energetico") || text.includes("energético")) {
-    return "https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80";
-  }
-  if (text.includes("agua") || text.includes("água") || text.includes("mineral")) {
-    return "https://images.unsplash.com/photo-1559839914-17aae19cec71?auto=format&fit=crop&w=600&q=80";
+  // 1. Açaí / Cremes / Tigelas
+  if (text.includes("acai") || text.includes("açaí") || text.includes("cupuaçu") || text.includes("cupuacu") || text.includes("pitaya")) {
+    return PRODUCT_FALLBACK_IMAGES.ACAI;
   }
 
-  // 2. Comidas, lanches, pizzas e porções -> Pollinations AI
-  const englishFood = translateDishToEnglish(name, category, description);
-  const prompt = encodeURIComponent(`professional photo of ${englishFood} food`);
-  return `https://image.pollinations.ai/prompt/${prompt}?width=600&height=600&nologo=true`;
+  // 2. Hot Dogs / Cachorro Quente
+  if (text.includes("hot dog") || text.includes("hotdog") || text.includes("cachorro quente") || text.includes("dogão") || text.includes("dogao") || text.includes("salsicha")) {
+    return PRODUCT_FALLBACK_IMAGES.HOT_DOG;
+  }
+
+  // 3. Pastéis e Batatas Fritas / Porções
+  if (
+    text.includes("pastel") ||
+    text.includes("pasteis") ||
+    text.includes("pastéis") ||
+    text.includes("batata") ||
+    text.includes("fritas") ||
+    text.includes("french fries") ||
+    text.includes("nuggets") ||
+    text.includes("mandioca") ||
+    text.includes("polenta")
+  ) {
+    return PRODUCT_FALLBACK_IMAGES.PASTEL_BATATA;
+  }
+
+  // 4. Bebidas
+  if (
+    text.includes("coca") ||
+    text.includes("refrigerante") ||
+    text.includes("guarana") ||
+    text.includes("guaraná") ||
+    text.includes("fanta") ||
+    text.includes("sprite") ||
+    text.includes("suco") ||
+    text.includes("bebida") ||
+    text.includes("cerveja") ||
+    text.includes("chopp") ||
+    text.includes("agua") ||
+    text.includes("água") ||
+    text.includes("energetico") ||
+    text.includes("energético") ||
+    text.includes("schweppes") ||
+    text.includes("lata") ||
+    text.includes("2l") ||
+    text.includes("600ml")
+  ) {
+    return PRODUCT_FALLBACK_IMAGES.BEBIDAS;
+  }
+
+  // 5. Hambúrgueres e Lanches
+  if (
+    text.includes("burg") ||
+    text.includes("hamburg") ||
+    text.includes("lanche") ||
+    text.includes("sanduiche") ||
+    text.includes("sanduíche") ||
+    text.includes("x-") ||
+    text.includes("bacon") ||
+    text.includes("artesanal") ||
+    text.includes("smash") ||
+    text.includes("cheddar")
+  ) {
+    return PRODUCT_FALLBACK_IMAGES.BURGER;
+  }
+
+  // Padrão gastronômico geral
+  return PRODUCT_FALLBACK_IMAGES.BURGER;
 }
 
 /**
@@ -352,30 +388,29 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido (sem texto adicional fora do JSON)
 }
 
 ### REGRA MANDATÓRIA: ATRIBUIÇÃO AUTOMÁTICA DE FOTOS ('image' É OBRIGATÓRIO EM CADA ITEM):
-Para CADA produto extraído, você DEVE preencher OBRIGATORIAMENTE o campo 'image' com uma URL direta, realista e de alta resolução:
-1. Para bebidas de marcas industriais conhecidas (ex: Coca-Cola, Coca-Cola Zero, Guaraná Antarctica, Fanta, Sprite, Schweppes, Cerveja Heineken, Stella Artois, Água Mineral, Red Bull, etc.):
-   - Retorne a foto oficial da embalagem, lata ou garrafa. Exemplos recomendados:
-     * Coca-Cola: https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&q=80
-     * Coca-Cola Zero: https://images.unsplash.com/photo-1554866585-cd94860890b7?auto=format&fit=crop&w=600&q=80
-     * Guaraná Antarctica / Kuat: https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80
-     * Fanta: https://images.unsplash.com/photo-1624517452488-04869289c4ca?auto=format&fit=crop&w=600&q=80
-     * Sprite / Soda: https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&w=600&q=80
-     * Schweppes: https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80
-     * Cerveja / Chopp: https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&q=80
-     * Água Mineral: https://images.unsplash.com/photo-1559839914-17aae19cec71?auto=format&fit=crop&w=600&q=80
-     * Energéticos: https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80
-2. Para pratos, lanches, hambúrgueres, pizzas, porções, pastéis, sucos naturais, açaí e sobremesas:
-   - Gere a URL dinâmica do Pollinations AI com a descrição do prato em inglês gastronômico apetitoso:
-     https://image.pollinations.ai/prompt/\${encodeURIComponent("professional photo of " + nomeEmIngles + " food")}?width=600&height=600&nologo=true
-     Exemplos:
-     * Hambúrguer com queijo e bacon: https://image.pollinations.ai/prompt/professional%20photo%20of%20gourmet%20bacon%20cheeseburger%20burger%20food?width=600&height=600&nologo=true
-     * Batata Frita: https://image.pollinations.ai/prompt/professional%20photo%20of%20crispy%20golden%20french%20fries%20food?width=600&height=600&nologo=true
-     * Pizza: https://image.pollinations.ai/prompt/professional%20photo%20of%20hot%20freshly%20baked%20pizza%20food?width=600&height=600&nologo=true
-     * Açaí na Tigela: https://image.pollinations.ai/prompt/professional%20photo%20of%20brazilian%20acai%20bowl%20with%20fruits%20granola%20food?width=600&height=600&nologo=true
-     * Pastel: https://image.pollinations.ai/prompt/professional%20photo%20of%20crispy%20golden%20brazilian%20pastel%20pastry%20food?width=600&height=600&nologo=true
-     * Suco Natural: https://image.pollinations.ai/prompt/professional%20photo%20of%20fresh%20fruit%20juice%20drink%20food?width=600&height=600&nologo=true
-   - Ou utilize URLs correspondentes e apetitosas do Unsplash Food.
-Nenhum produto pode ficar sem o campo 'image' preenchido!
+Para CADA produto extraído, você DEVE preencher OBRIGATORIAMENTE o campo 'image' com uma URL direta, realista e de alta resolução seguindo RIGOROSAMENTE estas categorias:
+
+1. AÇAÍ, CREMES E TIGELAS:
+   - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1590301157890-4810ed352733?w=800&q=80"
+   - NUNCA use fotos de waffle, sorvete no palito ou doces genéricos para açaí.
+
+2. HAMBÚRGUERES, SMASH E LANCHES (X-Tudo, Artesanais, Burgers):
+   - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80"
+   - Use para qualquer hambúrguer ou sanduíche artesanal.
+
+3. HOT DOGS E CACHORROS-QUENTES:
+   - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1619740455993-9e612b1af08a?w=800&q=80"
+
+4. PASTÉIS, BATATAS FRITAS, PORÇÕES E PETISCOS:
+   - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=800&q=80"
+
+5. BEBIDAS (Refrigerantes, Sucos, Cervejas, Água e Energéticos):
+   - URL OBRIGATÓRIA: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=800&q=80"
+
+ATENÇÃO CRÍTICA PARA CARDÁPIOS GRANDES (EX: 35+ PRODUTOS COM ADICIONAIS):
+- Você NÃO PODE resumir, omitir ou cortar produtos. Extraia TODOS os itens de ponta a ponta sem interromper.
+- Em cada produto que possuir opções de adicionais (ex: bacon extra, queijo, calda de chocolate, leite ninho, etc.), liste TODOS no array 'opcionais' com seus respectivos nomes e valores em reais.
+- Nenhum produto pode ficar sem imagem, nome ou preço.
 
 Instruções fundamentais para o logo_svg:
 1. Gere OBRIGATORIAMENTE um SVG COMPLETO, moderno, vetorial, estilo flat design de aplicativo de comida/delivery, com viewBox="0 0 512 512".
@@ -424,6 +459,8 @@ Instruções para categorias e produtos:
         ],
         config: {
           responseMimeType: "application/json",
+          maxOutputTokens: 8192,
+          temperature: 0.1,
         },
       });
 
