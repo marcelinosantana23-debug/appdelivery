@@ -1228,6 +1228,7 @@ export class Database {
         "ALTER TABLE products ADD COLUMN ordem INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN tenant_id TEXT",
         "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+        "ALTER TABLE users ADD COLUMN updated_at INTEGER DEFAULT 0",
         "ALTER TABLE tenants ADD COLUMN business_type TEXT DEFAULT 'Lanchonetes'",
         "ALTER TABLE tenants ADD COLUMN is_featured INTEGER DEFAULT 0",
         "ALTER TABLE tenants ADD COLUMN priority_order INTEGER DEFAULT 0",
@@ -1336,6 +1337,22 @@ export class Database {
           }
         } catch (backfillErr) {
           console.warn("orders/order_items backfill notice:", backfillErr);
+        }
+
+        // 6. Varredura e higienização para garantir estritamente 1 único Super Admin no D1
+        try {
+          const superAdminsRes = await db
+            .prepare("SELECT id FROM users WHERE role = 'super_admin' ORDER BY created_at ASC")
+            .all<{ id: string }>();
+          if (superAdminsRes?.results && superAdminsRes.results.length > 1) {
+            const keepId = superAdminsRes.results[0].id;
+            await db
+              .prepare("DELETE FROM users WHERE role = 'super_admin' AND id != ?")
+              .bind(keepId)
+              .run();
+          }
+        } catch (sweepErr) {
+          console.warn("D1 super admin cleanup sweep warning:", sweepErr);
         }
       } catch (e) {
         console.warn("D1 seed initial check warning:", e);
@@ -2832,77 +2849,150 @@ export class Database {
     email: string,
     password: string
   ): Promise<User | null> {
+    await this.ensureTables();
+
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
     const hashedPassword = await hashPassword(cleanPassword);
+    const now = Date.now();
 
     // 1. Cloudflare D1 integration via env.DB com hash seguro PBKDF2
     if (this.env?.DB) {
       try {
-        let query = "UPDATE users SET email = ?, password = ? WHERE role = 'super_admin'";
-        const binds: unknown[] = [cleanEmail, hashedPassword];
+        // Localiza os registros existentes com role 'super_admin'
+        const existingSuperAdmins = await this.env.DB.prepare(
+          "SELECT * FROM users WHERE role = 'super_admin' ORDER BY created_at ASC"
+        ).all<any>();
 
-        if (userId) {
-          query += " AND id = ?";
-          binds.push(userId);
+        let targetId = "user-superadmin";
+
+        if (existingSuperAdmins?.results && existingSuperAdmins.results.length > 0) {
+          // Se foi passado userId e ele existe na lista, prioriza ele; senão usa o primeiro super_admin
+          const matched = userId
+            ? existingSuperAdmins.results.find((r) => r.id === userId)
+            : null;
+          targetId = matched ? matched.id : existingSuperAdmins.results[0].id;
+
+          // 1. ATUALIZAÇÃO ESTRITA (UPDATE): Atualiza o registro já existente no banco de dados D1
+          await this.env.DB.prepare(
+            `UPDATE users 
+             SET email = ?, password = ?, name = COALESCE(name, 'Diretor da Plataforma'), status = 'active', updated_at = ? 
+             WHERE id = ?`
+          )
+            .bind(cleanEmail, hashedPassword, now, targetId)
+            .run();
+        } else {
+          // Se não houver nenhum super_admin cadastrado, tenta atualizar por ID conhecido ou e-mail
+          const existingAny = await this.env.DB.prepare(
+            "SELECT id FROM users WHERE id = ? OR LOWER(email) = ? LIMIT 1"
+          )
+            .bind(userId || "user-superadmin", cleanEmail)
+            .first<any>();
+
+          if (existingAny) {
+            targetId = existingAny.id;
+            await this.env.DB.prepare(
+              `UPDATE users 
+               SET email = ?, password = ?, role = 'super_admin', status = 'active', updated_at = ? 
+               WHERE id = ?`
+            )
+              .bind(cleanEmail, hashedPassword, now, targetId)
+              .run();
+          } else {
+            // Caso excepcional de banco 100% zerado
+            targetId = userId || "user-superadmin";
+            await this.env.DB.prepare(
+              `INSERT INTO users (id, email, password, name, role, tenant_id, status, created_at, updated_at) 
+               VALUES (?, ?, ?, 'Diretor da Plataforma', 'super_admin', NULL, 'active', ?, ?)`
+            )
+              .bind(targetId, cleanEmail, hashedPassword, now, now)
+              .run();
+          }
         }
 
-        await this.env.DB.prepare(query).bind(...binds).run();
-
-        // Retrieve the updated user record from D1
-        const row = await this.env.DB.prepare(
-          "SELECT * FROM users WHERE role = 'super_admin' AND LOWER(email) = ? LIMIT 1"
+        // 2. REMOÇÃO DE CREDENCIAIS ANTIGAS / VARREDURA NO D1:
+        // Garante que exista ESTRITAMENTE 1 único registro com role 'super_admin' no D1
+        await this.env.DB.prepare(
+          "DELETE FROM users WHERE role = 'super_admin' AND id != ?"
         )
-          .bind(cleanEmail)
+          .bind(targetId)
+          .run();
+
+        // Evita duplicidade de e-mail de outros registros que pudessem colidir com o novo e-mail
+        await this.env.DB.prepare(
+          "DELETE FROM users WHERE LOWER(email) = ? AND id != ?"
+        )
+          .bind(cleanEmail, targetId)
+          .run();
+
+        // Recupera o registro único e atualizado do D1
+        const updatedRow = await this.env.DB.prepare(
+          "SELECT * FROM users WHERE role = 'super_admin' AND id = ? LIMIT 1"
+        )
+          .bind(targetId)
           .first<any>();
 
-        if (row) {
-          // Keep in-memory store in sync
-          const memoryUser =
-            globalStore.users.find(
-              (u) => u.role === "super_admin" && (userId ? u.id === userId : true)
-            ) || globalStore.users.find((u) => u.role === "super_admin");
+        // Sincroniza store em memória garantindo estritamente 1 único Super Admin
+        globalStore.users = globalStore.users.filter(
+          (u) => u.role !== "super_admin" || u.id === targetId
+        );
 
-          if (memoryUser) {
-            memoryUser.email = cleanEmail;
-            memoryUser.password = hashedPassword;
-          }
+        let memUser = globalStore.users.find((u) => u.id === targetId);
+        if (!memUser) {
+          memUser = {
+            id: targetId,
+            email: cleanEmail,
+            password: hashedPassword,
+            name: updatedRow?.name || "Diretor da Plataforma",
+            role: "super_admin",
+            tenantId: null,
+            status: "active",
+            createdAt: updatedRow?.created_at ? Number(updatedRow.created_at) : now,
+            updatedAt: now,
+          };
+          globalStore.users.push(memUser);
+        } else {
+          memUser.email = cleanEmail;
+          memUser.password = hashedPassword;
+          memUser.role = "super_admin";
+          memUser.updatedAt = now;
+        }
 
-          return this.mapUserRow(row);
+        if (updatedRow) {
+          return this.mapUserRow(updatedRow);
         }
       } catch (e) {
         console.warn("D1 updateSuperAdminCredentials error:", e);
       }
     }
 
-    // 2. Fallback memory store update
-    let user = globalStore.users.find(
-      (u) => u.role === "super_admin" && (userId ? u.id === userId : true)
+    // 2. Fallback memory store update: garante estritamente 1 Super Admin
+    globalStore.users = globalStore.users.filter(
+      (u) => u.role !== "super_admin" || (userId ? u.id === userId : true)
     );
 
-    if (!user) {
-      user = globalStore.users.find((u) => u.role === "super_admin");
-    }
-
-    if (!user) {
-      const newUser: User = {
-        id: userId || "user-superadmin",
-        email: cleanEmail,
-        password: hashedPassword,
-        name: "Diretor da Plataforma",
-        role: "super_admin",
-        tenantId: null,
-        status: "active",
-        createdAt: Date.now(),
-      };
-      globalStore.users.push(newUser);
-      const { password: _, ...safeUser } = newUser;
+    const user = globalStore.users.find((u) => u.role === "super_admin");
+    if (user) {
+      user.email = cleanEmail;
+      user.password = hashedPassword;
+      user.updatedAt = now;
+      const { password: _, ...safeUser } = user;
       return safeUser as User;
     }
 
-    user.email = cleanEmail;
-    user.password = hashedPassword;
-    const { password: _, ...safeUser } = user;
+    const newUser: User = {
+      id: userId || "user-superadmin",
+      email: cleanEmail,
+      password: hashedPassword,
+      name: "Diretor da Plataforma",
+      role: "super_admin",
+      tenantId: null,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    };
+    globalStore.users.push(newUser);
+    const { password: _, ...safeUser } = newUser;
     return safeUser as User;
   }
 
@@ -3921,6 +4011,7 @@ export class Database {
       tenantId: row.tenant_id,
       status: row.status,
       createdAt: Number(row.created_at),
+      updatedAt: row.updated_at ? Number(row.updated_at) : undefined,
     };
   }
 

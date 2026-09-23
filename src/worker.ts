@@ -58,6 +58,7 @@ app.onError((err, c) => {
 
 // 1. Mount all /api routes FIRST
 app.route("/api", api);
+app.route("/", api);
 
 // 2. Health check route specifically
 app.get("/health", (c) => {

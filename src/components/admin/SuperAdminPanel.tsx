@@ -3199,12 +3199,12 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
             </div>
 
             {/* Cloudflare D1 Integration Badge */}
-            <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3 flex items-start gap-2.5 text-xs text-slate-300">
+            <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 flex items-start gap-2.5 text-xs text-slate-300">
               <Database className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-white">Persistência Cloudflare D1 (env.DB):</span>
-                <p className="text-slate-400 mt-0.5">
-                  Os novos dados serão gravados na tabela de usuários via API Hono e serão exigidos imediatamente no próximo login em <code className="text-amber-300 font-mono">/superadmin</code>.
+                <span className="font-semibold text-white">Atualização no Cloudflare D1 (env.DB):</span>
+                <p className="text-slate-300 mt-0.5 leading-relaxed">
+                  O registro existente será atualizado via <strong className="text-amber-300">UPDATE</strong> e registros antigos de Super Admin serão removidos, garantindo estritamente 1 único Super Admin. Ao salvar, sua sessão será <strong className="text-amber-300">invalidada imediatamente</strong> e você será redirecionado para a tela de login.
                 </p>
               </div>
             </div>

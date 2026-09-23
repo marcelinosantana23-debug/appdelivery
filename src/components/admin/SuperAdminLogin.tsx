@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ArrowLeft, Lock, Mail, Eye, EyeOff, Shield, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Lock, Mail, Eye, EyeOff, Shield, AlertCircle, CheckCircle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 
@@ -15,6 +15,24 @@ export function SuperAdminLogin({ onBack, onSuccess }: SuperAdminLoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successNotice, setSuccessNotice] = useState("");
+
+  useEffect(() => {
+    try {
+      const notice = sessionStorage.getItem("superadmin_relogin_notice");
+      if (notice) {
+        setSuccessNotice(notice);
+        sessionStorage.removeItem("superadmin_relogin_notice");
+      }
+      const prefillEmail = sessionStorage.getItem("superadmin_relogin_email");
+      if (prefillEmail) {
+        setEmail(prefillEmail);
+        sessionStorage.removeItem("superadmin_relogin_email");
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +103,16 @@ export function SuperAdminLogin({ onBack, onSuccess }: SuperAdminLoginProps) {
               Autenticação obrigatória para acessar o painel de controle e gerenciamento de todas as lanchonetes.
             </p>
           </div>
+
+          {successNotice && (
+            <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-950/60 p-3.5 text-xs text-emerald-200 animate-fade-in shadow-lg shadow-emerald-950/30">
+              <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+              <div className="leading-relaxed">
+                <span className="font-semibold block text-emerald-300">Sessão invalidada por segurança:</span>
+                {successNotice}
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

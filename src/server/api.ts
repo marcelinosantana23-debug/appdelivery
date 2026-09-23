@@ -123,6 +123,13 @@ export async function authenticateRequestUser(c: any): Promise<any | null> {
   const user = await db.getUserById(userId);
   if (!user || user.status !== "active") return null;
 
+  // Invalidação imediata de tokens emitidos antes da alteração de credenciais
+  if (user.updatedAt) {
+    if (!decoded.userUpdatedAt || decoded.userUpdatedAt < user.updatedAt) {
+      return null;
+    }
+  }
+
   return { ...user, tokenPayload: decoded };
 }
 
@@ -1712,6 +1719,7 @@ api.post("/auth/login", async (c) => {
         role: user.role,
         tenantId: user.tenantId,
         name: user.name,
+        userUpdatedAt: user.updatedAt || 0,
         exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 dias
         iat: Math.floor(Date.now() / 1000),
       },
@@ -1755,6 +1763,20 @@ api.post("/auth/verify", async (c) => {
       return c.json({ success: false, error: "Usuário não encontrado ou sessão expirada." }, 401);
     }
 
+    // Invalidação imediata de tokens emitidos antes da alteração de credenciais
+    if (user.updatedAt) {
+      if (!decoded.userUpdatedAt || decoded.userUpdatedAt < user.updatedAt) {
+        return c.json(
+          {
+            success: false,
+            error: "Sessão invalidada após alteração de credenciais. Faça login novamente.",
+            sessionInvalidated: true,
+          },
+          401
+        );
+      }
+    }
+
     let tenant = null;
     if (user.role === "tenant_admin" && user.tenantId) {
       tenant = await db.getTenantByIdOrSlug(user.tenantId);
@@ -1769,7 +1791,7 @@ api.post("/auth/verify", async (c) => {
   }
 });
 
-api.put("/superadmin/credentials", async (c) => {
+export async function handleUpdateSuperAdminCredentials(c: any) {
   try {
     const body = await c.req.json();
     const { email, password, userId } = body;
@@ -1806,18 +1828,28 @@ api.put("/superadmin/credentials", async (c) => {
       return c.json({ success: false, error: "Usuário Super Admin não encontrado." }, 404);
     }
 
-    return c.json({
-      success: true,
-      message: "Credenciais do Super Admin atualizadas com sucesso!",
-      user: updatedUser,
-    }, 200);
+    return c.json(
+      {
+        success: true,
+        message:
+          "Credenciais do Super Admin atualizadas com sucesso! Sua sessão foi invalidada por segurança. Faça login novamente.",
+        user: updatedUser,
+        sessionInvalidated: true,
+      },
+      200
+    );
   } catch (e: any) {
     return c.json(
-      { success: false, error: e.message || "Erro ao atualizar credenciais do Super Admin." },
+      { success: false, error: sanitizeErrorMessage(e) },
       500
     );
   }
-});
+}
+
+api.put("/superadmin/credentials", handleUpdateSuperAdminCredentials);
+api.put("/super-admin/credentials", handleUpdateSuperAdminCredentials);
+api.put("/api/superadmin/credentials", handleUpdateSuperAdminCredentials);
+api.put("/api/super-admin/credentials", handleUpdateSuperAdminCredentials);
 
 api.get("/platform/stats", async (c) => {
   const db = getDb(c);
@@ -3350,32 +3382,7 @@ api.get("/api/super-admin/credentials/tenants", async (c) => {
   }
 });
 
-api.put("/api/super-admin/credentials", async (c) => {
-  try {
-    const body = await c.req.json();
-    const { email, password, userId } = body;
-    if (!email || !password) {
-      return c.json({ success: false, error: "E-mail e senha são obrigatórios." }, 400);
-    }
-    const cleanEmail = String(email).trim().toLowerCase();
-    const cleanPassword = String(password).trim();
-    if (cleanPassword.length < 4) {
-      return c.json({ success: false, error: "A senha deve possuir no mínimo 4 caracteres." }, 400);
-    }
-    const db = getDb(c);
-    const updatedUser = await db.updateSuperAdminCredentials(userId, cleanEmail, cleanPassword);
-    if (!updatedUser) {
-      return c.json({ success: false, error: "Usuário Super Admin não encontrado." }, 404);
-    }
-    return c.json({
-      success: true,
-      message: "Credenciais do Super Admin atualizadas com sucesso!",
-      user: updatedUser,
-    }, 200);
-  } catch (err: any) {
-    return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);
-  }
-});
+api.put("/api/super-admin/credentials", handleUpdateSuperAdminCredentials);
 
 api.put("/api/super-admin/tenants/:slugOrId/credentials", async (c) => {
   try {

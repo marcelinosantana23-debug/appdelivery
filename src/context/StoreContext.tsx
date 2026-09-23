@@ -1030,24 +1030,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateSuperAdminCredentials = useCallback(
     async (email: string, password: string): Promise<{ success: boolean; error?: string; message?: string }> => {
+      const cleanEmail = email.trim().toLowerCase();
       const res = await updateSuperAdminCredentialsApi({
-        email,
+        email: cleanEmail,
         password,
         userId: currentUser?.id,
       });
 
-      if (res.success && res.user) {
-        setCurrentUser(res.user);
+      if (res.success) {
+        // INVALIDAÇÃO IMEDIATA DE SESSÃO:
+        // Define aviso e pré-preenchimento de e-mail para a tela de login
         try {
-          sessionStorage.setItem("topfood_admin_session", JSON.stringify(res.user));
+          sessionStorage.setItem(
+            "superadmin_relogin_notice",
+            "Credenciais atualizadas com sucesso! Sua sessão foi invalidada por segurança. Entre com seu novo e-mail e senha para validar o acesso."
+          );
+          sessionStorage.setItem("superadmin_relogin_email", cleanEmail);
         } catch (e) {
-          console.warn("Could not save updated session to sessionStorage", e);
+          console.warn("Could not save relogin notice to sessionStorage", e);
         }
-        return { success: true, message: res.message };
+
+        // Invalida e limpa imediatamente a sessão local (tokens, storages e currentUser)
+        logout();
+
+        return {
+          success: true,
+          message:
+            res.message ||
+            "Credenciais atualizadas com sucesso! Sua sessão foi invalidada por segurança. Faça login novamente.",
+        };
       }
       return { success: false, error: res.error || "Erro ao atualizar credenciais" };
     },
-    [currentUser?.id]
+    [currentUser?.id, logout]
   );
 
   const updateTenantCredentials = useCallback(

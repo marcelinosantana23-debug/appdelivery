@@ -83,6 +83,7 @@ export interface User {
   tenantId?: string | null;
   status: "active" | "inactive";
   createdAt: number;
+  updatedAt?: number;
 }
 
 export interface ProductOption {
