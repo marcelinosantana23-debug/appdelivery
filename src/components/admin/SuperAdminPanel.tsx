@@ -1923,35 +1923,31 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       isExpanded ? "max-h-[3500px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
                     }`}
                   >
-                    <div className="p-3.5 sm:p-5 min-w-0">
-                      {/* Controle de Status Operacional da Loja (Visibilidade na Vitrine) */}
-                      <div className="mb-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-950/80 p-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="px-3 py-2.5 sm:px-4 sm:py-3 min-w-0 space-y-2">
+                      {/* 1. Status Operacional Compacto em Barra Horizontal Única */}
+                      <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
                           <span
-                            className={`h-3 w-3 rounded-full shrink-0 ${
+                            className={`h-2.5 w-2.5 rounded-full shrink-0 ${
                               isActive
-                                ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]"
-                                : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                                ? "bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.6)]"
+                                : "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]"
                             }`}
                           />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-white">Status Operacional:</span>
-                              <span
-                                className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${
-                                  isActive
-                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
-                                    : "bg-red-500/15 text-red-300 border-red-500/40"
-                                }`}
-                              >
-                                {isActive ? "LOJA ATIVA (ONLINE)" : "LOJA PAUSADA (OFFLINE)"}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                              {isActive
-                                ? "Visível na vitrine pública. Clientes podem fazer pedidos normalmente."
-                                : "Loja oculta na vitrine pública. Clientes não conseguem enviar novos pedidos."}
-                            </p>
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            <span className="text-[11px] font-bold text-white">Status:</span>
+                            <span
+                              className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded border whitespace-nowrap ${
+                                isActive
+                                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                                  : "bg-red-500/15 text-red-300 border-red-500/40"
+                              }`}
+                            >
+                              {isActive ? "LOJA ATIVA (ONLINE)" : "LOJA PAUSADA (OFFLINE)"}
+                            </span>
+                            <span className="hidden md:inline text-[11px] text-slate-400">
+                              • {isActive ? "Visível na vitrine pública" : "Oculta para clientes"}
+                            </span>
                           </div>
                         </div>
 
@@ -1959,7 +1955,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           type="button"
                           onClick={() => handleStatusToggle(t)}
                           disabled={togglingStatusTenantId === t.id}
-                          className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition shadow-sm shrink-0 active:scale-[0.98] ${
+                          className={`inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition shadow-xs shrink-0 active:scale-[0.98] ${
                             isActive
                               ? "bg-red-500/15 hover:bg-red-500/25 text-red-300 border-red-500/40"
                               : "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40"
@@ -1967,15 +1963,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           title={isActive ? "Pausar loja e ocultar da vitrine" : "Ativar loja e exibir na vitrine"}
                         >
                           {togglingStatusTenantId === t.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <Loader2 className="h-3 w-3 animate-spin" />
                           ) : isActive ? (
                             <>
-                              <span className="h-2 w-2 rounded-full bg-red-400" />
+                              <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
                               <span>Pausar Loja</span>
                             </>
                           ) : (
                             <>
-                              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                               <span>Ativar Loja</span>
                             </>
                           )}
@@ -1983,242 +1979,214 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       </div>
 
                       {t.tagline && (
-                        <p className="text-xs text-slate-400 line-clamp-1 mb-3">{t.tagline}</p>
+                        <p className="text-[11px] text-slate-400 line-clamp-1 px-0.5">{t.tagline}</p>
                       )}
 
-                      {/* Meta info */}
-                      <div className="space-y-1.5 border-t border-slate-800/80 pt-3 text-xs text-slate-300">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-500 shrink-0">E-mail de Contato:</span>
-                        <span className="font-medium text-slate-200 truncate" title={t.email}>{t.email}</span>
+                      {/* 2. Informações de Contato & Stats em Grid Compacta */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 text-[11px] rounded-lg border border-slate-800/80 bg-slate-950/50 p-2 text-slate-300">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="text-slate-500 shrink-0">E-mail:</span>
+                          <span className="font-medium text-slate-200 truncate" title={t.email}>{t.email}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="text-slate-500 shrink-0">WhatsApp:</span>
+                          <span className="font-medium text-slate-200 truncate">{t.whatsapp}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="text-slate-500 shrink-0">PIX:</span>
+                          <span className="font-medium text-slate-200 truncate" title={t.pixKey}>{t.pixKey || "Não cadastrada"}</span>
+                        </div>
+                        <div className="flex items-center justify-between sm:justify-end gap-3 text-[11px] pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+                          <span className="text-slate-400">Cardápio: <strong className="text-white font-bold">{t.productCount ?? 0}</strong></span>
+                          <span className="text-slate-400">Pedidos: <strong className="text-amber-400 font-bold">{t.orderCount ?? 0}</strong></span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-500 shrink-0">WhatsApp de Pedidos:</span>
-                        <span className="font-medium text-slate-200 truncate">{t.whatsapp}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-500 shrink-0">Chave PIX:</span>
-                        <span className="font-medium text-slate-200 truncate max-w-[170px]" title={t.pixKey}>
-                          {t.pixKey}
-                        </span>
-                      </div>
-                    </div>
 
-                    {/* Mensalidade & Faturamento Recorrente */}
-                    <div className="mt-3.5 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
-                          <CreditCard className="h-3.5 w-3.5 text-amber-400" />
-                          <span>Plano & Mensalidade</span>
-                        </span>
+                      {/* 3. Mensalidade & Faturamento Recorrente Compacto */}
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2 sm:p-2.5">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+                            <CreditCard className="h-3 w-3 text-amber-400" />
+                            <span>Plano & Mensalidade</span>
+                          </span>
 
-                        {editingFeeTenantId === t.id ? (
-                          <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-amber-500/50">
-                            <span className="text-[11px] font-bold text-amber-400">R$</span>
-                            <input
-                              type="number"
-                              step="0.10"
-                              min="0"
-                              autoFocus
-                              value={editingFeeValue}
-                              onChange={(e) => setEditingFeeValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  handleSaveMonthlyFee(t.id);
-                                } else if (e.key === "Escape") {
-                                  setEditingFeeTenantId(null);
-                                }
-                              }}
-                              className="w-16 px-1 py-0.5 text-xs font-mono font-bold bg-slate-950 border border-slate-700 rounded text-white focus:outline-none focus:border-amber-400"
-                              title="Pressione Enter para salvar no D1 ou Esc para cancelar"
-                            />
+                          {editingFeeTenantId === t.id ? (
+                            <div className="flex items-center gap-1 bg-slate-900 px-1.5 py-0.5 rounded border border-amber-500/50">
+                              <span className="text-[10px] font-bold text-amber-400">R$</span>
+                              <input
+                                type="number"
+                                step="0.10"
+                                min="0"
+                                autoFocus
+                                value={editingFeeValue}
+                                onChange={(e) => setEditingFeeValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleSaveMonthlyFee(t.id);
+                                  } else if (e.key === "Escape") {
+                                    setEditingFeeTenantId(null);
+                                  }
+                                }}
+                                className="w-14 px-1 py-0.5 text-[11px] font-mono font-bold bg-slate-950 border border-slate-700 rounded text-white focus:outline-none focus:border-amber-400"
+                                title="Pressione Enter para salvar no D1 ou Esc para cancelar"
+                              />
+                              <button
+                                type="button"
+                                disabled={isSavingFee}
+                                onClick={() => handleSaveMonthlyFee(t.id)}
+                                className="p-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-50"
+                                title="Salvar valor no banco D1"
+                              >
+                                {isSavingFee ? (
+                                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                ) : (
+                                  <Check className="h-2.5 w-2.5" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSavingFee}
+                                onClick={() => setEditingFeeTenantId(null)}
+                                className="p-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                                title="Cancelar edição"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[11px] font-mono font-bold text-slate-300 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
+                                {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditFee(t)}
+                                className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 transition"
+                                title="Editar valor da mensalidade"
+                              >
+                                <Pencil className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Feedback de Assinatura */}
+                        {subscriptionFeedback?.id === t.id && (
+                          <div
+                            className={`mb-1.5 p-1.5 rounded text-[11px] font-semibold flex items-center gap-1.5 border transition-all ${
+                              subscriptionFeedback.type === "success"
+                                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                                : "bg-red-500/15 border-red-500/30 text-red-300"
+                            }`}
+                          >
+                            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />
+                            <span className="leading-tight">{subscriptionFeedback.message}</span>
+                          </div>
+                        )}
+
+                        {subInfo.status === "demo" || (subInfo.status as string) === "cancelled" ? (
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 w-full sm:w-auto">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                              <span className="text-amber-300 font-semibold truncate">
+                                {(subInfo.status as string) === "cancelled"
+                                  ? "Assinatura Cancelada"
+                                  : "Modo Demonstração (Aguardando Ativação)"}
+                              </span>
+                            </div>
                             <button
                               type="button"
-                              disabled={isSavingFee}
-                              onClick={() => handleSaveMonthlyFee(t.id)}
-                              className="p-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-50"
-                              title="Salvar valor no banco D1"
+                              onClick={() => handleActivateSubscription(t)}
+                              disabled={activatingTenantId === t.id}
+                              className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 text-[11px] font-bold transition shadow-xs disabled:opacity-50 active:scale-[0.98] whitespace-nowrap"
                             >
-                              {isSavingFee ? (
+                              {activatingTenantId === t.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                <Check className="h-3 w-3" />
+                                <CreditCard className="h-3 w-3" />
                               )}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isSavingFee}
-                              onClick={() => setEditingFeeTenantId(null)}
-                              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-                              title="Cancelar edição"
-                            >
-                              <X className="h-3 w-3" />
+                              <span>Ativar Mensalidade (Capturar Dia {new Date().getDate()})</span>
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] font-mono font-bold text-slate-300 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md">
-                              {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditFee(t)}
-                              className="p-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 transition"
-                              title="Editar valor da mensalidade"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] rounded p-1.5 border bg-emerald-500/10 border-emerald-500/20">
+                              <div className="flex items-center gap-1.5 text-emerald-300 min-w-0">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                <span className="truncate">
+                                  Mensalidade Ativa • Vence em <strong className="text-white font-bold">{subInfo.dueDateFormatted}</strong> ({subInfo.isOverdue
+                                    ? `Vencida há ${Math.abs(subInfo.daysRemaining || 0)}d`
+                                    : subInfo.isDueToday
+                                    ? "Vence Hoje!"
+                                    : `Faltam ${subInfo.daysRemaining}d`})
+                                </span>
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.2 rounded border whitespace-nowrap self-start sm:self-auto ${
+                                  subInfo.isOverdue
+                                    ? "bg-red-500/20 text-red-300 border-red-500/40"
+                                    : subInfo.isDueToday
+                                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse"
+                                    : subInfo.isDueSoon
+                                    ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                    : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                }`}
+                              >
+                                Ciclo: Dia {subInfo.billingDay}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmMonthlyPayment(t)}
+                                disabled={confirmingPaymentTenantId === t.id}
+                                className="flex-1 w-full flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 py-1 px-2 text-[11px] font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-xs"
+                                title={`Confirmar pagamento recebido via Pix e renovar +1 mês (mantém vencimento todo dia ${subInfo.billingDay})`}
+                              >
+                                {confirmingPaymentTenantId === t.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
+                                ) : (
+                                  <CheckCheck className="h-3 w-3 text-emerald-400" />
+                                )}
+                                <span>Confirmar Pagamento / Renovar (+1 Mês)</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelSubscription(t)}
+                                disabled={cancellingSubscriptionTenantId === t.id}
+                                className="w-full sm:w-auto flex items-center justify-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-xs whitespace-nowrap"
+                                title="Cancelar assinatura da loja e retornar ao Modo Demonstração"
+                              >
+                                {cancellingSubscriptionTenantId === t.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin text-rose-400" />
+                                ) : (
+                                  <Ban className="h-3 w-3 text-rose-400" />
+                                )}
+                                <span>Cancelar Assinatura</span>
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Feedback de Assinatura específico deste card */}
-                      {subscriptionFeedback?.id === t.id && (
-                        <div
-                          className={`mb-2 p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-                            subscriptionFeedback.type === "success"
-                              ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
-                              : "bg-red-500/15 border-red-500/30 text-red-300"
-                          }`}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                          <span className="leading-tight">{subscriptionFeedback.message}</span>
-                        </div>
-                      )}
-
-                      {subInfo.status === "demo" || (subInfo.status as string) === "cancelled" ? (
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
-                            <span className="text-amber-300 font-semibold flex items-center gap-1.5 text-[11px]">
-                              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                              {(subInfo.status as string) === "cancelled"
-                                ? "Assinatura Cancelada / Modo Demonstração"
-                                : "Modo Demonstração / Aguardando Ativação"}
-                            </span>
-                            <span className="text-[10px] text-amber-400/80 font-mono">
-                              {(subInfo.status as string) === "cancelled" ? "Cancelada" : "Aguardando Ativação"}
+                      {/* 4. Links da Loja em Linhas Compactas e Elegantes */}
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/80 p-2 space-y-1.5">
+                        {/* a) Linha Compacta: Vitrine Pública */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 rounded-md border border-slate-800/90 bg-slate-900/70 px-2 py-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Store className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                            <span className="text-[11px] font-bold text-amber-300 shrink-0">Vitrine Pública:</span>
+                            <span className="font-mono text-[11px] text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 truncate" title={`${origin}/loja/${t.slug}`}>
+                              /loja/{t.slug}
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleActivateSubscription(t)}
-                            disabled={activatingTenantId === t.id}
-                            className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white py-2 text-xs font-bold transition shadow-md shadow-emerald-900/30 disabled:opacity-50 active:scale-[0.98]"
-                          >
-                            {activatingTenantId === t.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <CreditCard className="h-3.5 w-3.5" />
-                            )}
-                            <span>Ativar Mensalidade (Capturar Dia {new Date().getDate()})</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs rounded-lg p-2.5 border bg-emerald-500/10 border-emerald-500/20">
-                            <div className="flex items-center gap-1.5 text-emerald-300 min-w-0">
-                              <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-                              <span className="text-xs font-semibold">
-                                Mensalidade Ativa • Vence em <strong className="text-white font-bold">{subInfo.dueDateFormatted}</strong> ({subInfo.isOverdue
-                                  ? `Vencida há ${Math.abs(subInfo.daysRemaining || 0)} dias`
-                                  : subInfo.isDueToday
-                                  ? "Vence Hoje!"
-                                  : `Faltam ${subInfo.daysRemaining} dias`})
-                              </span>
-                            </div>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap self-start sm:self-auto ${
-                                subInfo.isOverdue
-                                  ? "bg-red-500/20 text-red-300 border-red-500/40"
-                                  : subInfo.isDueToday
-                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse"
-                                  : subInfo.isDueSoon
-                                  ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                                  : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                              }`}
-                            >
-                              {subInfo.isOverdue
-                                ? `Vencida (${Math.abs(subInfo.daysRemaining || 0)}d)`
-                                : subInfo.isDueToday
-                                ? "Vence Hoje!"
-                                : `Faltam ${subInfo.daysRemaining} dias`}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-                            <span>Ciclo: Todo dia <strong className="text-slate-300">{subInfo.billingDay}</strong></span>
-                            <span>Valor: <strong className="text-slate-300">R$ {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                          </div>
-
-                          <div className="flex flex-col sm:flex-row items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleConfirmMonthlyPayment(t)}
-                              disabled={confirmingPaymentTenantId === t.id}
-                              className="flex-1 w-full flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 py-2 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-sm"
-                              title={`Confirmar pagamento recebido via Pix e renovar +1 mês (mantém vencimento todo dia ${subInfo.billingDay})`}
-                            >
-                              {confirmingPaymentTenantId === t.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                              ) : (
-                                <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
-                              )}
-                              <span>Confirmar Pagamento / Renovar (+1 Mês)</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleCancelSubscription(t)}
-                              disabled={cancellingSubscriptionTenantId === t.id}
-                              className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 px-3 py-2 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-sm whitespace-nowrap"
-                              title="Cancelar assinatura da loja e retornar ao Modo Demonstração"
-                            >
-                              {cancellingSubscriptionTenantId === t.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-400" />
-                              ) : (
-                                <Ban className="h-3.5 w-3.5 text-rose-400" />
-                              )}
-                              <span>Cancelar Assinatura</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stats pills */}
-                    <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-950/60 p-2.5 text-center text-xs">
-                      <div>
-                        <span className="block text-slate-500 font-medium">Itens Cardápio</span>
-                        <span className="font-bold text-white text-sm">{t.productCount ?? 0}</span>
-                      </div>
-                      <div>
-                        <span className="block text-slate-500 font-medium">Total Pedidos</span>
-                        <span className="font-bold text-amber-400 text-sm">{t.orderCount ?? 0}</span>
-                      </div>
-                    </div>
-
-                    {/* Links Exclusivos e Isolados da Loja (Multi-tenant) */}
-                    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/80 p-2.5 sm:p-3 space-y-3">
-                      {/* a) Vitrine Pública do Cliente */}
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
-                          <span className="flex items-center gap-1.5 text-amber-300 font-bold">
-                            <Store className="h-3.5 w-3.5" /> Vitrine Pública (Cliente)
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono">/loja/{t.slug}</span>
-                        </div>
-                        <div className="flex flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-1.5">
-                          <div
-                            className="w-full sm:w-auto flex-1 rounded-lg border border-slate-800/90 bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-slate-300 select-all break-all [overflow-wrap:anywhere]"
-                            title={`${origin}/loja/${t.slug}`}
-                          >
-                            {origin}/loja/{t.slug}
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+                          <div className="flex items-center gap-1 shrink-0 justify-end">
                             <button
                               type="button"
                               onClick={() => copyToClipboard(`${origin}/loja/${t.slug}`, `${t.slug}-public`)}
-                              className={`flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold transition ${
                                 copiedKey === `${t.slug}-public`
                                   ? "bg-emerald-500 text-white"
                                   : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
@@ -2227,12 +2195,12 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                             >
                               {copiedKey === `${t.slug}-public` ? (
                                 <>
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                                  <CheckCircle2 className="h-3 w-3 text-white shrink-0" />
                                   <span>Copiado!</span>
                                 </>
                               ) : (
                                 <>
-                                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                                  <Copy className="h-3 w-3 shrink-0" />
                                   <span>Copiar Link</span>
                                 </>
                               )}
@@ -2246,36 +2214,29 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                   window.open(`/loja/${t.slug}`, "_blank");
                                 }
                               }}
-                              className="flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
+                              className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/20 px-2 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/30 transition"
                               title="Abrir Vitrine Pública da Lanchonete"
                             >
-                              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                              <ExternalLink className="h-3 w-3 shrink-0" />
                               <span>Abrir Loja</span>
                             </button>
                           </div>
                         </div>
-                      </div>
 
-                      {/* b) Link de Acesso ao Painel Admin da Loja */}
-                      <div className="border-t border-slate-800/80 pt-2.5">
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
-                          <span className="flex items-center gap-1.5 text-sky-400 font-bold">
-                            <Settings className="h-3.5 w-3.5" /> Painel Admin da Loja
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono">/admin?tenant={t.slug}</span>
-                        </div>
-                        <div className="flex flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-1.5">
-                          <div
-                            className="w-full sm:w-auto flex-1 rounded-lg border border-slate-800/90 bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-slate-300 select-all break-all [overflow-wrap:anywhere]"
-                            title={`${origin}/admin?tenant=${t.slug}`}
-                          >
-                            {origin}/admin?tenant={t.slug}
+                        {/* b) Linha Compacta: Painel Admin */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 rounded-md border border-slate-800/90 bg-slate-900/70 px-2 py-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Settings className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+                            <span className="text-[11px] font-bold text-sky-300 shrink-0">Painel Admin:</span>
+                            <span className="font-mono text-[11px] text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 truncate" title={`${origin}/admin?tenant=${t.slug}`}>
+                              /admin?tenant={t.slug}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+                          <div className="flex items-center gap-1 shrink-0 justify-end">
                             <button
                               type="button"
                               onClick={() => copyToClipboard(`${origin}/admin?tenant=${t.slug}`, `${t.slug}-admin`)}
-                              className={`flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold transition ${
                                 copiedKey === `${t.slug}-admin`
                                   ? "bg-emerald-500 text-white"
                                   : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
@@ -2284,12 +2245,12 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                             >
                               {copiedKey === `${t.slug}-admin` ? (
                                 <>
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                                  <CheckCircle2 className="h-3 w-3 text-white shrink-0" />
                                   <span>Copiado!</span>
                                 </>
                               ) : (
                                 <>
-                                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                                  <Copy className="h-3 w-3 shrink-0" />
                                   <span>Copiar Link</span>
                                 </>
                               )}
@@ -2297,168 +2258,154 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                             <button
                               type="button"
                               onClick={() => onManageStore(t)}
-                              className="flex flex-1 sm:flex-none items-center justify-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/20 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/30 transition"
+                              className="inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/30 transition"
                               title="Acessar Painel de Administração desta Loja"
                             >
-                              <Settings className="h-3.5 w-3.5 shrink-0" />
+                              <Settings className="h-3 w-3 shrink-0" />
                               <span>Gerenciar</span>
                             </button>
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* c) Credenciais de Acesso do Lojista (Login & Senha) */}
-                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 sm:p-3 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
-                          <Key className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                          <span>Acesso do Lojista (Login & Senha)</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => openTenantCredentialsModal(t)}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 hover:text-amber-200 underline transition shrink-0"
-                          title="Alterar e-mail e senha no banco de dados"
-                        >
-                          <span>Alterar</span>
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        {/* Login */}
-                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5 min-w-0">
-                          <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                            Login (E-mail):
+                      {/* 5. Credenciais de Acesso do Lojista (Login & Senha) Compacto */}
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+                            <Key className="h-3 w-3 text-amber-400 shrink-0" />
+                            <span>Acesso do Lojista (Login & Senha)</span>
                           </span>
-                          <div className="flex items-center justify-between gap-1 mt-0.5">
-                            <span className="font-mono text-slate-200 text-xs select-all break-all [overflow-wrap:anywhere]" title={adminLogin}>
-                              {adminLogin}
-                            </span>
+                          <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => copyToClipboard(adminLogin, `${t.slug}-login`)}
-                              className="shrink-0 p-1 text-slate-400 hover:text-white transition"
-                              title="Copiar login do lojista"
+                              onClick={() => copyMerchantWhatsAppAccess(t, adminLogin, adminPass)}
+                              className="flex items-center gap-1 text-[10px] font-semibold text-emerald-300 hover:text-emerald-200 transition"
+                              title="Copiar mensagem formatada com login e senha para enviar ao lojista"
                             >
-                              {copiedKey === `${t.slug}-login` ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                              ) : (
-                                <Copy className="h-3.5 w-3.5" />
-                              )}
+                              <Copy className="h-3 w-3" />
+                              <span>{copiedKey === `${t.slug}-whatsapp-full` ? "WhatsApp Copiado!" : "Copiar WhatsApp"}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openTenantCredentialsModal(t)}
+                              className="text-[10px] font-semibold text-amber-300 hover:text-amber-200 underline transition shrink-0"
+                              title="Alterar e-mail e senha no banco de dados"
+                            >
+                              <span>Alterar</span>
                             </button>
                           </div>
                         </div>
 
-                        {/* Senha */}
-                        <div className="rounded-lg border border-slate-800 bg-slate-900/90 px-2.5 py-1.5 min-w-0">
-                          <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                            Senha Atual:
-                          </span>
-                          <div className="flex items-center justify-between gap-1 mt-0.5">
-                            <span className="font-mono font-medium text-amber-300 text-xs select-all break-all [overflow-wrap:anywhere]">
-                              {isPassVisible ? adminPass : "••••••••"}
-                            </span>
-                            <div className="flex items-center gap-1 shrink-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                          {/* Login */}
+                          <div className="flex items-center justify-between gap-1 rounded border border-slate-800 bg-slate-900/90 px-2 py-1 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0">Login:</span>
+                              <span className="font-mono text-slate-200 text-[11px] truncate select-all" title={adminLogin}>
+                                {adminLogin}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(adminLogin, `${t.slug}-login`)}
+                              className="shrink-0 p-0.5 text-slate-400 hover:text-white transition"
+                              title="Copiar login do lojista"
+                            >
+                              {copiedKey === `${t.slug}-login` ? (
+                                <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Senha */}
+                          <div className="flex items-center justify-between gap-1 rounded border border-slate-800 bg-slate-900/90 px-2 py-1 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0">Senha:</span>
+                              <span className="font-mono font-medium text-amber-300 text-[11px] truncate select-all">
+                                {isPassVisible ? adminPass : "••••••••"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-0.5 shrink-0">
                               <button
                                 type="button"
                                 onClick={() => toggleCardPasswordVisibility(t.id)}
-                                className="p-1 text-slate-400 hover:text-slate-200 transition"
+                                className="p-0.5 text-slate-400 hover:text-slate-200 transition"
                                 title={isPassVisible ? "Ocultar senha" : "Ver senha em texto claro"}
                               >
                                 {isPassVisible ? (
-                                  <EyeOff className="h-3.5 w-3.5" />
+                                  <EyeOff className="h-3 w-3" />
                                 ) : (
-                                  <Eye className="h-3.5 w-3.5" />
+                                  <Eye className="h-3 w-3" />
                                 )}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => copyToClipboard(adminPass, `${t.slug}-pass`)}
-                                className="p-1 text-slate-400 hover:text-white transition"
+                                className="p-0.5 text-slate-400 hover:text-white transition"
                                 title="Copiar senha do lojista"
                               >
                                 {copiedKey === `${t.slug}-pass` ? (
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-400" />
                                 ) : (
-                                  <Copy className="h-3.5 w-3.5" />
+                                  <Copy className="h-3 w-3" />
                                 )}
                               </button>
                             </div>
                           </div>
                         </div>
                       </div>
-
-                      {/* Botão de Envio de Acesso WhatsApp */}
-                      <button
-                        type="button"
-                        onClick={() => copyMerchantWhatsAppAccess(t, adminLogin, adminPass)}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 py-1.5 px-2 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20 transition"
-                        title="Copiar mensagem formatada com login e senha para enviar ao lojista"
-                      >
-                        {copiedKey === `${t.slug}-whatsapp-full` ? (
-                          <>
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                            <span>Mensagem de Acesso Copiada!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3.5 w-3.5" />
-                            <span>Copiar Acesso Formatado (WhatsApp)</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Actions Footer */}
-                  <div className="border-t border-slate-800/80 bg-slate-950/40 p-2.5 sm:p-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 w-full sm:w-auto">
-                      <button
-                        onClick={() => onManageStore(t)}
-                        className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 rounded-xl bg-amber-500/15 py-2 px-2.5 sm:px-3 text-xs font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
-                      >
-                        <Settings className="h-3.5 w-3.5 shrink-0" />
-                        <span>Gerenciar Loja</span>
-                      </button>
-
-                      <button
-                        onClick={() => openTenantCredentialsModal(t)}
-                        className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 py-2 px-2.5 sm:px-3 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/30"
-                        title="Alterar Login e Senha do Lojista no Banco de Dados"
-                      >
-                        <Key className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span>Alterar Login / Senha</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleOpenStoreConfig(t)}
-                        className="w-full sm:w-auto justify-center flex items-center gap-1.5 rounded-xl bg-slate-800/90 border border-slate-700 py-2 px-2.5 sm:px-3 text-xs font-semibold text-slate-200 transition hover:bg-slate-750 hover:text-white"
-                        title="Configurações da Loja e Foto/Banner da Vitrine"
-                      >
-                        <ImageIcon className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span>Configurações & Banner</span>
-                      </button>
-
-                      <button
-                        onClick={() => setSelectedTenantForQrCode(t)}
-                        className="w-full sm:w-auto justify-center flex items-center gap-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 py-2 px-2.5 sm:px-3 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25"
-                        title="Gerar QR Code & Placa de Divulgação (Mesa e Balcão)"
-                      >
-                        <QrCode className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span>QR Code & Placa</span>
-                      </button>
                     </div>
 
-                    <button
-                      onClick={() => handleDelete(t)}
-                      title="Excluir Lanchonete"
-                      className="w-full sm:w-auto justify-center flex items-center gap-1 rounded-xl border border-red-900/30 bg-red-950/20 px-3 py-2 text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 transition"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                      <span>Excluir</span>
-                    </button>
-                  </div>
+                    {/* Actions Footer Compacto */}
+                    <div className="border-t border-slate-800/80 bg-slate-950/40 px-3 py-2 flex flex-wrap items-center justify-between gap-1.5">
+                      <div className="flex items-center flex-wrap gap-1.5 w-full sm:w-auto">
+                        <button
+                          onClick={() => onManageStore(t)}
+                          className="flex-1 sm:flex-none justify-center flex items-center gap-1 rounded-lg bg-amber-500/15 py-1.5 px-2.5 text-[11px] font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
+                        >
+                          <Settings className="h-3 w-3 shrink-0" />
+                          <span>Gerenciar Loja</span>
+                        </button>
+
+                        <button
+                          onClick={() => openTenantCredentialsModal(t)}
+                          className="flex-1 sm:flex-none justify-center flex items-center gap-1 rounded-lg bg-amber-500/20 border border-amber-500/40 py-1.5 px-2.5 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/30"
+                          title="Alterar Login e Senha do Lojista no Banco de Dados"
+                        >
+                          <Key className="h-3 w-3 text-amber-400 shrink-0" />
+                          <span>Alterar Login / Senha</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenStoreConfig(t)}
+                          className="w-full sm:w-auto justify-center flex items-center gap-1 rounded-lg bg-slate-800/90 border border-slate-700 py-1.5 px-2.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-750 hover:text-white"
+                          title="Configurações da Loja e Foto/Banner da Vitrine"
+                        >
+                          <ImageIcon className="h-3 w-3 text-amber-400 shrink-0" />
+                          <span>Configurações & Banner</span>
+                        </button>
+
+                        <button
+                          onClick={() => setSelectedTenantForQrCode(t)}
+                          className="w-full sm:w-auto justify-center flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/30 py-1.5 px-2.5 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/25"
+                          title="Gerar QR Code & Placa de Divulgação (Mesa e Balcão)"
+                        >
+                          <QrCode className="h-3 w-3 text-amber-400 shrink-0" />
+                          <span>QR Code & Placa</span>
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleDelete(t)}
+                        title="Excluir Lanchonete"
+                        className="w-full sm:w-auto justify-center flex items-center gap-1 rounded-lg border border-red-900/30 bg-red-950/20 px-2.5 py-1.5 text-[11px] text-red-400 hover:bg-red-950/40 hover:text-red-300 transition"
+                      >
+                        <Trash2 className="h-3 w-3 shrink-0" />
+                        <span>Excluir</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
