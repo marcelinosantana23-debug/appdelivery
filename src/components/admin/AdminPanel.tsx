@@ -14,6 +14,7 @@ import {
   Users,
   TrendingUp,
   QrCode,
+  Store,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
@@ -34,12 +35,13 @@ import type { Tenant } from "@/types";
 interface AdminPanelProps {
   onExit: () => void;
   onGoToSuperAdmin?: () => void;
+  onViewStoreFront?: (slug: string) => void;
   initialTab?: AdminTab;
 }
 
 type AdminTab = "orders" | "financial" | "customers" | "menu" | "qrcode" | "settings";
 
-export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelProps) {
+export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initialTab }: AdminPanelProps) {
   const {
     isAdminAuthed,
     isSuperAdmin,
@@ -154,15 +156,38 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
     <div className="fixed inset-0 z-50 flex flex-col w-full max-w-full overflow-x-hidden bg-slate-900 text-slate-100">
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between border-b border-slate-800 bg-slate-900 px-3 sm:px-4 py-2 sm:py-3 gap-2.5 sm:gap-3 w-full shrink-0">
-        {/* Left: Voltar + Logo + Nome da Loja + Link */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+        {/* Left: Voltar + Botão Ver Vitrine + Logo + Nome da Loja + Link */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1 sm:flex-initial">
+          {/* Seta Voltar (navegação para o portal / tela anterior) */}
           <button
             onClick={onExit}
             className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white"
-            title="Voltar para a vitrine"
+            title="Voltar para o portal"
           >
             <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
+
+          {/* Botão Ver Vitrine da Loja (navegação interna na mesma aba) */}
+          <button
+            type="button"
+            onClick={() => {
+              const cleanSlug = getSafeSlug(config.slug, "loja");
+              selectTenant(cleanSlug);
+              if (onViewStoreFront) {
+                onViewStoreFront(cleanSlug);
+              } else if (typeof window !== "undefined") {
+                // Atualiza o histórico HTML5 e carrega na mesma aba
+                window.history.pushState({ view: "menu", slug: cleanSlug }, "", `/loja/${cleanSlug}`);
+                window.dispatchEvent(new PopStateEvent("popstate"));
+              }
+            }}
+            className="inline-flex h-8 sm:h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-emerald-500/15 border border-amber-500/30 hover:border-amber-400 hover:bg-slate-800 text-amber-300 hover:text-amber-200 px-2 sm:px-2.5 text-xs font-semibold shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
+            title="Ver a vitrine pública da loja"
+          >
+            <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 shrink-0" />
+            <span className="hidden xs:inline">Ver Vitrine</span>
+          </button>
+
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-800 border border-slate-700 text-base sm:text-xl shadow-inner">
               <StoreLogo logo={config.logo} name={config.name} className="h-full w-full object-cover" />
@@ -198,7 +223,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
                   ) : (
                     <>
                       <Share2 className="h-3 w-3" />
-                      <span className="truncate max-w-[140px] sm:max-w-[200px]">/loja/{getSafeSlug(config.slug, "loja")}</span>
+                      <span className="truncate max-w-[120px] sm:max-w-[200px]">/loja/{getSafeSlug(config.slug, "loja")}</span>
                       <Copy className="h-3 w-3 text-slate-400 ml-0.5 hidden sm:inline" />
                     </>
                   )}
@@ -208,9 +233,15 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, initialTab }: AdminPanelP
           </div>
         </div>
 
-        {/* Right: Status "Loja Aberta" + Ponto Verde + Sininho + Recarga + Sair */}
+        {/* Right: Status "Loja Aberta" + Ponto Verde + Sininho + Recarga Redonda + Sair */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 ml-auto sm:ml-0">
-          <GlobalReloadButton variant="dark" />
+          {/* Botão Atualizar compacto (apenas ícone redondo sem texto) */}
+          <GlobalReloadButton
+            variant="dark"
+            showLabel={false}
+            title="Atualizar dados"
+            className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white"
+          />
 
           {/* Status "Loja Aberta" com ponto verde */}
           <button

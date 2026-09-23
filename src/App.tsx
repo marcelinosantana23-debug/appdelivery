@@ -636,6 +636,10 @@ function AppContent() {
       return (
         <AdminPanel
           onExit={() => navigateTo("portal")}
+          onViewStoreFront={(slug) => {
+            selectTenant(slug);
+            navigateTo("menu", slug);
+          }}
           onGoToSuperAdmin={isSuperAdmin ? () => navigateTo("superadmin") : undefined}
         />
       );

@@ -5,6 +5,7 @@ interface GlobalReloadButtonProps {
   className?: string;
   variant?: "glass" | "light" | "dark" | "outline";
   showLabel?: boolean;
+  title?: string;
 }
 
 /**
@@ -15,6 +16,7 @@ export function GlobalReloadButton({
   className = "",
   variant = "glass",
   showLabel = true,
+  title = "Atualizar dados",
 }: GlobalReloadButtonProps) {
   const [isReloading, setIsReloading] = useState(false);
 
@@ -47,8 +49,8 @@ export function GlobalReloadButton({
       id="global-header-reload-btn"
       type="button"
       onClick={handleReload}
-      title="Atualizar aplicação (recarregar página)"
-      aria-label="Atualizar aplicação"
+      title={title}
+      aria-label={title}
       className={`inline-flex ${
         showLabel
           ? "h-8 w-8 sm:h-8 sm:w-auto sm:px-2.5 gap-1.5"
