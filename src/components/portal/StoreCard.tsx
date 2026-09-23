@@ -20,6 +20,8 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
 
   const stories = getStoreActiveStories(tenant.id || tenant.slug);
   const hasStories = stories.length > 0;
+  const latestStory = hasStories ? stories[stories.length - 1] : null;
+  const storyPreviewUrl = latestStory?.mediaUrl || (latestStory as any)?.imageUrl;
 
   const matchedCat = matchStoreCategory(tenant, allCategories);
   const catInfo = {
@@ -100,7 +102,7 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
             </span>
           </div>
 
-          {/* Logo da Loja sobreposta (com anel vibrante estilo Instagram quando tiver Stories) */}
+          {/* Logo da Loja sobreposta (com preview da foto do story recente se houver stories ativos) */}
           <div
             onClick={(e) => {
               if (hasStories) {
@@ -110,12 +112,21 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
             }}
             className={`absolute -bottom-2 left-2.5 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-lg shadow-md transition-transform ${
               hasStories
-                ? "p-[2px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400/80 cursor-pointer animate-pulse hover:scale-110"
+                ? "p-[2px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400/80 cursor-pointer hover:scale-110"
                 : "border-2 border-white dark:border-slate-900"
             }`}
             title={hasStories ? "Ver stories desta loja" : getSafeDisplayName(tenant.name, "Loja")}
           >
-            <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[10px]" />
+            {hasStories && storyPreviewUrl ? (
+              <img
+                src={storyPreviewUrl}
+                alt={`Story de ${tenant.name}`}
+                className="h-full w-full object-cover rounded-[8px]"
+                loading="lazy"
+              />
+            ) : (
+              <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[10px]" />
+            )}
           </div>
         </div>
 
@@ -214,7 +225,7 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
           </div>
         )}
 
-        {/* Logo Avatar sobreposta (com anel vibrante estilo Instagram quando tiver Stories) */}
+        {/* Logo Avatar sobreposta (com preview da foto do story recente se houver stories ativos) */}
         <div
           onClick={(e) => {
             if (hasStories) {
@@ -224,12 +235,21 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
           }}
           className={`absolute bottom-2.5 left-2.5 sm:bottom-auto sm:top-2.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-xl shadow-md transition-transform ${
             hasStories
-              ? "p-[2.5px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400/80 cursor-pointer animate-pulse hover:scale-110"
+              ? "p-[2.5px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400/80 cursor-pointer hover:scale-110"
               : "border-2 border-white dark:border-slate-900"
           }`}
           title={hasStories ? "Ver stories desta loja" : getSafeDisplayName(tenant.name, "Loja")}
         >
-          <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[9px]" />
+          {hasStories && storyPreviewUrl ? (
+            <img
+              src={storyPreviewUrl}
+              alt={`Story de ${tenant.name}`}
+              className="h-full w-full object-cover rounded-[8px]"
+              loading="lazy"
+            />
+          ) : (
+            <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[9px]" />
+          )}
         </div>
 
         {/* Status Chip */}
