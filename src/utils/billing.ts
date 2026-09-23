@@ -66,15 +66,18 @@ export function getSubscriptionInfo(
       ? Number(tenant.monthlyFee)
       : defaultFee;
 
-  // Se status for explicitamente 'demo' ou se não possui billingDay configurado
-  if (rawStatus === "demo" || !rawBillingDay || rawBillingDay < 1 || rawBillingDay > 31) {
+  // Se status for explicitamente 'demo' ou 'cancelled', ou se não possui billingDay configurado
+  if (rawStatus === "demo" || rawStatus === "cancelled" || !rawBillingDay || rawBillingDay < 1 || rawBillingDay > 31) {
+    const isCancelled = rawStatus === "cancelled";
     return {
-      status: "demo",
-      billingDay: rawBillingDay,
+      status: isCancelled ? "cancelled" : "demo",
+      billingDay: undefined,
       isDueSoon: false,
       isOverdue: false,
       isDueToday: false,
-      statusText: "Modo Demonstração / Aguardando Ativação",
+      statusText: isCancelled
+        ? "Assinatura Cancelada / Modo Demonstração"
+        : "Modo Demonstração / Aguardando Ativação",
       lastPaymentAt,
       monthlyFee,
     };

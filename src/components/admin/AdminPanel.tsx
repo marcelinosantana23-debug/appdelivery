@@ -417,17 +417,21 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
         {/* Topo do Painel do Lojista: Mensagem Dinâmica de Mensalidade */}
         {subInfo && (
           <div>
-            {subInfo.status === "demo" ? (
+            {subInfo.status === "demo" || subInfo.status === "cancelled" ? (
               <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-950">
                 <div className="flex items-center gap-2">
                   <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                  <span className="font-bold">Modo Demonstração / Aguardando Ativação</span>
+                  <span className="font-bold">
+                    {subInfo.status === "cancelled"
+                      ? "Assinatura Cancelada / Modo Demonstração"
+                      : "Modo Demonstração / Aguardando Ativação"}
+                  </span>
                   <span className="hidden sm:inline text-amber-800">
-                    • Seu cardápio e pedidos estão liberados para testes.
+                    • Seu cardápio e pedidos continuam funcionando em modo demonstração.
                   </span>
                 </div>
                 <span className="text-[11px] font-semibold bg-amber-200/80 border border-amber-300 text-amber-950 px-2.5 py-0.5 rounded-full shrink-0">
-                  Aguardando Ativação
+                  {subInfo.status === "cancelled" ? "Assinatura Cancelada" : "Aguardando Ativação"}
                 </span>
               </div>
             ) : (
@@ -506,7 +510,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
             )}
 
             {/* Card com Chave PIX e WhatsApp se faltar <= 5 dias ou estiver vencido */}
-            {subInfo.status !== "demo" && (subInfo.isDueSoon || subInfo.isOverdue) && (
+            {subInfo.status !== "demo" && subInfo.status !== "cancelled" && (subInfo.isDueSoon || subInfo.isOverdue) && (
               <div
                 className={`mx-3 sm:mx-6 mt-3 sm:mt-4 p-4 rounded-2xl border shadow-sm ${
                   subInfo.isOverdue

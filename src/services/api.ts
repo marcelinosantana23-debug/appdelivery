@@ -221,6 +221,20 @@ export async function confirmTenantPaymentApi(
   }
 }
 
+export async function cancelTenantSubscriptionApi(
+  slugOrId: string
+): Promise<{ success: boolean; tenant?: Tenant; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/cancel-subscription`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 export async function deleteTenantApi(slugOrId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}`, {

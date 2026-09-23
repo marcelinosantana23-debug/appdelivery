@@ -2118,6 +2118,26 @@ api.post("/tenants/:slugOrId/confirm-payment", async (c) => {
   }
 });
 
+// -----------------------------------------------------------------------------
+// CANCELAMENTO DE ASSINATURA (SUPER ADMIN)
+// POST /api/tenants/:slugOrId/cancel-subscription
+// -----------------------------------------------------------------------------
+api.post("/tenants/:slugOrId/cancel-subscription", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+
+    const result = await db.cancelSubscription(slugOrId);
+    return c.json({
+      success: true,
+      message: `Assinatura da lanchonete "${result.tenant.name}" cancelada com sucesso. A loja retornou ao Modo Demonstração.`,
+      tenant: result.tenant,
+    }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao cancelar assinatura" }, 500);
+  }
+});
+
 api.patch("/tenants/:slugOrId/featured", async (c) => {
   try {
     const db = getDb(c);

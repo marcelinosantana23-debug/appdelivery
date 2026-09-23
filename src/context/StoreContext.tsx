@@ -161,6 +161,9 @@ interface StoreContextValue {
   confirmMonthlyPayment: (
     slugOrId: string
   ) => Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; paymentAt?: number; message?: string; error?: string }>;
+  cancelSubscription: (
+    slugOrId: string
+  ) => Promise<{ success: boolean; tenant?: Tenant; message?: string; error?: string }>;
   deleteTenant: (slugOrId: string) => Promise<boolean>;
   updateTenantCredentials: (
     slugOrId: string,
@@ -2028,6 +2031,90 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [tenants, currentTenant]
   );
 
+  const cancelSubscription = useCallback(
+    async (slugOrId: string) => {
+      // 1. Atualização otimista imediata na UI (Super Admin e Lojista sem recarregar tela)
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === slugOrId || t.slug === slugOrId
+            ? {
+                ...t,
+                subscriptionStatus: "demo" as const,
+                billingDay: undefined,
+                lastPaymentAt: undefined,
+                paidUntil: undefined,
+                nextDueDate: undefined,
+              }
+            : t
+        )
+      );
+
+      setCurrentTenant((prev) => {
+        if (prev && (prev.id === slugOrId || prev.slug === slugOrId)) {
+          const updated: Tenant = {
+            ...prev,
+            subscriptionStatus: "demo" as const,
+            billingDay: undefined,
+            lastPaymentAt: undefined,
+            paidUntil: undefined,
+            nextDueDate: undefined,
+          };
+          try {
+            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        }
+        return prev;
+      });
+
+      // 2. Persistência real na API / D1
+      const res = await cancelTenantSubscriptionApi(slugOrId);
+      if (res.success && res.tenant) {
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.id === res.tenant!.id || t.slug === res.tenant!.slug
+              ? {
+                  ...t,
+                  ...res.tenant!,
+                  subscriptionStatus: "demo" as const,
+                  billingDay: undefined,
+                  lastPaymentAt: undefined,
+                  paidUntil: undefined,
+                  nextDueDate: undefined,
+                }
+              : t
+          )
+        );
+        setCurrentTenant((prev) => {
+          if (prev && (prev.id === res.tenant!.id || prev.slug === res.tenant!.slug)) {
+            const updated: Tenant = {
+              ...prev,
+              ...res.tenant!,
+              subscriptionStatus: "demo" as const,
+              billingDay: undefined,
+              lastPaymentAt: undefined,
+              paidUntil: undefined,
+              nextDueDate: undefined,
+            };
+            try {
+              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          }
+          return prev;
+        });
+      }
+      return res;
+    },
+    []
+  );
+
   const deleteTenant = useCallback(
     async (slugOrId: string) => {
       const res = await deleteTenantApi(slugOrId);
@@ -2179,6 +2266,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         activateSubscription,
         updateMonthlyFee,
         confirmMonthlyPayment,
+        cancelSubscription,
         deleteTenant,
         establishmentCategories,
         createEstablishmentCategory,

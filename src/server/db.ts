@@ -1907,30 +1907,30 @@ export class Database {
 
     const billingDayVal =
       partial.billingDay !== undefined
-        ? (partial.billingDay !== null ? Number(partial.billingDay) : undefined)
+        ? (partial.billingDay !== null && !isNaN(Number(partial.billingDay)) ? Number(partial.billingDay) : undefined)
         : ((partial as any).billing_day !== undefined
-            ? ((partial as any).billing_day !== null ? Number((partial as any).billing_day) : undefined)
+            ? ((partial as any).billing_day !== null && !isNaN(Number((partial as any).billing_day)) ? Number((partial as any).billing_day) : undefined)
             : tenant.billingDay);
 
     const lastPaymentAtVal =
       partial.lastPaymentAt !== undefined
-        ? (partial.lastPaymentAt !== null ? Number(partial.lastPaymentAt) : undefined)
+        ? (partial.lastPaymentAt !== null && !isNaN(Number(partial.lastPaymentAt)) ? Number(partial.lastPaymentAt) : undefined)
         : ((partial as any).last_payment_at !== undefined
-            ? ((partial as any).last_payment_at !== null ? Number((partial as any).last_payment_at) : undefined)
+            ? ((partial as any).last_payment_at !== null && !isNaN(Number((partial as any).last_payment_at)) ? Number((partial as any).last_payment_at) : undefined)
             : tenant.lastPaymentAt);
 
     const paidUntilVal =
       partial.paidUntil !== undefined
-        ? (partial.paidUntil !== null ? Number(partial.paidUntil) : undefined)
+        ? (partial.paidUntil !== null && !isNaN(Number(partial.paidUntil)) ? Number(partial.paidUntil) : undefined)
         : ((partial as any).paid_until !== undefined
-            ? ((partial as any).paid_until !== null ? Number((partial as any).paid_until) : undefined)
+            ? ((partial as any).paid_until !== null && !isNaN(Number((partial as any).paid_until)) ? Number((partial as any).paid_until) : undefined)
             : tenant.paidUntil);
 
     const nextDueDateVal =
       partial.nextDueDate !== undefined
-        ? (partial.nextDueDate !== null ? Number(partial.nextDueDate) : undefined)
+        ? (partial.nextDueDate !== null && !isNaN(Number(partial.nextDueDate)) ? Number(partial.nextDueDate) : undefined)
         : ((partial as any).next_due_date !== undefined
-            ? ((partial as any).next_due_date !== null ? Number((partial as any).next_due_date) : undefined)
+            ? ((partial as any).next_due_date !== null && !isNaN(Number((partial as any).next_due_date)) ? Number((partial as any).next_due_date) : undefined)
             : tenant.nextDueDate);
 
     const monthlyFeeVal =
@@ -2169,6 +2169,48 @@ export class Database {
       billingDay: originalBillingDay,
       paymentAt: timestamp,
       nextDueDate,
+    };
+  }
+
+  async cancelSubscription(
+    idOrSlug: string
+  ): Promise<{ success: boolean; tenant: Tenant }> {
+    const tenant = await this.getTenantByIdOrSlug(idOrSlug);
+    if (!tenant) {
+      throw new Error("Lanchonete não encontrada.");
+    }
+
+    const timestamp = Date.now();
+
+    // Redefine status para 'demo' e limpa todos os dados do ciclo atual
+    const updated = await this.updateTenant(tenant.id, {
+      subscriptionStatus: "demo",
+      billingDay: null as any,
+      lastPaymentAt: null as any,
+      paidUntil: null as any,
+      nextDueDate: null as any,
+      updatedAt: timestamp,
+    });
+
+    if (!updated) {
+      throw new Error("Falha ao cancelar assinatura da lanchonete.");
+    }
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          "UPDATE tenants SET subscription_status = 'demo', billing_day = NULL, last_payment_at = NULL, paid_until = NULL, next_due_date = NULL, updated_at = ? WHERE id = ?"
+        )
+          .bind(timestamp, tenant.id)
+          .run();
+      } catch (e) {
+        console.warn("D1 direct cancelSubscription warning:", e);
+      }
+    }
+
+    return {
+      success: true,
+      tenant: updated,
     };
   }
 

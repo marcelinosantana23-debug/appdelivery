@@ -36,6 +36,7 @@ import {
   Calendar,
   CreditCard,
   CheckCheck,
+  Ban,
   Clock,
   Pencil,
   Check,
@@ -79,6 +80,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     activateSubscription,
     updateMonthlyFee,
     confirmMonthlyPayment,
+    cancelSubscription,
     platformSettings,
     updatePlatformSettings,
   } = useStore();
@@ -87,6 +89,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "featured" | "demo" | "due_soon">("all");
   const [activatingTenantId, setActivatingTenantId] = useState<string | null>(null);
   const [confirmingPaymentTenantId, setConfirmingPaymentTenantId] = useState<string | null>(null);
+  const [cancellingSubscriptionTenantId, setCancellingSubscriptionTenantId] = useState<string | null>(null);
   const [subscriptionFeedback, setSubscriptionFeedback] = useState<{ id: string; message: string; type: "success" | "error" } | null>(null);
   const [editingFeeTenantId, setEditingFeeTenantId] = useState<string | null>(null);
   const [editingFeeValue, setEditingFeeValue] = useState<string>("");
@@ -856,6 +859,43 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     }
   };
 
+  const handleCancelSubscription = async (tenant: Tenant) => {
+    const isConfirmed = confirm(
+      `Deseja realmente cancelar a assinatura da loja "${tenant.name}"?\n\n` +
+      `A loja retornará ao Modo Demonstração e o ciclo atual será limpo. Quando desejar reativá-la futuramente, bastará clicar em "Ativar Mensalidade" para capturar o novo dia e iniciar uma nova contagem de 30 dias.`
+    );
+    if (!isConfirmed) return;
+
+    try {
+      setCancellingSubscriptionTenantId(tenant.id);
+      const res = await cancelSubscription(tenant.id);
+      if (res.success) {
+        setSubscriptionFeedback({
+          id: tenant.id,
+          message: `Assinatura da loja "${tenant.name}" cancelada com sucesso! A loja voltou ao Modo Demonstração.`,
+          type: "success",
+        });
+        setTimeout(() => setSubscriptionFeedback(null), 6000);
+      } else {
+        setSubscriptionFeedback({
+          id: tenant.id,
+          message: res.error || "Falha ao cancelar assinatura.",
+          type: "error",
+        });
+        setTimeout(() => setSubscriptionFeedback(null), 5000);
+      }
+    } catch (e: any) {
+      setSubscriptionFeedback({
+        id: tenant.id,
+        message: e.message || "Erro ao cancelar assinatura.",
+        type: "error",
+      });
+      setTimeout(() => setSubscriptionFeedback(null), 5000);
+    } finally {
+      setCancellingSubscriptionTenantId(null);
+    }
+  };
+
   const handleDelete = async (tenant: Tenant) => {
     if (
       confirm(
@@ -1350,10 +1390,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         {/* Mensalidade & Vencimento Dinâmico */}
                         <td className="px-4 py-3.5">
                           <div className="flex flex-col gap-1">
-                            {subInfo.status === "demo" ? (
+                            {subInfo.status === "demo" || (subInfo.status as string) === "cancelled" ? (
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-300 border border-amber-500/20 whitespace-nowrap">
-                                  🧪 Demo / Aguardando
+                                  {(subInfo.status as string) === "cancelled" ? "❌ Cancelada" : "🧪 Demo / Aguardando"}
                                 </span>
                                 <button
                                   type="button"
@@ -1420,6 +1460,20 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                       <CheckCheck className="h-3 w-3 text-emerald-400" />
                                     )}
                                     <span>Confirmar Pagamento / Renovar (+1 Mês)</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCancelSubscription(t)}
+                                    disabled={cancellingSubscriptionTenantId === t.id}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 px-2 py-1 text-[11px] font-bold transition disabled:opacity-50 whitespace-nowrap shadow-sm active:scale-[0.98] ml-1.5"
+                                    title="Cancelar assinatura da loja e retornar ao Modo Demonstração"
+                                  >
+                                    {cancellingSubscriptionTenantId === t.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin text-rose-400" />
+                                    ) : (
+                                      <Ban className="h-3 w-3 text-rose-400" />
+                                    )}
+                                    <span>Cancelar Assinatura</span>
                                   </button>
                                 </div>
                               </div>
@@ -1835,14 +1889,18 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         </div>
                       )}
 
-                      {subInfo.status === "demo" ? (
+                      {subInfo.status === "demo" || (subInfo.status as string) === "cancelled" ? (
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center justify-between text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
                             <span className="text-amber-300 font-semibold flex items-center gap-1.5 text-[11px]">
                               <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                              Modo Demonstração / Aguardando Ativação
+                              {(subInfo.status as string) === "cancelled"
+                                ? "Assinatura Cancelada / Modo Demonstração"
+                                : "Modo Demonstração / Aguardando Ativação"}
                             </span>
-                            <span className="text-[10px] text-amber-400/80 font-mono">Aguardando Ativação</span>
+                            <span className="text-[10px] text-amber-400/80 font-mono">
+                              {(subInfo.status as string) === "cancelled" ? "Cancelada" : "Aguardando Ativação"}
+                            </span>
                           </div>
                           <button
                             type="button"
@@ -1895,20 +1953,36 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                             <span>Valor: <strong className="text-slate-300">R$ {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleConfirmMonthlyPayment(t)}
-                            disabled={confirmingPaymentTenantId === t.id}
-                            className="w-full flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 py-2 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-sm"
-                            title={`Confirmar pagamento recebido via Pix e renovar +1 mês (mantém vencimento todo dia ${subInfo.billingDay})`}
-                          >
-                            {confirmingPaymentTenantId === t.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                            ) : (
-                              <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
-                            )}
-                            <span>Confirmar Pagamento / Renovar (+1 Mês)</span>
-                          </button>
+                          <div className="flex flex-col sm:flex-row items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmMonthlyPayment(t)}
+                              disabled={confirmingPaymentTenantId === t.id}
+                              className="flex-1 w-full flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 py-2 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-sm"
+                              title={`Confirmar pagamento recebido via Pix e renovar +1 mês (mantém vencimento todo dia ${subInfo.billingDay})`}
+                            >
+                              {confirmingPaymentTenantId === t.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                              ) : (
+                                <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
+                              )}
+                              <span>Confirmar Pagamento / Renovar (+1 Mês)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCancelSubscription(t)}
+                              disabled={cancellingSubscriptionTenantId === t.id}
+                              className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 px-3 py-2 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-sm whitespace-nowrap"
+                              title="Cancelar assinatura da loja e retornar ao Modo Demonstração"
+                            >
+                              {cancellingSubscriptionTenantId === t.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-400" />
+                              ) : (
+                                <Ban className="h-3.5 w-3.5 text-rose-400" />
+                              )}
+                              <span>Cancelar Assinatura</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
