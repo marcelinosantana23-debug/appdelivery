@@ -1235,6 +1235,8 @@ export class Database {
         "ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'demo'",
         "ALTER TABLE tenants ADD COLUMN billing_day INTEGER",
         "ALTER TABLE tenants ADD COLUMN last_payment_at INTEGER",
+        "ALTER TABLE tenants ADD COLUMN paid_until INTEGER",
+        "ALTER TABLE tenants ADD COLUMN next_due_date INTEGER",
         "ALTER TABLE tenants ADD COLUMN monthly_fee REAL DEFAULT 49.90",
         "ALTER TABLE orders ADD COLUMN pix_receipt_url TEXT",
         "ALTER TABLE orders ADD COLUMN card_type TEXT",
@@ -1917,6 +1919,20 @@ export class Database {
             ? ((partial as any).last_payment_at !== null ? Number((partial as any).last_payment_at) : undefined)
             : tenant.lastPaymentAt);
 
+    const paidUntilVal =
+      partial.paidUntil !== undefined
+        ? (partial.paidUntil !== null ? Number(partial.paidUntil) : undefined)
+        : ((partial as any).paid_until !== undefined
+            ? ((partial as any).paid_until !== null ? Number((partial as any).paid_until) : undefined)
+            : tenant.paidUntil);
+
+    const nextDueDateVal =
+      partial.nextDueDate !== undefined
+        ? (partial.nextDueDate !== null ? Number(partial.nextDueDate) : undefined)
+        : ((partial as any).next_due_date !== undefined
+            ? ((partial as any).next_due_date !== null ? Number((partial as any).next_due_date) : undefined)
+            : tenant.nextDueDate);
+
     const monthlyFeeVal =
       partial.monthlyFee !== undefined
         ? Number(partial.monthlyFee)
@@ -1932,6 +1948,8 @@ export class Database {
       subscriptionStatus: subscriptionStatusVal,
       billingDay: billingDayVal,
       lastPaymentAt: lastPaymentAtVal,
+      paidUntil: paidUntilVal,
+      nextDueDate: nextDueDateVal,
       monthlyFee: monthlyFeeVal,
       updatedAt: Date.now(),
     };
@@ -2038,7 +2056,7 @@ export class Database {
   async activateSubscription(
     idOrSlug: string,
     customBillingDay?: number
-  ): Promise<{ success: boolean; tenant: Tenant; billingDay: number }> {
+  ): Promise<{ success: boolean; tenant: Tenant; billingDay: number; nextDueDate: number }> {
     const tenant = await this.getTenantByIdOrSlug(idOrSlug);
     if (!tenant) {
       throw new Error("Lanchonete não encontrada.");
@@ -2053,10 +2071,20 @@ export class Database {
 
     const timestamp = now.getTime();
 
+    // Vencimento DEVE SER no mês seguinte no dia X (ex: se ativou em 23/09, o vencimento é 23/10)
+    const nextMonthObj = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const targetYear = nextMonthObj.getFullYear();
+    const targetMonth = nextMonthObj.getMonth();
+    const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const targetDay = Math.min(billingDay, daysInTargetMonth);
+    const nextDueDate = new Date(targetYear, targetMonth, targetDay, 23, 59, 59, 999).getTime();
+
     const updated = await this.updateTenant(tenant.id, {
       subscriptionStatus: "active",
       billingDay,
       lastPaymentAt: timestamp,
+      paidUntil: nextDueDate,
+      nextDueDate,
       status: "active",
     });
 
@@ -2076,12 +2104,12 @@ export class Database {
       }
     }
 
-    return { success: true, tenant: updated, billingDay };
+    return { success: true, tenant: updated, billingDay, nextDueDate };
   }
 
   async confirmMonthlyPayment(
     idOrSlug: string
-  ): Promise<{ success: boolean; tenant: Tenant; billingDay: number; paymentAt: number }> {
+  ): Promise<{ success: boolean; tenant: Tenant; billingDay: number; paymentAt: number; nextDueDate: number }> {
     const tenant = await this.getTenantByIdOrSlug(idOrSlug);
     if (!tenant) {
       throw new Error("Lanchonete não encontrada.");
@@ -2091,10 +2119,31 @@ export class Database {
     // Preserva o billing_day original já salvo; se não houver, adota o dia de hoje
     const originalBillingDay = tenant.billingDay || new Date().getDate();
 
+    // Calcula próximo vencimento somando +1 mês ao vencimento atual (se futuro) ou +1 mês a partir do mês atual
+    const now = new Date();
+    let baseYear = now.getFullYear();
+    let baseMonth = now.getMonth();
+
+    const currentDueTimestamp = tenant.nextDueDate || tenant.paidUntil;
+    if (currentDueTimestamp && currentDueTimestamp > now.getTime()) {
+      const currentDueDate = new Date(currentDueTimestamp);
+      baseYear = currentDueDate.getFullYear();
+      baseMonth = currentDueDate.getMonth();
+    }
+
+    const nextMonthObj = new Date(baseYear, baseMonth + 1, 1);
+    const targetYear = nextMonthObj.getFullYear();
+    const targetMonth = nextMonthObj.getMonth();
+    const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const targetDay = Math.min(originalBillingDay, daysInTargetMonth);
+    const nextDueDate = new Date(targetYear, targetMonth, targetDay, 23, 59, 59, 999).getTime();
+
     const updated = await this.updateTenant(tenant.id, {
       subscriptionStatus: "active",
       billingDay: originalBillingDay,
       lastPaymentAt: timestamp,
+      paidUntil: nextDueDate,
+      nextDueDate,
       status: "active",
     });
 
@@ -2119,6 +2168,7 @@ export class Database {
       tenant: updated,
       billingDay: originalBillingDay,
       paymentAt: timestamp,
+      nextDueDate,
     };
   }
 
@@ -3761,6 +3811,14 @@ export class Database {
       lastPaymentAt:
         row.last_payment_at !== undefined && row.last_payment_at !== null && row.last_payment_at !== ""
           ? Number(row.last_payment_at)
+          : undefined,
+      paidUntil:
+        row.paid_until !== undefined && row.paid_until !== null && row.paid_until !== ""
+          ? Number(row.paid_until)
+          : undefined,
+      nextDueDate:
+        row.next_due_date !== undefined && row.next_due_date !== null && row.next_due_date !== ""
+          ? Number(row.next_due_date)
           : undefined,
       monthlyFee:
         row.monthly_fee !== undefined && row.monthly_fee !== null && row.monthly_fee !== ""

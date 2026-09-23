@@ -1759,6 +1759,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ? customBillingDay
           : now.getDate();
 
+      // Próximo vencimento DEVE SER no mês seguinte no dia X (ex: se ativou em 23/09, vence em 23/10)
+      const nextMonthObj = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const targetYear = nextMonthObj.getFullYear();
+      const targetMonth = nextMonthObj.getMonth();
+      const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const targetDay = Math.min(billingDay, daysInTargetMonth);
+      const nextDueDate = new Date(targetYear, targetMonth, targetDay, 23, 59, 59, 999).getTime();
+
       // 1. Atualização otimista imediata na UI (Super Admin e Lojista sem F5)
       setTenants((prev) =>
         prev.map((t) =>
@@ -1768,6 +1776,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 subscriptionStatus: "active" as const,
                 billingDay,
                 lastPaymentAt: now.getTime(),
+                paidUntil: nextDueDate,
+                nextDueDate,
                 status: "active" as const,
               }
             : t
@@ -1781,6 +1791,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             subscriptionStatus: "active" as const,
             billingDay,
             lastPaymentAt: now.getTime(),
+            paidUntil: nextDueDate,
+            nextDueDate,
             status: "active" as const,
           };
           try {
@@ -1798,6 +1810,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const res = await activateTenantSubscriptionApi(slugOrId, customBillingDay);
       if (res.success && res.tenant) {
         const resolvedBillingDay = res.billingDay || res.tenant.billingDay || billingDay;
+        const resolvedNextDueDate = res.nextDueDate || res.tenant.nextDueDate || res.tenant.paidUntil || nextDueDate;
         setTenants((prev) =>
           prev.map((t) =>
             t.id === res.tenant!.id || t.slug === res.tenant!.slug
@@ -1807,6 +1820,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   subscriptionStatus: "active" as const,
                   billingDay: resolvedBillingDay,
                   lastPaymentAt: res.tenant!.lastPaymentAt || now.getTime(),
+                  paidUntil: resolvedNextDueDate,
+                  nextDueDate: resolvedNextDueDate,
                   status: "active" as const,
                 }
               : t
@@ -1820,6 +1835,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               subscriptionStatus: "active" as const,
               billingDay: resolvedBillingDay,
               lastPaymentAt: res.tenant!.lastPaymentAt || now.getTime(),
+              paidUntil: resolvedNextDueDate,
+              nextDueDate: resolvedNextDueDate,
               status: "active" as const,
             };
             try {
@@ -1909,8 +1926,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const confirmMonthlyPayment = useCallback(
     async (slugOrId: string) => {
+      const now = new Date();
+      // Otimisticamente calcula o próximo vencimento (+1 mês) para atualização instantânea
+      const existingTenant = tenants.find((t) => t.id === slugOrId || t.slug === slugOrId) || currentTenant;
+      const billingDay = existingTenant?.billingDay || now.getDate();
+      let baseYear = now.getFullYear();
+      let baseMonth = now.getMonth();
+      const currentDue = existingTenant?.nextDueDate || existingTenant?.paidUntil;
+      if (currentDue && currentDue > now.getTime()) {
+        const d = new Date(currentDue);
+        baseYear = d.getFullYear();
+        baseMonth = d.getMonth();
+      }
+      const nextMonthDate = new Date(baseYear, baseMonth + 1, 1);
+      const targetYear = nextMonthDate.getFullYear();
+      const targetMonth = nextMonthDate.getMonth();
+      const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const targetDay = Math.min(billingDay, daysInTargetMonth);
+      const optimisticNextDueDate = new Date(targetYear, targetMonth, targetDay, 23, 59, 59, 999).getTime();
+
+      // 1. Atualização otimista imediata
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === slugOrId || t.slug === slugOrId
+            ? {
+                ...t,
+                subscriptionStatus: "active" as const,
+                lastPaymentAt: now.getTime(),
+                paidUntil: optimisticNextDueDate,
+                nextDueDate: optimisticNextDueDate,
+                status: "active" as const,
+              }
+            : t
+        )
+      );
+
+      setCurrentTenant((prev) => {
+        if (prev && (prev.id === slugOrId || prev.slug === slugOrId)) {
+          const updated = {
+            ...prev,
+            subscriptionStatus: "active" as const,
+            lastPaymentAt: now.getTime(),
+            paidUntil: optimisticNextDueDate,
+            nextDueDate: optimisticNextDueDate,
+            status: "active" as const,
+          };
+          try {
+            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        }
+        return prev;
+      });
+
+      // 2. Persistência real
       const res = await confirmTenantPaymentApi(slugOrId);
       if (res.success && res.tenant) {
+        const resolvedNextDueDate = res.nextDueDate || res.tenant.nextDueDate || res.tenant.paidUntil || optimisticNextDueDate;
         setTenants((prev) =>
           prev.map((t) =>
             t.id === res.tenant!.id || t.slug === res.tenant!.slug
@@ -1918,7 +1993,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   ...t,
                   ...res.tenant!,
                   subscriptionStatus: "active" as const,
-                  lastPaymentAt: res.paymentAt || res.tenant!.lastPaymentAt || Date.now(),
+                  lastPaymentAt: res.paymentAt || res.tenant!.lastPaymentAt || now.getTime(),
+                  paidUntil: resolvedNextDueDate,
+                  nextDueDate: resolvedNextDueDate,
+                  status: "active" as const,
                 }
               : t
           )
@@ -1929,7 +2007,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ...prev,
               ...res.tenant!,
               subscriptionStatus: "active" as const,
-              lastPaymentAt: res.paymentAt || res.tenant!.lastPaymentAt || Date.now(),
+              lastPaymentAt: res.paymentAt || res.tenant!.lastPaymentAt || now.getTime(),
+              paidUntil: resolvedNextDueDate,
+              nextDueDate: resolvedNextDueDate,
+              status: "active" as const,
             };
             try {
               sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
@@ -1944,7 +2025,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return res;
     },
-    []
+    [tenants, currentTenant]
   );
 
   const deleteTenant = useCallback(

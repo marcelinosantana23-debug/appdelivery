@@ -9,6 +9,7 @@ export interface SubscriptionInfo {
   daysRemaining?: number;
   dueDate?: Date;
   dueDateFormatted?: string;
+  dueDateShort?: string;
   isDueSoon: boolean; // <= 5 dias
   isOverdue: boolean; // < 0 dias
   isDueToday: boolean; // 0 dias
@@ -21,6 +22,8 @@ export interface TenantBillingInput {
   subscriptionStatus?: string;
   billingDay?: number | string | null;
   lastPaymentAt?: number | string | null;
+  paidUntil?: number | string | null;
+  nextDueDate?: number | string | null;
   monthlyFee?: number | string | null;
   status?: string;
 }
@@ -51,6 +54,13 @@ export function getSubscriptionInfo(
       ? Number(tenant.lastPaymentAt)
       : undefined;
 
+  const nextDueDateTimestamp =
+    tenant.nextDueDate !== undefined && tenant.nextDueDate !== null
+      ? Number(tenant.nextDueDate)
+      : tenant.paidUntil !== undefined && tenant.paidUntil !== null
+      ? Number(tenant.paidUntil)
+      : undefined;
+
   const monthlyFee =
     tenant.monthlyFee !== undefined && tenant.monthlyFee !== null && !isNaN(Number(tenant.monthlyFee))
       ? Number(tenant.monthlyFee)
@@ -76,41 +86,54 @@ export function getSubscriptionInfo(
   const currentMonth = now.getMonth();
   const currentDay = now.getDate();
 
-  // Quantidade de dias no mês atual
-  const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const clampedDayThisMonth = Math.min(billingDay, daysInCurrentMonth);
-
-  // Vencimento no mês atual (fim do dia 23:59:59)
-  const thisMonthDueDate = new Date(
-    currentYear,
-    currentMonth,
-    clampedDayThisMonth,
-    23,
-    59,
-    59,
-    999
-  );
-
-  // Verifica se houve pagamento registrado no ciclo deste mês (a partir do dia 1 do mês atual)
-  const isPaidThisMonth = lastPaymentAt
-    ? lastPaymentAt >= new Date(currentYear, currentMonth, 1).getTime()
-    : false;
-
   let targetDueDate: Date;
 
-  if (now.getTime() <= thisMonthDueDate.getTime()) {
-    // Vencimento deste mês ainda vai acontecer
-    targetDueDate = thisMonthDueDate;
+  if (nextDueDateTimestamp && !isNaN(nextDueDateTimestamp)) {
+    targetDueDate = new Date(nextDueDateTimestamp);
   } else {
-    // A data deste mês já passou
-    if (isPaidThisMonth) {
-      // Já foi pago! O próximo vencimento é no próximo mês
-      const nextMonth = currentMonth + 1;
-      const daysInNextMonth = new Date(currentYear, nextMonth + 1, 0).getDate();
-      const clampedNextDay = Math.min(billingDay, daysInNextMonth);
-      targetDueDate = new Date(currentYear, nextMonth, clampedNextDay, 23, 59, 59, 999);
+    // Cálculo seguro caso nextDueDate ainda não esteja persistido explicitamente:
+    // 1. Data de vencimento no mês atual
+    const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const clampedDayThisMonth = Math.min(billingDay, daysInCurrentMonth);
+    const thisMonthDueDate = new Date(
+      currentYear,
+      currentMonth,
+      clampedDayThisMonth,
+      23,
+      59,
+      59,
+      999
+    );
+
+    // 2. Data de vencimento no próximo mês
+    const nextMonthObj = new Date(currentYear, currentMonth + 1, 1);
+    const nextYear = nextMonthObj.getFullYear();
+    const nextMonth = nextMonthObj.getMonth();
+    const daysInNextMonth = new Date(nextYear, nextMonth + 1, 0).getDate();
+    const clampedNextDay = Math.min(billingDay, daysInNextMonth);
+    const nextMonthDueDate = new Date(
+      nextYear,
+      nextMonth,
+      clampedNextDay,
+      23,
+      59,
+      59,
+      999
+    );
+
+    // Se houve pagamento/ativação recente (no mês atual ou dentro dos últimos 30 dias):
+    // o vencimento deve ser no mês seguinte!
+    const isPaidRecently = lastPaymentAt
+      ? (now.getTime() - lastPaymentAt) < 31 * 24 * 60 * 60 * 1000 &&
+        lastPaymentAt >= new Date(currentYear, currentMonth, 1).getTime()
+      : false;
+
+    if (isPaidRecently) {
+      targetDueDate = nextMonthDueDate;
+    } else if (now.getTime() <= thisMonthDueDate.getTime()) {
+      targetDueDate = thisMonthDueDate;
     } else {
-      // Não foi confirmado pagamento após o vencimento -> faturamento VENCIDO
+      // Vencido no ciclo atual
       targetDueDate = thisMonthDueDate;
     }
   }
@@ -131,6 +154,13 @@ export function getSubscriptionInfo(
 
   const currentStatus: "active" | "overdue" = isOverdue ? "overdue" : "active";
 
+  const dayStr = String(targetDueDate.getDate()).padStart(2, "0");
+  const monthStr = String(targetDueDate.getMonth() + 1).padStart(2, "0");
+  const yearStr = targetDueDate.getFullYear();
+
+  const dueDateFormatted = `${dayStr}/${monthStr}/${yearStr}`;
+  const dueDateShort = `${dayStr}/${monthStr}`;
+
   let statusText = "";
   if (isOverdue) {
     const overdueDays = Math.abs(diffDays);
@@ -140,14 +170,10 @@ export function getSubscriptionInfo(
   } else if (isDueToday) {
     statusText = `Sua mensalidade vence todo dia ${billingDay} • Vence HOJE!`;
   } else {
-    statusText = `Sua mensalidade vence todo dia ${billingDay} • Faltam ${diffDays} dia${
+    statusText = `Sua mensalidade vence em ${dueDateShort} • Faltam ${diffDays} dia${
       diffDays > 1 ? "s" : ""
     }`;
   }
-
-  const dueDateFormatted = `${String(targetDueDate.getDate()).padStart(2, "0")}/${String(
-    targetDueDate.getMonth() + 1
-  ).padStart(2, "0")}/${targetDueDate.getFullYear()}`;
 
   return {
     status: currentStatus,
@@ -155,6 +181,7 @@ export function getSubscriptionInfo(
     daysRemaining: diffDays,
     dueDate: targetDueDate,
     dueDateFormatted,
+    dueDateShort,
     isDueSoon,
     isOverdue,
     isDueToday,

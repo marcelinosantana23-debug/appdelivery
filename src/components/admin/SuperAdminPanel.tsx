@@ -796,12 +796,13 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       setActivatingTenantId(tenant.id);
       const res = await activateSubscription(tenant.id, today);
       if (res.success) {
+        const nextDueDateStr = res.nextDueDate ? new Date(res.nextDueDate).toLocaleDateString("pt-BR") : `dia ${res.billingDay || today} do próximo mês`;
         setSubscriptionFeedback({
           id: tenant.id,
-          message: `Mensalidade ativada com sucesso! Vencimento definido para todo dia ${res.billingDay || today}.`,
+          message: `Mensalidade ativada com sucesso! Vencimento definido para todo dia ${res.billingDay || today}. Próximo vencimento em ${nextDueDateStr} (Faltam 30 dias).`,
           type: "success",
         });
-        setTimeout(() => setSubscriptionFeedback(null), 5000);
+        setTimeout(() => setSubscriptionFeedback(null), 6000);
       } else {
         setSubscriptionFeedback({
           id: tenant.id,
@@ -828,12 +829,13 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       setConfirmingPaymentTenantId(tenant.id);
       const res = await confirmMonthlyPayment(tenant.id);
       if (res.success) {
+        const nextDueDateStr = res.nextDueDate ? new Date(res.nextDueDate).toLocaleDateString("pt-BR") : `dia ${res.billingDay || billingDay}`;
         setSubscriptionFeedback({
           id: tenant.id,
-          message: `Pagamento do mês confirmado com sucesso! Loja ativa para o próximo ciclo (vencimento todo dia ${res.billingDay || billingDay}).`,
+          message: `Pagamento confirmado com sucesso! Mensalidade renovada (+1 mês) para a loja "${tenant.name}". Próximo vencimento em ${nextDueDateStr} (todo dia ${res.billingDay || billingDay}).`,
           type: "success",
         });
-        setTimeout(() => setSubscriptionFeedback(null), 5000);
+        setTimeout(() => setSubscriptionFeedback(null), 6000);
       } else {
         setSubscriptionFeedback({
           id: tenant.id,
@@ -1357,7 +1359,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                   type="button"
                                   onClick={() => handleActivateSubscription(t)}
                                   disabled={activatingTenantId === t.id}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 text-xs font-bold transition shadow-sm disabled:opacity-50 whitespace-nowrap"
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 text-xs font-bold transition shadow-sm disabled:opacity-50 whitespace-nowrap active:scale-[0.98]"
                                   title={`Ativar mensalidade agora (captura o dia de hoje: ${new Date().getDate()})`}
                                 >
                                   {activatingTenantId === t.id ? (
@@ -1365,7 +1367,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                   ) : (
                                     <CreditCard className="h-3 w-3" />
                                   )}
-                                  <span>Ativar Mensalidade</span>
+                                  <span>Ativar Mensalidade (Capturar Dia {new Date().getDate()})</span>
                                 </button>
                               </div>
                             ) : (
@@ -1381,7 +1383,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                     }`}
                                   >
                                     <Calendar className="h-3.5 w-3.5 shrink-0" />
-                                    <span>Todo dia {subInfo.billingDay}</span>
+                                    <span>Vence em {subInfo.dueDateFormatted}</span>
                                   </span>
                                   <span
                                     className={`text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap border ${
@@ -1401,20 +1403,23 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                       : `Faltam ${subInfo.daysRemaining}d`}
                                   </span>
                                 </div>
+                                <div className="text-[10px] text-slate-400">
+                                  Todo dia {subInfo.billingDay} • R$ {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
                                 <div>
                                   <button
                                     type="button"
                                     onClick={() => handleConfirmMonthlyPayment(t)}
                                     disabled={confirmingPaymentTenantId === t.id}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 px-2 py-1 text-[11px] font-semibold transition disabled:opacity-50 whitespace-nowrap"
-                                    title="Confirmar pagamento do mês (mantém o dia original e renova ciclo)"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 whitespace-nowrap shadow-sm active:scale-[0.98]"
+                                    title={`Confirmar pagamento recebido via Pix e renovar +1 mês (mantém vencimento todo dia ${subInfo.billingDay})`}
                                   >
                                     {confirmingPaymentTenantId === t.id ? (
                                       <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
                                     ) : (
                                       <CheckCheck className="h-3 w-3 text-emerald-400" />
                                     )}
-                                    <span>Confirmar Pagamento</span>
+                                    <span>Confirmar Pagamento / Renovar (+1 Mês)</span>
                                   </button>
                                 </div>
                               </div>
@@ -1855,11 +1860,15 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         </div>
                       ) : (
                         <div className="flex flex-col gap-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs rounded-lg p-2 border bg-emerald-500/10 border-emerald-500/20">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs rounded-lg p-2.5 border bg-emerald-500/10 border-emerald-500/20">
                             <div className="flex items-center gap-1.5 text-emerald-300 min-w-0">
                               <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-                              <span className="text-xs font-semibold truncate">
-                                Mensalidade Ativa (Vence todo dia <strong className="text-white font-bold">{subInfo.billingDay}</strong>)
+                              <span className="text-xs font-semibold">
+                                Mensalidade Ativa • Vence em <strong className="text-white font-bold">{subInfo.dueDateFormatted}</strong> ({subInfo.isOverdue
+                                  ? `Vencida há ${Math.abs(subInfo.daysRemaining || 0)} dias`
+                                  : subInfo.isDueToday
+                                  ? "Vence Hoje!"
+                                  : `Faltam ${subInfo.daysRemaining} dias`})
                               </span>
                             </div>
                             <span
@@ -1877,22 +1886,28 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                                 ? `Vencida (${Math.abs(subInfo.daysRemaining || 0)}d)`
                                 : subInfo.isDueToday
                                 ? "Vence Hoje!"
-                                : `Faltam ${subInfo.daysRemaining} dias para o próximo vencimento`}
+                                : `Faltam ${subInfo.daysRemaining} dias`}
                             </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                            <span>Ciclo: Todo dia <strong className="text-slate-300">{subInfo.billingDay}</strong></span>
+                            <span>Valor: <strong className="text-slate-300">R$ {(subInfo.monthlyFee || 49.9).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                           </div>
 
                           <button
                             type="button"
                             onClick={() => handleConfirmMonthlyPayment(t)}
                             disabled={confirmingPaymentTenantId === t.id}
-                            className="w-full flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 py-1.5 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98]"
+                            className="w-full flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 py-2 text-xs font-bold transition disabled:opacity-50 active:scale-[0.98] shadow-sm"
+                            title={`Confirmar pagamento recebido via Pix e renovar +1 mês (mantém vencimento todo dia ${subInfo.billingDay})`}
                           >
                             {confirmingPaymentTenantId === t.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
                             ) : (
                               <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
                             )}
-                            <span>Confirmar Pagamento do Mês</span>
+                            <span>Confirmar Pagamento / Renovar (+1 Mês)</span>
                           </button>
                         </div>
                       )}

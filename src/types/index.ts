@@ -78,6 +78,8 @@ export interface Tenant {
   subscriptionStatus?: SubscriptionStatus;
   billingDay?: number;
   lastPaymentAt?: number;
+  paidUntil?: number;
+  nextDueDate?: number;
   monthlyFee?: number;
   isOpen: boolean;
   createdAt: number;

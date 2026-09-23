@@ -451,23 +451,35 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
                     }`}
                   />
                   <span className="font-medium">
-                    Sua mensalidade vence todo dia{" "}
-                    <strong className="font-black text-slate-900">{subInfo.billingDay}</strong> •{" "}
-                    <strong
-                      className={
-                        subInfo.isOverdue
-                          ? "text-red-700 font-bold"
-                          : subInfo.isDueToday
-                          ? "text-amber-700 font-bold"
-                          : "text-slate-900 font-bold"
-                      }
-                    >
-                      {subInfo.isOverdue
-                        ? `Vencida há ${Math.abs(subInfo.daysRemaining || 0)} dias`
-                        : subInfo.isDueToday
-                        ? "Vence hoje!"
-                        : `Faltam ${subInfo.daysRemaining} dias`}
-                    </strong>
+                    {subInfo.isOverdue || subInfo.isDueSoon ? (
+                      <>
+                        Sua mensalidade vence todo dia{" "}
+                        <strong className="font-black text-slate-900">{subInfo.billingDay}</strong> •{" "}
+                        <strong
+                          className={
+                            subInfo.isOverdue
+                              ? "text-red-700 font-bold"
+                              : subInfo.isDueToday
+                              ? "text-amber-700 font-bold"
+                              : "text-amber-800 font-bold"
+                          }
+                        >
+                          {subInfo.isOverdue
+                            ? `Vencida há ${Math.abs(subInfo.daysRemaining || 0)} dias`
+                            : subInfo.isDueToday
+                            ? "Vence hoje!"
+                            : `Faltam ${subInfo.daysRemaining} dias`}
+                        </strong>
+                      </>
+                    ) : (
+                      <>
+                        Plano Ativo • Vence todo dia{" "}
+                        <strong className="font-black text-slate-900">{subInfo.billingDay}</strong> •{" "}
+                        Próximo vencimento:{" "}
+                        <strong className="text-slate-900 font-bold">{subInfo.dueDateFormatted}</strong>{" "}
+                        (Faltam {subInfo.daysRemaining} dias)
+                      </>
+                    )}
                   </span>
                 </div>
 
@@ -488,13 +500,13 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
                     ? "Vence Hoje"
                     : subInfo.isDueSoon
                     ? `Faltam ${subInfo.daysRemaining}d`
-                    : "Ativa"}
+                    : "Plano Ativo"}
                 </span>
               </div>
             )}
 
             {/* Card com Chave PIX e WhatsApp se faltar <= 5 dias ou estiver vencido */}
-            {subInfo.status === "active" && (subInfo.isDueSoon || subInfo.isOverdue) && (
+            {subInfo.status !== "demo" && (subInfo.isDueSoon || subInfo.isOverdue) && (
               <div
                 className={`mx-3 sm:mx-6 mt-3 sm:mt-4 p-4 rounded-2xl border shadow-sm ${
                   subInfo.isOverdue

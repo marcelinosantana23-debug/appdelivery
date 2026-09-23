@@ -194,7 +194,7 @@ export async function updateTenantMonthlyFeeApi(
 export async function activateTenantSubscriptionApi(
   slugOrId: string,
   billingDay?: number
-): Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; message?: string; error?: string }> {
+): Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; nextDueDate?: number; message?: string; error?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/activate-subscription`, {
       method: "POST",
@@ -209,7 +209,7 @@ export async function activateTenantSubscriptionApi(
 
 export async function confirmTenantPaymentApi(
   slugOrId: string
-): Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; paymentAt?: number; message?: string; error?: string }> {
+): Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; paymentAt?: number; nextDueDate?: number; message?: string; error?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/confirm-payment`, {
       method: "POST",

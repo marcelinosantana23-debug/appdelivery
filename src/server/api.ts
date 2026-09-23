@@ -2088,6 +2088,7 @@ api.post("/tenants/:slugOrId/activate-subscription", async (c) => {
       message: `Mensalidade ativada com sucesso! Vencimento definido para todo dia ${result.billingDay}.`,
       tenant: result.tenant,
       billingDay: result.billingDay,
+      nextDueDate: result.nextDueDate,
     }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao ativar mensalidade" }, 500);
@@ -2106,10 +2107,11 @@ api.post("/tenants/:slugOrId/confirm-payment", async (c) => {
     const result = await db.confirmMonthlyPayment(slugOrId);
     return c.json({
       success: true,
-      message: `Pagamento confirmado com sucesso! Loja ativa para o próximo ciclo (vencimento todo dia ${result.billingDay}).`,
+      message: `Pagamento confirmado com sucesso! Mensalidade renovada (+1 mês). Vencimento todo dia ${result.billingDay}.`,
       tenant: result.tenant,
       billingDay: result.billingDay,
       paymentAt: result.paymentAt,
+      nextDueDate: result.nextDueDate,
     }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao confirmar pagamento" }, 500);
