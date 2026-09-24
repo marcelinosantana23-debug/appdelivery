@@ -1797,35 +1797,62 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                   {/* Cabeçalho Compacto (Accordion Header - Sempre Visível) */}
                   <div
                     onClick={() => toggleCardExpanded(t.id)}
-                    className={`p-3.5 sm:p-4 flex items-center justify-between gap-2.5 cursor-pointer select-none transition ${
+                    className={`p-3.5 sm:p-4 flex flex-col gap-2.5 cursor-pointer select-none transition ${
                       isExpanded
                         ? "bg-slate-900/90 border-b border-slate-800"
                         : "bg-slate-900/60 hover:bg-slate-800/40"
                     }`}
                   >
-                    {/* Ícone / Nome da Loja */}
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                      <div
-                        className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xl shadow-inner border border-white/10"
-                        style={{
-                          backgroundColor: `${t.primaryColor || "#E63946"}20`,
-                          color: t.primaryColor || "#E63946",
-                        }}
-                      >
-                        <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="font-bold text-white text-sm sm:text-base leading-tight truncate">
+                    {/* Linha 1: Ícone + Nome Completo da Loja (Sem truncate, quebra até 2 linhas) + Slug + Botão Retrátil */}
+                    <div className="flex items-start justify-between gap-2.5 min-w-0 w-full">
+                      <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
+                        <div
+                          className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xl shadow-inner border border-white/10 mt-0.5"
+                          style={{
+                            backgroundColor: `${t.primaryColor || "#E63946"}20`,
+                            color: t.primaryColor || "#E63946",
+                          }}
+                        >
+                          <StoreLogo logo={t.logo} name={t.name} className="h-full w-full object-cover" fallbackEmoji="🍔" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3
+                            className="font-bold text-white text-sm sm:text-base leading-snug line-clamp-2 break-words"
+                            title={t.name}
+                          >
                             {getSafeDisplayName(t.name, "Lanchonete")}
                           </h3>
+                          <span className="text-[11px] text-slate-400 block break-all font-mono mt-0.5">
+                            /loja/{getSafeSlug(t.slug, "loja")}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-slate-400 block truncate">/loja/{getSafeSlug(t.slug, "loja")}</span>
                       </div>
+
+                      {/* Botão/Ícone retrátil de Expandir/Minimizar (setinha v / ^) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCardExpanded(t.id);
+                        }}
+                        className={`p-1 sm:p-1.5 rounded-lg border shrink-0 transition ${
+                          isExpanded
+                            ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+                            : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700"
+                        }`}
+                        title={isExpanded ? "Minimizar card" : "Expandir card completo"}
+                        aria-label={isExpanded ? "Minimizar card" : "Expandir card completo"}
+                      >
+                        <ChevronDown
+                          className={`h-4 w-4 transition-transform duration-200 ${
+                            isExpanded ? "rotate-180 text-amber-400" : ""
+                          }`}
+                        />
+                      </button>
                     </div>
 
-                    {/* Lado Direito: Badge Plano + Destaque + Controle Ativar/Pausar + Botão Retrátil */}
-                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    {/* Linha 2: Badges e Selos (Demo/Plano, Destaque/P10, Ativa/Pausada) - Sempre visíveis e sem truncamento */}
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1 border-t border-slate-800/50 w-full">
                       {/* 1. Badge de Plano / Assinatura (Demo / Cancelada / Mensalidade) */}
                       {subInfo.status === "demo" ? (
                         <span
@@ -1856,7 +1883,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         </span>
                       )}
 
-                      {/* 2. Botão/Badge de Destaque (Marketing Pago) */}
+                      {/* 2. Botão/Badge de Destaque (Marketing Pago com P10) */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1884,7 +1911,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                             }`}
                           />
                         )}
-                        <span className="hidden xs:inline">{t.isFeatured ? "Destaque" : "Normal"}</span>
+                        <span>{t.isFeatured ? "Destaque" : "Normal"}</span>
                         {t.isFeatured && (t.priorityOrder || 0) > 0 && (
                           <span className="text-[9px] font-mono bg-amber-500/30 px-1 rounded text-amber-200">
                             P{t.priorityOrder}
@@ -1905,7 +1932,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                             ? "Loja ATIVA e visível na vitrine pública. Clique para pausar."
                             : "Loja PAUSADA (oculta para clientes). Clique para ativar."
                         }
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-bold border transition shadow-sm active:scale-95 ${
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-bold border transition shadow-sm active:scale-95 ml-auto sm:ml-0 ${
                           isActive
                             ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25"
                             : "bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25"
@@ -1921,28 +1948,6 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                           />
                         )}
                         <span>{isActive ? "Ativa" : "Pausada"}</span>
-                      </button>
-
-                      {/* 4. Botão/Ícone retrátil de Expandir/Minimizar (setinha v / ^) */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleCardExpanded(t.id);
-                        }}
-                        className={`p-1 sm:p-1.5 rounded-lg border transition ${
-                          isExpanded
-                            ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
-                            : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700"
-                        }`}
-                        title={isExpanded ? "Minimizar card" : "Expandir card completo"}
-                        aria-label={isExpanded ? "Minimizar card" : "Expandir card completo"}
-                      >
-                        <ChevronDown
-                          className={`h-4 w-4 transition-transform duration-200 ${
-                            isExpanded ? "rotate-180 text-amber-400" : ""
-                          }`}
-                        />
                       </button>
                     </div>
                   </div>
