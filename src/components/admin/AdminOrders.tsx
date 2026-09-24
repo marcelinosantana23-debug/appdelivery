@@ -469,16 +469,16 @@ function OrderCard({
 
         {/* Items */}
         <div className="mt-3 space-y-1.5 rounded-xl bg-gray-50 p-3">
-          {order.items.map((item) => (
-            <div key={item.id} className="flex justify-between text-sm">
+          {(order?.items || []).map((item, idx) => (
+            <div key={item?.id || idx} className="flex justify-between text-sm">
               <span className="text-gray-700">
-                <span className="font-bold">{item.quantity}x</span> {item.product.name}
-                {item.selectedOptions.length > 0 && (
+                <span className="font-bold">{item?.quantity || 1}x</span> {item?.product?.name || (item as any)?.name || "Item"}
+                {Array.isArray(item?.selectedOptions) && item.selectedOptions.length > 0 && (
                   <span className="ml-1 text-xs text-gray-400">
-                    ({item.selectedOptions.map((o) => o.name).join(", ")})
+                    ({item.selectedOptions.map((o) => o?.name || o).join(", ")})
                   </span>
                 )}
-                {item.notes && <span className="block text-xs italic text-gray-400">📝 {item.notes}</span>}
+                {item?.notes && <span className="block text-xs italic text-gray-400">📝 {item.notes}</span>}
               </span>
             </div>
           ))}

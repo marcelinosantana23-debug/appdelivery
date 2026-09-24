@@ -394,18 +394,18 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
             {/* Itens do Pedido */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
               <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
-                Resumo dos Itens ({submittedOrder.items.length})
+                Resumo dos Itens ({submittedOrder?.items?.length || 0})
               </span>
               <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
-                {submittedOrder.items.map((item, idx) => (
+                {(submittedOrder?.items || []).map((item, idx) => (
                   <div key={idx} className="flex justify-between py-1 border-b border-slate-100 last:border-0">
                     <span className="text-slate-800">
-                      <strong className="text-slate-900">{item.quantity}x</strong> {item.product.name}
+                      <strong className="text-slate-900">{item?.quantity || 1}x</strong> {item?.product?.name || (item as any)?.name || "Item"}
                     </span>
                     <span className="font-bold text-slate-700">
                       {formatPrice(
-                        item.quantity *
-                          (item.product.price + item.selectedOptions.reduce((s, o) => s + o.price, 0)),
+                        (item?.quantity || 1) *
+                          ((item?.product?.price ?? (item as any)?.price ?? 0) + (item?.selectedOptions || []).reduce((s, o) => s + (o?.price || 0), 0)),
                         config
                       )}
                     </span>

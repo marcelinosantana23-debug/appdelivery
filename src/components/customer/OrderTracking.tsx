@@ -7,6 +7,7 @@ import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
 import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
+import { playOrderStatusUpdateChime } from "@/utils/audio";
 
 interface OrderTrackingProps {
   order: Order;
@@ -14,19 +15,33 @@ interface OrderTrackingProps {
   onHome: () => void;
 }
 
+const STATUS_RANKS: Record<OrderStatus, number> = {
+  received: 0,
+  preparing: 1,
+  delivering: 2,
+  done: 3,
+  cancelled: -1,
+};
+
 export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrackingProps) {
   const { config } = useStore();
   const [order, setOrder] = useState<Order>(initialOrder);
+  const [isLoadingOrderDetails, setIsLoadingOrderDetails] = useState<boolean>(() => {
+    return !initialOrder?.items || initialOrder.items.length === 0;
+  });
   const [lastCheckTime, setLastCheckTime] = useState<string>(() => {
     return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshSuccess, setRefreshSuccess] = useState(false);
 
-  const statusRef = useRef<OrderStatus>(initialOrder.status);
-  statusRef.current = order.status;
+  // Referência para o status atual e rastreio de transição para disparo sonoro
+  const prevStatusRef = useRef<OrderStatus>(initialOrder?.status || "received");
+  const isInitialLoadRef = useRef<boolean>(true);
+  const statusRef = useRef<OrderStatus>(initialOrder?.status || "received");
+  statusRef.current = order?.status || "received";
 
-  const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
+  const isPickup = order?.orderType === "pickup" || (order as any)?.delivery_type === "pickup";
 
   const statusSteps: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { status: "received", label: "Recebido", icon: Package },
@@ -41,25 +56,34 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
 
   // Aplica atualização de status em tempo real por eventos (sem loops de polling)
   const applyStatus = useCallback((newStatus: OrderStatus, updatedOrder?: Order | null) => {
-    const prevStatus = statusRef.current;
+    const prevStatus = prevStatusRef.current;
     if (updatedOrder) {
       setOrder(updatedOrder);
     } else {
-      setOrder((prev) => ({ ...prev, status: newStatus }));
+      setOrder((prev) => (prev ? { ...prev, status: newStatus } : prev));
+    }
+
+    const currentRank = STATUS_RANKS[prevStatus] ?? -1;
+    const newRank = STATUS_RANKS[newStatus] ?? -1;
+
+    // Dispara efeito sonoro suave quando o status avança e NÃO é o carregamento inicial
+    if (newRank > currentRank && !isInitialLoadRef.current) {
+      playOrderStatusUpdateChime(newStatus);
     }
 
     if (newStatus !== prevStatus) {
+      prevStatusRef.current = newStatus;
       statusRef.current = newStatus;
       updateActiveOrderStatus(newStatus);
     }
   }, []);
 
-  // Busca manual sob demanda no banco D1 ao clicar no botão "Atualizar Status" (economiza requisições Cloudflare/D1)
+  // Busca manual sob demanda no banco D1 ao clicar no botão "Atualizar Status"
   const handleRefreshStatus = useCallback(async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
     setRefreshSuccess(false);
-    const cleanId = initialOrder.id.replace(/^#/, "");
+    const cleanId = (initialOrder?.id || order?.id || "").replace(/^#/, "");
 
     try {
       const res = await fetchOrderDetailsApi(cleanId, config.slug);
@@ -76,12 +100,12 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     } finally {
       setIsRefreshing(false);
     }
-  }, [initialOrder.id, config.slug, applyStatus, isRefreshing]);
+  }, [initialOrder?.id, order?.id, config.slug, applyStatus, isRefreshing]);
 
   // Sincronização inicial pontual + eventos sob demanda (SEM intervalos periódicos de polling automático)
   useEffect(() => {
     let isMounted = true;
-    const cleanId = initialOrder.id.replace(/^#/, "");
+    const cleanId = (initialOrder?.id || "").replace(/^#/, "");
 
     // Carga inicial pontual única ao abrir a tela
     const loadInitialStatus = async () => {
@@ -94,6 +118,16 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
         }
       } catch (err) {
         console.warn("Aviso na carga inicial de status:", err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingOrderDetails(false);
+          // Libera para tocar áudio apenas em transições subsequentes
+          setTimeout(() => {
+            if (isMounted) {
+              isInitialLoadRef.current = false;
+            }
+          }, 400);
+        }
       }
     };
 
@@ -150,9 +184,9 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       const detail = e.detail;
       if (
         detail?.orderId &&
-        (detail.orderId === initialOrder.id ||
+        (detail.orderId === initialOrder?.id ||
           detail.orderId.replace(/^#/, "") === cleanId ||
-          `#${detail.orderId}` === initialOrder.id)
+          `#${detail.orderId}` === initialOrder?.id)
       ) {
         if (detail.status) {
           applyStatus(detail.status, detail.order || detail.orderData);
@@ -174,10 +208,10 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       }
       window.removeEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
     };
-  }, [initialOrder.id, config.slug, applyStatus]);
+  }, [initialOrder?.id, config.slug, applyStatus]);
 
-  const currentIndex = statusSteps.findIndex((s) => s.status === order.status);
-  const isCancelled = order.status === "cancelled";
+  const currentIndex = statusSteps.findIndex((s) => s.status === order?.status);
+  const isCancelled = order?.status === "cancelled";
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50">
@@ -191,9 +225,11 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-bold text-gray-800 truncate">Pedido {order.id}</h1>
+            <h1 className="text-base sm:text-lg font-bold text-gray-800 truncate">
+              Pedido {order?.id || initialOrder?.id}
+            </h1>
             <p className="text-xs text-gray-400 truncate">
-              {new Date(order.createdAt).toLocaleString("pt-BR")}
+              {order?.createdAt ? new Date(order.createdAt).toLocaleString("pt-BR") : ""}
             </p>
           </div>
         </div>
@@ -324,49 +360,69 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
         {/* Order items */}
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-bold text-gray-700">Itens do pedido</h2>
-          <div className="space-y-3">
-            {order.items.map((item) => (
-              <div key={item.id} className="flex gap-3">
-                <img
-                  src={normalizeProductImage(item.product.image, item.product.category, item.product.name)}
-                  alt={item.product.name}
-                  onError={(e) => handleImageError(e, item.product.category, item.product.name)}
-                  className="h-14 w-14 rounded-lg object-cover bg-gray-100"
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-gray-800">
-                    {item.quantity}x {item.product.name}
-                  </p>
-                  {item.selectedOptions.length > 0 && (
-                    <ul className="mt-0.5 space-y-0.5">
-                      {item.selectedOptions.map((opt) => (
-                        <li key={opt.id} className="text-xs text-gray-400">
-                          {opt.name}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {item.notes && (
-                    <p className="mt-0.5 text-xs italic text-gray-400">"{item.notes}"</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+
+          {isLoadingOrderDetails && (!order?.items || order.items.length === 0) ? (
+            <div className="py-8 flex flex-col items-center justify-center gap-2.5 text-gray-400">
+              <RefreshCw className="h-6 w-6 animate-spin text-amber-500" />
+              <span className="text-xs font-medium">Carregando itens do pedido...</span>
+            </div>
+          ) : !Array.isArray(order?.items) || order.items.length === 0 ? (
+            <div className="py-6 text-center text-xs text-gray-400 bg-gray-50/50 rounded-xl">
+              Nenhum item listado neste pedido
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {(order?.items || []).map((item, idx) => {
+                const productName = item?.product?.name || (item as any)?.name || "Item do pedido";
+                const productImage = item?.product?.image || (item as any)?.image;
+                const productCategory = item?.product?.category || (item as any)?.category || "lanches";
+                const selectedOptions = Array.isArray(item?.selectedOptions) ? item.selectedOptions : [];
+
+                return (
+                  <div key={item?.id || idx} className="flex gap-3">
+                    <img
+                      src={normalizeProductImage(productImage, productCategory, productName)}
+                      alt={productName}
+                      onError={(e) => handleImageError(e, productCategory, productName)}
+                      className="h-14 w-14 rounded-lg object-cover bg-gray-100 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-800 truncate">
+                        {item?.quantity || 1}x {productName}
+                      </p>
+                      {selectedOptions.length > 0 && (
+                        <ul className="mt-0.5 space-y-0.5">
+                          {selectedOptions.map((opt, optIdx) => (
+                            <li key={opt?.id || optIdx} className="text-xs text-gray-400 truncate">
+                              {opt?.name || String(opt)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {item?.notes && (
+                        <p className="mt-0.5 text-xs italic text-gray-400 break-words">"{item.notes}"</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="mt-4 border-t border-gray-100 pt-3 space-y-1.5">
             <div className="flex justify-between text-sm text-gray-500">
               <span>Subtotal</span>
-              <span>{formatPrice(order.subtotal, config)}</span>
+              <span>{formatPrice(order?.subtotal ?? 0, config)}</span>
             </div>
-            {order.orderType === "delivery" && (
+            {(order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") && (
               <div className="flex justify-between text-sm text-gray-500">
                 <span>Taxa de entrega</span>
-                <span>{formatPrice(order.deliveryFee, config)}</span>
+                <span>{formatPrice(order?.deliveryFee ?? 0, config)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-gray-800">
               <span>Total</span>
-              <span>{formatPrice(order.total, config)}</span>
+              <span>{formatPrice(order?.total ?? 0, config)}</span>
             </div>
           </div>
         </div>
@@ -374,9 +430,9 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
         {/* Delivery info */}
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-bold text-gray-700">
-            {order.orderType === "delivery" ? "Endereço de entrega" : "Retirada no balcão"}
+            {(order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") ? "Endereço de entrega" : "Retirada no balcão"}
           </h2>
-          {order.orderType === "delivery" && order.address ? (
+          {(order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") && order?.address ? (
             <div className="space-y-1 text-sm text-gray-600">
               <p>{order.address.street}, {order.address.number}</p>
               <p>Bairro: {order.address.district}</p>
@@ -385,22 +441,23 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
             </div>
           ) : (
             <p className="text-sm text-gray-600">
-              {config.name} — {config.address}
+              {config?.name || "Loja"} — {config?.address || "Retirada no balcão"}
             </p>
           )}
           <div className="mt-3 border-t border-gray-100 pt-3">
             <p className="text-xs text-gray-400">Pagamento</p>
             <p className="text-sm font-medium text-gray-700">
-              {order.paymentMethod === "pix" && "PIX"}
-              {order.paymentMethod === "card" && "Cartão na entrega"}
-              {order.paymentMethod === "cash" && `Dinheiro${order.changeFor ? ` (troco para ${formatPrice(parseFloat(order.changeFor), config)})` : ""}`}
+              {order?.paymentMethod === "pix" && "PIX"}
+              {order?.paymentMethod === "card" && "Cartão na entrega"}
+              {order?.paymentMethod === "cash" && `Dinheiro${order?.changeFor ? ` (troco para ${formatPrice(parseFloat(order.changeFor), config)})` : ""}`}
+              {!["pix", "card", "cash"].includes(order?.paymentMethod || "") && (order?.paymentMethod || "Não informado")}
             </p>
           </div>
         </div>
 
         <button
           onClick={onHome}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3.5 font-bold text-gray-600 transition hover:bg-gray-50"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3.5 font-bold text-gray-600 transition hover:bg-gray-50 cursor-pointer"
         >
           <Home className="h-5 w-5" />
           Voltar ao cardápio

@@ -718,16 +718,19 @@ export function FloatingOrderTracker({
                       Itens do Pedido:
                     </p>
                     <div className="max-h-36 overflow-y-auto space-y-1 divide-y divide-gray-100 dark:divide-slate-700/50">
-                      {order.items.map((item, idx) => {
+                      {(order?.items || []).map((item, idx) => {
+                        const productPrice = item?.product?.price ?? (item as any)?.price ?? 0;
+                        const productName = item?.product?.name || (item as any)?.name || "Item";
+                        const selectedOptions = Array.isArray(item?.selectedOptions) ? item.selectedOptions : [];
                         const itemTotal =
-                          item.totalPrice ??
-                          ((item.product.price +
-                            (item.selectedOptions || []).reduce((acc, opt) => acc + opt.price, 0)) *
-                            item.quantity);
+                          item?.totalPrice ??
+                          ((productPrice +
+                            selectedOptions.reduce((acc, opt) => acc + (opt?.price || 0), 0)) *
+                            (item?.quantity || 1));
                         return (
                           <div key={idx} className="flex justify-between items-start pt-1 first:pt-0">
                             <span className="text-gray-800 dark:text-gray-200 font-medium">
-                              {item.quantity}x {item.product.name}
+                              {item?.quantity || 1}x {productName}
                             </span>
                             <span className="text-gray-500 dark:text-gray-400 font-mono">
                               {formatPrice(itemTotal, config)}

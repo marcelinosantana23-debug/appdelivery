@@ -101,12 +101,50 @@ export function playNewOrderChime(): void {
   }
 }
 
+let lastStatusChimeTime = 0;
+
 /**
- * Aviso sonoro de status desativado para clientes para manter a vitrine
- * e acompanhamento 100% silenciosos conforme diretrizes do projeto.
+ * Toca um efeito sonoro suave e agradável (chime/pop) quando o status do pedido avança.
+ * Utiliza a Web Audio API nativa sem depender de arquivos externos de áudio.
  */
 export function playOrderStatusUpdateChime(_status?: string): void {
-  // Desativado por completo
-  return;
+  const nowMs = Date.now();
+  if (nowMs - lastStatusChimeTime < 400) {
+    return;
+  }
+  lastStatusChimeTime = nowMs;
+
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+
+    // Sequência suave de 2 notas ascendentes (E5 -> C6) em formato de pop/chime
+    const tones = [
+      { freq: 659.25, start: 0.0, duration: 0.14, gain: 0.25 }, // E5
+      { freq: 1046.50, start: 0.09, duration: 0.32, gain: 0.3 },  // C6
+    ];
+
+    tones.forEach(({ freq, start, duration, gain }) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + start);
+
+      gainNode.gain.setValueAtTime(0.001, now + start);
+      gainNode.gain.linearRampToValueAtTime(gain, now + start + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      osc.start(now + start);
+      osc.stop(now + start + duration);
+    });
+  } catch (err) {
+    console.warn("Não foi possível tocar o som de atualização de status:", err);
+  }
 }
 
