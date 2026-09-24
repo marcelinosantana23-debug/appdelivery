@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   Bell,
@@ -24,6 +24,7 @@ import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
 import { getSubscriptionInfo, generateProofWhatsAppUrl } from "@/utils/billing";
+import { playPendingOrderAlarm } from "@/utils/audio";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminCustomers } from "./AdminCustomers";
@@ -66,6 +67,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     refreshCurrentStore,
     showToast,
     refreshCategories,
+    updateOrderStatus,
   } = useStore();
 
   const [tab, setTab] = useState<AdminTab>(() => {
@@ -188,128 +190,44 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     (o) => o.status !== "done" && o.status !== "cancelled"
   ).length;
 
-  // Web Audio chime nítido e exclusivo para notificação de novos pedidos no painel do lojista
-  const playNotificationSound = useCallback(() => {
-    // Verificação estrita: o som de novos pedidos SÓ SEJA REPRODUZIDO se a rota for o Painel do Lojista
-    if (typeof window !== "undefined") {
-      const path = window.location.pathname.toLowerCase();
-      if (!path.includes("/admin") && !path.includes("/painel")) {
-        return;
-      }
-    }
+  // Identifica pedidos pendentes aguardando aceite do lojista (status 'received')
+  const pendingOrders = orders.filter((o) => o.status === "received");
+  const hasPendingOrders = pendingOrders.length > 0;
 
-    try {
-      const AudioContextClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextClass) return;
-
-      const ctx = new AudioContextClass();
-      if (ctx.state === "suspended") {
-        ctx.resume().catch(() => {});
-      }
-
-      const now = ctx.currentTime;
-      // Toque harmônico e expressivo: 3 tons ascendentes nítidos (A5 -> C#6 -> E6)
-      const notes = [
-        { freq: 880, start: 0.0, duration: 0.22, gain: 0.4 },
-        { freq: 1108.73, start: 0.16, duration: 0.25, gain: 0.45 },
-        { freq: 1318.51, start: 0.34, duration: 0.45, gain: 0.5 },
-      ];
-
-      notes.forEach(({ freq, start, duration, gain }) => {
-        const osc = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, now + start);
-
-        gainNode.gain.setValueAtTime(0.001, now + start);
-        gainNode.gain.linearRampToValueAtTime(gain, now + start + 0.02);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
-
-        osc.connect(gainNode);
-        gainNode.connect(ctx.destination);
-
-        osc.start(now + start);
-        osc.stop(now + start + duration);
-      });
-    } catch {
-      // Audio não disponível ou bloqueado pelo navegador
-    }
-  }, []);
-
-  // Evita disparar múltiplos alertas no mesmo instante (throttle de 2 segundos)
-  const lastSoundTimeRef = useRef<number>(0);
-  const triggerNotificationSound = useCallback(() => {
-    const now = Date.now();
-    if (now - lastSoundTimeRef.current < 2000) return;
-    lastSoundTimeRef.current = now;
-    playNotificationSound();
-  }, [playNotificationSound]);
-
-  // Conjunto de IDs de pedidos já conhecidos pelo painel para não tocar som indevidamente na carga inicial
-  const knownAdminOrderIdsRef = useRef<Set<string>>(new Set());
-  const isInitialAdminMountRef = useRef<boolean>(true);
-  const ordersRef = useRef(orders);
-
+  // =========================================================================
+  // REQUISITO 2: ALARME SONORO REPETITIVO (A CADA 5 SEGUNDOS) PARA PEDIDOS PENDENTES
+  // Começa a tocar assim que chega um novo pedido e se repete automaticamente a cada 5 segundos
+  // até que o lojista clique no botão para aceitar o pedido, momento em que o alarme para de vez.
+  // =========================================================================
   useEffect(() => {
-    ordersRef.current = orders;
-  }, [orders]);
-
-  // Inicializa o conjunto de IDs conhecidos com os pedidos atuais
-  useEffect(() => {
-    if (orders.length > 0 && isInitialAdminMountRef.current) {
-      orders.forEach((o) => {
-        if (o.id) {
-          knownAdminOrderIdsRef.current.add(o.id);
-          knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
-        }
-      });
-      isInitialAdminMountRef.current = false;
+    if (!isAdminAuthed || !soundEnabled || !hasPendingOrders) {
+      return;
     }
-  }, [orders]);
+
+    // Toca imediatamente na detecção do pedido pendente
+    playPendingOrderAlarm();
+
+    // Repete a cada 5 segundos enquanto houver pedido com status "received"
+    const alarmInterval = setInterval(() => {
+      playPendingOrderAlarm();
+    }, 5000);
+
+    return () => {
+      clearInterval(alarmInterval);
+    };
+  }, [isAdminAuthed, soundEnabled, hasPendingOrders]);
 
   // INTERVALO DE 5 SEGUNDOS (5000ms):
-  // Restrito EXCLUSIVAMENTE ao painel do lojista (AdminPanel.tsx) para buscar novos pedidos
-  // e tocar o som de notificação quando detectado novo pedido.
-  // Limpa o setInterval (clearInterval) ao sair da tela do lojista.
+  // Busca pedidos frescos da API em background no painel do lojista
   useEffect(() => {
     if (!isAdminAuthed) return;
-
-    // Garante que os pedidos já existentes estão registrados antes de iniciar o polling
-    ordersRef.current.forEach((o) => {
-      if (o.id) {
-        knownAdminOrderIdsRef.current.add(o.id);
-        knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
-      }
-    });
 
     let isMounted = true;
 
     const pollInterval = setInterval(async () => {
       if (!isMounted) return;
       try {
-        const freshOrders = await refreshOrders();
-        if (!isMounted || !freshOrders || !Array.isArray(freshOrders)) return;
-
-        // Detecta se há algum pedido verdadeiramente novo que não existia no painel
-        const hasNewOrder = freshOrders.some((o) => {
-          if (!o.id) return false;
-          const cleanId = o.id.replace(/^#/, "");
-          return !knownAdminOrderIdsRef.current.has(o.id) && !knownAdminOrderIdsRef.current.has(cleanId);
-        });
-
-        if (hasNewOrder && soundEnabled) {
-          triggerNotificationSound();
-        }
-
-        freshOrders.forEach((o) => {
-          if (o.id) {
-            knownAdminOrderIdsRef.current.add(o.id);
-            knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
-          }
-        });
+        await refreshOrders();
       } catch {
         // Falha temporária de conexão ignorada silenciosamente
       }
@@ -319,29 +237,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
       isMounted = false;
       clearInterval(pollInterval);
     };
-  }, [isAdminAuthed, refreshOrders, soundEnabled, triggerNotificationSound]);
-
-  // Sincronização em tempo real (SSE / Broadcast): se a lista `orders` receber um novo pedido no painel
-  useEffect(() => {
-    if (!isAdminAuthed || isInitialAdminMountRef.current) return;
-
-    const hasNewOrder = orders.some((o) => {
-      if (!o.id) return false;
-      const cleanId = o.id.replace(/^#/, "");
-      return !knownAdminOrderIdsRef.current.has(o.id) && !knownAdminOrderIdsRef.current.has(cleanId);
-    });
-
-    if (hasNewOrder && soundEnabled) {
-      triggerNotificationSound();
-    }
-
-    orders.forEach((o) => {
-      if (o.id) {
-        knownAdminOrderIdsRef.current.add(o.id);
-        knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
-      }
-    });
-  }, [orders, soundEnabled, isAdminAuthed, triggerNotificationSound]);
+  }, [isAdminAuthed, refreshOrders]);
 
   if (!isAdminAuthed) {
     return <AdminLogin onBack={onExit} />;
@@ -362,6 +258,43 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col w-full max-w-full overflow-x-hidden bg-slate-900 text-slate-100">
+      {/* Alerta de Pedido Pendente com botão para aceitar imediatamente e parar o alarme */}
+      {hasPendingOrders && (
+        <div className="bg-gradient-to-r from-red-600 via-amber-600 to-red-600 px-3 sm:px-4 py-2 text-white shadow-lg flex flex-wrap items-center justify-between gap-2.5 text-xs sm:text-sm animate-pulse z-30 shrink-0 border-b border-amber-400/40">
+          <div className="flex items-center gap-2 font-bold min-w-0">
+            <Bell className="h-4 w-4 shrink-0 animate-bounce text-yellow-300" />
+            <span className="truncate">
+              🚨 {pendingOrders.length === 1 ? "1 novo pedido pendente!" : `${pendingOrders.length} novos pedidos pendentes!`} Alarme sonoro ativo (tocando a cada 5s).
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {tab !== "orders" && (
+              <button
+                type="button"
+                onClick={() => handleTabChange("orders")}
+                className="bg-slate-900/80 hover:bg-slate-900 text-white font-bold px-2.5 py-1 rounded-xl text-xs transition cursor-pointer"
+              >
+                Ver Pedidos
+              </button>
+            )}
+            <button
+              type="button"
+              id="admin-btn-quick-accept-order"
+              onClick={async () => {
+                const firstPending = pendingOrders[0];
+                if (firstPending) {
+                  await updateOrderStatus(firstPending.id, "preparing");
+                }
+              }}
+              className="bg-white hover:bg-slate-100 text-slate-950 font-black px-3.5 py-1 rounded-xl text-xs transition shadow-sm cursor-pointer"
+              title="Aceitar pedido imediatamente e parar o alarme"
+            >
+              Aceitar Pedido
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between border-b border-slate-800 bg-slate-900 px-3 sm:px-4 py-2 sm:py-3 gap-2.5 sm:gap-3 w-full shrink-0">
         {/* Left: Voltar + Botão Ver Vitrine + Logo + Nome da Loja + Link */}
@@ -542,11 +475,16 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
             icon={<Package className="h-4 w-4" />}
           >
             Pedidos
-            {activeOrders > 0 && (
+            {hasPendingOrders ? (
+              <span className="ml-1.5 flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-black text-white animate-pulse">
+                <Bell className="h-3 w-3 animate-bounce" />
+                {pendingOrders.length} novo{pendingOrders.length > 1 ? "s" : ""}
+              </span>
+            ) : activeOrders > 0 ? (
               <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">
                 {activeOrders}
               </span>
-            )}
+            ) : null}
           </TabButton>
           <TabButton
             id="tab-btn-financial"

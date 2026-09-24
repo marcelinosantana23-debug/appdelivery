@@ -47,6 +47,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const topAnchorRef = useRef<HTMLDivElement>(null);
 
   const activeOrdersCount = orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length;
+  const pendingOrdersCount = orders.filter((o) => o.status === "received").length;
   const allOrdersCount = orders.length;
 
   const filtered = filter === "active"
@@ -151,6 +152,27 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
 
       {/* Lista de Pedidos */}
       <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex-1">
+        {/* Banner de Pedidos Pendentes Aguardando Aceite */}
+        {pendingOrdersCount > 0 && (
+          <div className="rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 p-3 sm:p-4 text-amber-900 animate-pulse shadow-xs">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white font-bold text-base shadow-sm">
+                🔔
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm font-black text-amber-950">
+                  {pendingOrdersCount === 1
+                    ? "1 Novo Pedido Pendente Aguardando Aceite!"
+                    : `${pendingOrdersCount} Novos Pedidos Pendentes Aguardando Aceite!`}
+                </p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  O alarme sonoro toca a cada 5 segundos. Clique em <strong>&quot;Aceitar Pedido&quot;</strong> no card abaixo para iniciar o preparo e parar o alarme.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20 text-gray-400">
             <Package className="h-16 w-16" strokeWidth={1} />
@@ -226,7 +248,7 @@ function OrderCard({
 
   const getAdvanceButtonLabel = () => {
     if (order.status === "received") {
-      return "Aceitar / Colocar em Preparo";
+      return "Aceitar Pedido / Iniciar Preparo";
     }
     if (order.status === "preparing") {
       return isPickup ? "Marcar como 'Pronto no Balcão'" : "Enviar para Entrega";
@@ -499,7 +521,11 @@ function OrderCard({
                 e.stopPropagation();
                 onAdvance(order.id);
               }}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-500 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-green-600 active:scale-95 cursor-pointer"
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 cursor-pointer ${
+                order.status === "received"
+                  ? "bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400 font-black shadow-md animate-pulse"
+                  : "bg-green-500 hover:bg-green-600"
+              }`}
             >
               <Check className="h-4 w-4" />
               {getAdvanceButtonLabel()}

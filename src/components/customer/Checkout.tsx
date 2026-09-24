@@ -34,6 +34,7 @@ import {
   clearCustomerProfile,
 } from "@/utils/orderStorage";
 import { compressImageToDataUrl, formatFileSize } from "@/utils/imageCompressor";
+import { playOrderSubmissionConfirmationSound } from "@/utils/audio";
 import type { OrderType, PaymentMethod, CardType, Order } from "@/types";
 
 interface CheckoutProps {
@@ -213,6 +214,9 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   const handleSubmit = async () => {
     if (!validate()) return;
     if (!isStoreOpen || !isStoreActive) return;
+
+    // Som de confirmação imediato para o cliente ("tricks" sonoro agradável)
+    playOrderSubmissionConfirmationSound();
 
     setIsSubmitting(true);
 
