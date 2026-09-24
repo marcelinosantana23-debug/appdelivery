@@ -17,12 +17,362 @@ import type {
   FeaturedStoreRanked,
   StoreStory,
 } from "./types";
-import { mockProducts } from "../data/mockData";
 import { orderEvents } from "./events";
 import { hashPassword, verifyPassword } from "./security";
 
 // Seed data para demonstração e inicialização
 const initialTenants: Tenant[] = [
+  // 1. Açaiteria
+  {
+    id: "tenant-acai-do-vale",
+    name: "Açaí Puro & Bowls",
+    slug: "acai-do-vale",
+    email: "contato@acaipuro.com.br",
+    phone: "11966666666",
+    whatsapp: "5511966666666",
+    pixKey: "contato@acaipuro.com.br",
+    pixKeyType: "email",
+    deliveryFee: 4.0,
+    address: "Av. Brasil, 890 - Centro",
+    hours: "12:00 - 23:00",
+    tagline: "O autêntico açaí do Pará 100% puro com acompanhamentos à vontade",
+    announcement: "🍧 Monte seu copo ou tigela com camadas de frutas frescas, cremes e adicionais à vontade!",
+    logo: "🍧",
+    bannerImage: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#7E22CE",
+    secondaryColor: "#1E1B4B",
+    primaryDark: "#6B21A8",
+    primaryLight: "#A855F7",
+    accentColor: "#EAB308",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 10,
+    businessType: "Açaíterias",
+    rating: 4.9,
+    ratingCount: 245,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 10 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 2. Hambúrgueres
+  {
+    id: "tenant-burger-town",
+    name: "Burger Town Artesanal",
+    slug: "burger-town",
+    email: "admin@burgertown.com",
+    phone: "11999999999",
+    whatsapp: "5511999999999",
+    pixKey: "contato@burgertown.com.br",
+    pixKeyType: "email",
+    deliveryFee: 5.0,
+    address: "Rua das Chamas, 420 - Centro",
+    hours: "18:00 - 23:45",
+    tagline: "Smash e burgers artesanais grelhados no fogo com queijo derretido e bacon",
+    announcement: "🔥 Pão brioche selado e blend angus especial. Entrega rápida e quentinha!",
+    logo: "🍔",
+    bannerImage: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#E63946",
+    secondaryColor: "#1E293B",
+    primaryDark: "#C1121F",
+    primaryLight: "#F77F00",
+    accentColor: "#FCBF49",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 9,
+    businessType: "Hambúrgueres",
+    rating: 4.9,
+    ratingCount: 380,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 30 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 3. Pizzaria
+  {
+    id: "tenant-pizza-bella",
+    name: "Bella Pizza Forno a Lenha",
+    slug: "pizza-bella",
+    email: "admin@pizzabella.com",
+    phone: "11988888888",
+    whatsapp: "5511988888888",
+    pixKey: "pedidos@pizzabella.com.br",
+    pixKeyType: "email",
+    deliveryFee: 6.0,
+    address: "Av. Paulista, 1500 - Bela Vista",
+    hours: "18:30 - 00:00",
+    tagline: "Massa de fermentação natural de 48h, molho artesanal e bordas recheadas",
+    announcement: "🍕 Promoção: Borda recheada de Catupiry ou Cheddar grátis em pizzas grandes!",
+    logo: "🍕",
+    bannerImage: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#D97706",
+    secondaryColor: "#0F172A",
+    primaryDark: "#B45309",
+    primaryLight: "#F59E0B",
+    accentColor: "#EF4444",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 8,
+    businessType: "Pizzarias",
+    rating: 4.8,
+    ratingCount: 310,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 15 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 4. Sorveteria
+  {
+    id: "tenant-sorvetes-imperial",
+    name: "Gelateria & Sorvetes Imperial",
+    slug: "sorvetes-imperial",
+    email: "contato@sorvetesimperial.com.br",
+    phone: "11977777777",
+    whatsapp: "5511977777777",
+    pixKey: "contato@sorvetesimperial.com.br",
+    pixKeyType: "email",
+    deliveryFee: 4.5,
+    address: "Rua das Palmeiras, 350 - Jardins",
+    hours: "13:00 - 22:30",
+    tagline: "Gelatos italianos autênticos, picolés artesanais e taças montadas",
+    announcement: "🍨 Embalagens térmicas especiais com gelo seco: gelato cremoso e firme na sua casa!",
+    logo: "🍨",
+    bannerImage: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#0284C7",
+    secondaryColor: "#0F172A",
+    primaryDark: "#0369A1",
+    primaryLight: "#38BDF8",
+    accentColor: "#F59E0B",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 7,
+    businessType: "Sorveterias",
+    rating: 4.9,
+    ratingCount: 192,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 12 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 5. Japonesa
+  {
+    id: "tenant-sushi-ya",
+    name: "Tokyo Sushi & Temakeria",
+    slug: "tokyo-sushi",
+    email: "contato@tokyosushi.com.br",
+    phone: "11944444444",
+    whatsapp: "5511944444444",
+    pixKey: "contato@tokyosushi.com.br",
+    pixKeyType: "email",
+    deliveryFee: 7.0,
+    address: "Rua Liberdade, 320 - Bairro Oriental",
+    hours: "18:00 - 23:30",
+    tagline: "Sashimis frescos, combinados especiais, hot rolls crocantes e temakis generosos",
+    announcement: "🍣 Peixes frescos selecionados diariamente, wasabi de verdade e molho tarê artesanal!",
+    logo: "🍣",
+    bannerImage: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#BE123C",
+    secondaryColor: "#1C1917",
+    primaryDark: "#9F1239",
+    primaryLight: "#FB7185",
+    accentColor: "#E11D48",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 6,
+    businessType: "Japonesa",
+    rating: 4.9,
+    ratingCount: 410,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 18 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 6. Salgados
+  {
+    id: "tenant-rei-dos-salgados",
+    name: "Rei dos Salgados & Coxinhas",
+    slug: "rei-dos-salgados",
+    email: "contato@reidossalgados.com.br",
+    phone: "11933333333",
+    whatsapp: "5511933333333",
+    pixKey: "contato@reidossalgados.com.br",
+    pixKeyType: "email",
+    deliveryFee: 5.0,
+    address: "Av. Central, 550 - Bairro Novo",
+    hours: "09:00 - 21:00",
+    tagline: "Coxinhas com massa de batata crocante, empadas finas, kibes e centos para festa",
+    announcement: "🥟 Fritos na hora da entrega! Monte seu cento ou caixinha mista quentinha.",
+    logo: "🥟",
+    bannerImage: "https://images.unsplash.com/photo-1628294895950-9805252327bc?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#EA580C",
+    secondaryColor: "#292524",
+    primaryDark: "#C2410C",
+    primaryLight: "#FB923C",
+    accentColor: "#F59E0B",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 5,
+    businessType: "Salgados",
+    rating: 4.8,
+    ratingCount: 275,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 14 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 7. Marmitaria
+  {
+    id: "tenant-marmitaria-dona-maria",
+    name: "Marmitaria Dona Maria",
+    slug: "marmitaria-dona-maria",
+    email: "contato@marmitariadonamaria.com.br",
+    phone: "11922222222",
+    whatsapp: "5511922222222",
+    pixKey: "contato@marmitariadonamaria.com.br",
+    pixKeyType: "email",
+    deliveryFee: 3.5,
+    address: "Rua dos Coqueiros, 140 - Vila Nova",
+    hours: "10:30 - 15:00",
+    tagline: "Comida caseira de verdade feita no capricho com tempero de mãe e entrega rápida",
+    announcement: "🍱 Cardápio diário com feijoada, bife acebolado, parmegiana e opções fitness balanceadas!",
+    logo: "🍱",
+    bannerImage: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#15803D",
+    secondaryColor: "#14532D",
+    primaryDark: "#166534",
+    primaryLight: "#4ADE80",
+    accentColor: "#FACC15",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 4,
+    businessType: "Marmitaria",
+    rating: 4.9,
+    ratingCount: 520,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 25 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 8. Doces
+  {
+    id: "tenant-doce-encanto",
+    name: "Doce Encanto Confeitaria & Bolos",
+    slug: "doce-encanto",
+    email: "contato@doceencanto.com.br",
+    phone: "11911111111",
+    whatsapp: "5511911111111",
+    pixKey: "contato@doceencanto.com.br",
+    pixKeyType: "email",
+    deliveryFee: 4.5,
+    address: "Alameda das Flores, 770 - Jardim Primavera",
+    hours: "12:00 - 22:00",
+    tagline: "Bolos vulcão, fatias gourmet, brigadeiros belgas e sobremesas refinadas no pote",
+    announcement: "🍰 Sobremesas artesanais com chocolate nobre e morangos frescos. Adoce o seu dia!",
+    logo: "🍰",
+    bannerImage: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#DB2777",
+    secondaryColor: "#831843",
+    primaryDark: "#BE185D",
+    primaryLight: "#F472B6",
+    accentColor: "#FBBF24",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 3,
+    businessType: "Doces",
+    rating: 5.0,
+    ratingCount: 168,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 16 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 9. Churrascaria
+  {
+    id: "tenant-sabor-e-brasa",
+    name: "Boi Dourado Churrascaria & Brasa",
+    slug: "sabor-e-brasa",
+    email: "contato@saborebrasa.com.br",
+    phone: "11955555555",
+    whatsapp: "5511955555555",
+    pixKey: "contato@saborebrasa.com.br",
+    pixKeyType: "email",
+    deliveryFee: 6.5,
+    address: "Rua do Comércio, 1200 - Centro",
+    hours: "11:00 - 23:00",
+    tagline: "Cortes nobres na brasa de carvão: picanha, costela assada no bafo e guarnições",
+    announcement: "🥩 Cortes nobres fatiados com farofa crocante, vinagrete da casa e mandioca na manteiga de garrafa!",
+    logo: "🥩",
+    bannerImage: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#991B1B",
+    secondaryColor: "#18181B",
+    primaryDark: "#7F1D1D",
+    primaryLight: "#EF4444",
+    accentColor: "#F59E0B",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 2,
+    businessType: "Churrascaria",
+    rating: 4.8,
+    ratingCount: 340,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 20 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 10. Bebidas
+  {
+    id: "tenant-adega-zero-grau",
+    name: "Adega & Distribuidora Zero Grau",
+    slug: "adega-zero-grau",
+    email: "contato@adegazerograu.com.br",
+    phone: "11987654321",
+    whatsapp: "5511987654321",
+    pixKey: "contato@adegazerograu.com.br",
+    pixKeyType: "email",
+    deliveryFee: 5.0,
+    address: "Av. das Nações, 1020 - Centro",
+    hours: "14:00 - 02:00",
+    tagline: "Cervejas estupidamente geladas, destilados, vinhos, energéticos, gelo e carvão",
+    announcement: "🍺 Entrega expressa em até 30 minutos: bebida na temperatura certa para o seu rolê!",
+    logo: "🍺",
+    bannerImage: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?auto=format&fit=crop&w=1200&q=80",
+    primaryColor: "#0D9488",
+    secondaryColor: "#134E4A",
+    primaryDark: "#0F766E",
+    primaryLight: "#2DD4BF",
+    accentColor: "#F59E0B",
+    themeMode: "light",
+    menuLayout: "list",
+    showFeaturedCarousel: true,
+    isFeatured: true,
+    priorityOrder: 1,
+    businessType: "Bebidas",
+    rating: 4.9,
+    ratingCount: 295,
+    status: "active",
+    isOpen: true,
+    createdAt: Date.now() - 22 * 86400000,
+    updatedAt: Date.now(),
+  },
+  // 11. MS Preparações (Lanches e Burger Artesanal)
   {
     id: "tenant-ms-preparacoes",
     name: "MS Preparações",
@@ -49,7 +399,7 @@ const initialTenants: Tenant[] = [
     showFeaturedCarousel: true,
     isFeatured: true,
     priorityOrder: 10,
-    businessType: "Lanchonetes",
+    businessType: "Hambúrgueres",
     rating: 4.9,
     ratingCount: 184,
     status: "active",
@@ -57,165 +407,6 @@ const initialTenants: Tenant[] = [
     subscriptionStatus: "demo",
     monthlyFee: 49.9,
     createdAt: Date.now() - 5 * 86400000,
-    updatedAt: Date.now(),
-  },
-  {
-    id: "tenant-burger-town",
-    name: "Burger Town",
-    slug: "burger-town",
-    email: "admin@burgertown.com",
-    phone: "11999999999",
-    whatsapp: "5511999999999",
-    pixKey: "contato@burgertown.com.br",
-    pixKeyType: "email",
-    deliveryFee: 6.0,
-    address: "Rua das Chamas, 420 - Centro",
-    hours: "18:00 - 23:30",
-    tagline: "Hambúrgueres artesanais na chama",
-    announcement: "Entrega grátis para pedidos acima de R$ 50,00!",
-    logo: "🍔",
-    bannerImage: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80",
-    primaryColor: "#E63946",
-    secondaryColor: "#1E293B",
-    primaryDark: "#C1121F",
-    primaryLight: "#F77F00",
-    accentColor: "#FCBF49",
-    themeMode: "light",
-    menuLayout: "list",
-    showFeaturedCarousel: true,
-    isFeatured: true,
-    priorityOrder: 5,
-    businessType: "Lanchonetes",
-    rating: 4.8,
-    ratingCount: 126,
-    status: "active",
-    isOpen: true,
-    createdAt: Date.now() - 30 * 86400000,
-    updatedAt: Date.now(),
-  },
-  {
-    id: "tenant-pizza-bella",
-    name: "Pizza Bella",
-    slug: "pizza-bella",
-    email: "admin@pizzabella.com",
-    phone: "11988888888",
-    whatsapp: "5511988888888",
-    pixKey: "pedidos@pizzabella.com.br",
-    pixKeyType: "email",
-    deliveryFee: 7.5,
-    address: "Av. Paulista, 1500 - Bela Vista",
-    hours: "18:30 - 00:00",
-    tagline: "Pizzas no forno a lenha com massa fermentada",
-    announcement: "🍕 Tradicionais pizzas no forno a lenha e bordas recheadas!",
-    logo: "🍕",
-    bannerImage: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80",
-    primaryColor: "#059669",
-    secondaryColor: "#0F172A",
-    primaryDark: "#047857",
-    primaryLight: "#10B981",
-    accentColor: "#F59E0B",
-    businessType: "Pizzarias",
-    rating: 4.9,
-    ratingCount: 215,
-    status: "active",
-    isOpen: true,
-    createdAt: Date.now() - 15 * 86400000,
-    updatedAt: Date.now(),
-  },
-  {
-    id: "tenant-sorvetes-imperial",
-    name: "Sorvetes & Gelatos Imperial",
-    slug: "sorvetes-imperial",
-    email: "contato@sorvetesimperial.com.br",
-    phone: "11977777777",
-    whatsapp: "5511977777777",
-    pixKey: "contato@sorvetesimperial.com.br",
-    pixKeyType: "email",
-    deliveryFee: 4.0,
-    address: "Rua das Palmeiras, 350 - Jardins",
-    hours: "13:00 - 22:30",
-    tagline: "Gelatos italianos autênticos, picolés artesanais e taças premium",
-    announcement: "🍦 Mais de 30 sabores artesanais e taças montadas na hora!",
-    logo: "🍨",
-    bannerImage: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=1200&q=80",
-    primaryColor: "#0284C7",
-    secondaryColor: "#0F172A",
-    primaryDark: "#0369A1",
-    primaryLight: "#38BDF8",
-    accentColor: "#F59E0B",
-    themeMode: "light",
-    menuLayout: "list",
-    showFeaturedCarousel: true,
-    businessType: "Sorveteiras",
-    rating: 4.9,
-    ratingCount: 98,
-    status: "active",
-    isOpen: true,
-    createdAt: Date.now() - 10 * 86400000,
-    updatedAt: Date.now(),
-  },
-  {
-    id: "tenant-acai-do-vale",
-    name: "Açaí do Vale & Cia",
-    slug: "acai-do-vale",
-    email: "pedidos@acaidovale.com.br",
-    phone: "11966666666",
-    whatsapp: "5511966666666",
-    pixKey: "pedidos@acaidovale.com.br",
-    pixKeyType: "email",
-    deliveryFee: 5.0,
-    address: "Av. Brasil, 890 - Centro",
-    hours: "12:00 - 23:00",
-    tagline: "Açaí puro do Pará batido na hora, cremes e acompanhamentos",
-    announcement: "🍧 Monte sua tigela ou copo com frutas frescas e complementos à vontade!",
-    logo: "🍧",
-    bannerImage: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=1200&q=80",
-    primaryColor: "#7E22CE",
-    secondaryColor: "#1E1B4B",
-    primaryDark: "#6B21A8",
-    primaryLight: "#A855F7",
-    accentColor: "#EAB308",
-    themeMode: "light",
-    menuLayout: "list",
-    showFeaturedCarousel: true,
-    businessType: "Açaíterias",
-    rating: 4.9,
-    ratingCount: 167,
-    status: "active",
-    isOpen: true,
-    createdAt: Date.now() - 8 * 86400000,
-    updatedAt: Date.now(),
-  },
-  {
-    id: "tenant-sabor-e-brasa",
-    name: "Sabor & Brasa Grill",
-    slug: "sabor-e-brasa",
-    email: "contato@saborebrasa.com.br",
-    phone: "11955555555",
-    whatsapp: "5511955555555",
-    pixKey: "contato@saborebrasa.com.br",
-    pixKeyType: "email",
-    deliveryFee: 7.0,
-    address: "Rua do Comércio, 1200 - Centro",
-    hours: "11:00 - 22:30",
-    tagline: "Cortes nobres na brasa, marmitex gourmet e refeições executivas",
-    announcement: "🥩 Almoço executivo e cortes nobres preparados na churrasqueira a carvão!",
-    logo: "🥩",
-    bannerImage: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
-    primaryColor: "#B91C1C",
-    secondaryColor: "#18181B",
-    primaryDark: "#991B1B",
-    primaryLight: "#EF4444",
-    accentColor: "#F59E0B",
-    themeMode: "light",
-    menuLayout: "list",
-    showFeaturedCarousel: true,
-    businessType: "Restaurantes",
-    rating: 4.8,
-    ratingCount: 312,
-    status: "active",
-    isOpen: true,
-    createdAt: Date.now() - 20 * 86400000,
     updatedAt: Date.now(),
   },
 ];
@@ -232,20 +423,20 @@ const initialUsers: User[] = [
     createdAt: Date.now() - 60 * 86400000,
   },
   {
-    id: "user-burgertown",
-    email: "admin@burgertown.com",
-    password: "123456",
-    name: "Carlos Burguer",
+    id: "user-acai",
+    email: "contato@acaipuro.com.br",
+    password: "admin",
+    name: "Gerente Açaí Puro",
     role: "tenant_admin",
-    tenantId: "tenant-burger-town",
+    tenantId: "tenant-acai-do-vale",
     status: "active",
-    createdAt: Date.now() - 30 * 86400000,
+    createdAt: Date.now() - 10 * 86400000,
   },
   {
-    id: "user-burgertown-legacy",
-    email: "admin@loja.com",
-    password: "123456",
-    name: "Gerente Burger Town",
+    id: "user-burgertown",
+    email: "admin@burgertown.com",
+    password: "admin",
+    name: "Carlos Burguer",
     role: "tenant_admin",
     tenantId: "tenant-burger-town",
     status: "active",
@@ -254,12 +445,82 @@ const initialUsers: User[] = [
   {
     id: "user-pizzabella",
     email: "admin@pizzabella.com",
-    password: "123456",
+    password: "admin",
     name: "Luigi Pizza",
     role: "tenant_admin",
     tenantId: "tenant-pizza-bella",
     status: "active",
     createdAt: Date.now() - 15 * 86400000,
+  },
+  {
+    id: "user-sorvetes",
+    email: "contato@sorvetesimperial.com.br",
+    password: "admin",
+    name: "Sofia Gelato",
+    role: "tenant_admin",
+    tenantId: "tenant-sorvetes-imperial",
+    status: "active",
+    createdAt: Date.now() - 12 * 86400000,
+  },
+  {
+    id: "user-sushi",
+    email: "contato@tokyosushi.com.br",
+    password: "admin",
+    name: "Kenji Sushi",
+    role: "tenant_admin",
+    tenantId: "tenant-sushi-ya",
+    status: "active",
+    createdAt: Date.now() - 18 * 86400000,
+  },
+  {
+    id: "user-salgados",
+    email: "contato@reidossalgados.com.br",
+    password: "admin",
+    name: "Ricardo Salgados",
+    role: "tenant_admin",
+    tenantId: "tenant-rei-dos-salgados",
+    status: "active",
+    createdAt: Date.now() - 14 * 86400000,
+  },
+  {
+    id: "user-marmitaria",
+    email: "contato@marmitariadonamaria.com.br",
+    password: "admin",
+    name: "Dona Maria",
+    role: "tenant_admin",
+    tenantId: "tenant-marmitaria-dona-maria",
+    status: "active",
+    createdAt: Date.now() - 25 * 86400000,
+  },
+  {
+    id: "user-doces",
+    email: "contato@doceencanto.com.br",
+    password: "admin",
+    name: "Beatriz Confeiteira",
+    role: "tenant_admin",
+    tenantId: "tenant-doce-encanto",
+    status: "active",
+    createdAt: Date.now() - 16 * 86400000,
+  },
+  {
+    id: "user-churrasco",
+    email: "contato@saborebrasa.com.br",
+    password: "admin",
+    name: "Marcos Gaúcho",
+    role: "tenant_admin",
+    tenantId: "tenant-sabor-e-brasa",
+    status: "active",
+    createdAt: Date.now() - 20 * 86400000,
+  },
+  {
+    id: "user-adega",
+    email: "contato@adegazerograu.com.br",
+    password: "admin",
+    name: "Fernando Bebidas",
+    role: "tenant_admin",
+    tenantId: "tenant-adega-zero-grau",
+    status: "active",
+    createdAt: Date.now() - 22 * 86400000,
   },
   {
     id: "user-marcelino",
@@ -274,7 +535,432 @@ const initialUsers: User[] = [
 ];
 
 const initialProducts: Product[] = [
-  // MS Preparações products (Lanchonete MS Preparações)
+  // ==========================================
+  // 1. AÇAITERIA (tenant-acai-do-vale) - Opções ricas de adicionais para demonstração
+  // ==========================================
+  {
+    id: "acai-copo-500",
+    tenantId: "tenant-acai-do-vale",
+    name: "Copo de Açaí Turbinado 500ml",
+    description: "Açaí puro batido na hora, cremoso e refrescante. Monte com camadas fartas de adicionais.",
+    price: 22.0,
+    image: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80",
+    category: "acai",
+    available: true,
+    options: [
+      { id: "acai-ninho", name: "Leite em Pó Ninho", price: 3.5 },
+      { id: "acai-granola", name: "Granola Tradicional Crocante", price: 2.5 },
+      { id: "acai-morango", name: "Morango Fresco Picado", price: 4.5 },
+      { id: "acai-nutella", name: "Nutella Pura Original", price: 5.0 },
+      { id: "acai-leite-cond", name: "Leite Condensado Cremoso", price: 2.5 },
+      { id: "acai-banana", name: "Banana Fatiada Fresca", price: 2.0 },
+      { id: "acai-pacoca", name: "Paçoca de Amendoim Rolha", price: 2.0 },
+      { id: "acai-gotas-choc", name: "Gotas de Chocolate Nobre", price: 3.0 },
+    ],
+  },
+  {
+    id: "acai-tigela-700",
+    tenantId: "tenant-acai-do-vale",
+    name: "Tigela Açaí Especial Supreme 700ml",
+    description: "Tigela generosa de açaí artesanal premium. Acompanha camadas perfeitas para você customizar com frutas e cremes.",
+    price: 28.9,
+    image: "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=600&q=80",
+    category: "acai",
+    available: true,
+    options: [
+      { id: "acai-creme-ninho", name: "Creme de Ninho Artesanal Trufado", price: 4.5 },
+      { id: "acai-creme-avela", name: "Creme de Avelã Nutella", price: 5.0 },
+      { id: "acai-ninho-extra", name: "Leite em Pó Ninho Extra", price: 3.0 },
+      { id: "acai-granola-castanhas", name: "Granola Especial com Castanhas", price: 3.5 },
+      { id: "acai-mix-frutas", name: "Mix de Kiwi, Morango e Banana", price: 5.5 },
+      { id: "acai-mel", name: "Mel Silvestre Orgânico", price: 3.0 },
+    ],
+  },
+  {
+    id: "acai-copo-300",
+    tenantId: "tenant-acai-do-vale",
+    name: "Copo de Açaí Cremoso 300ml",
+    description: "Açaí tradicional batido com xarope de guaraná na consistência perfeita.",
+    price: 16.0,
+    image: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80",
+    category: "acai",
+    available: true,
+    options: [
+      { id: "acai-300-ninho", name: "Leite em Pó Ninho", price: 3.0 },
+      { id: "acai-300-granola", name: "Granola Crocante", price: 2.5 },
+      { id: "acai-300-morango", name: "Morango Fresco", price: 4.0 },
+      { id: "acai-300-nutella", name: "Nutella Original", price: 4.5 },
+    ],
+  },
+  {
+    id: "acai-vitamina",
+    tenantId: "tenant-acai-do-vale",
+    name: "Vitamina Energética de Açaí 400ml",
+    description: "Açaí batido com banana, leite e guaraná em pó. Pura energia!",
+    price: 15.0,
+    image: "https://images.unsplash.com/photo-1553530666-ba11a7da3888?auto=format&fit=crop&w=600&q=80",
+    category: "bebidas",
+    available: true,
+    options: [
+      { id: "vit-whey", name: "Whey Protein Isolado Baunilha", price: 6.0 },
+      { id: "vit-aveia", name: "Aveia em Flocos Finos", price: 2.0 },
+      { id: "vit-guarana", name: "Dose Extra de Guaraná em Pó", price: 2.0 },
+    ],
+  },
+
+  // ==========================================
+  // 2. HAMBÚRGUERES (tenant-burger-town) - Opções ricas de adicionais para demonstração
+  // ==========================================
+  {
+    id: "bt-smash-bacon",
+    tenantId: "tenant-burger-town",
+    name: "Smash Monster Duplo Bacon",
+    description: "Dois smash burgers de 90g de puro Angus prensados na chapa bem quente, queijo cheddar derretido, fatias crocantes de bacon e maionese defumada no pão brioche amanteigado.",
+    price: 29.9,
+    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
+    category: "lanches",
+    available: true,
+    options: [
+      { id: "smash-extra-bacon", name: "Bacon Crocante Extra em Tiras", price: 5.0 },
+      { id: "smash-extra-cheddar", name: "Cheddar Cremoso Fundido", price: 4.0 },
+      { id: "smash-extra-burger", name: "Hambúrguer Smash Extra 90g", price: 7.0 },
+      { id: "smash-ovo", name: "Ovo Frito na Chapa Gema Mole", price: 3.0 },
+      { id: "smash-cebola-caramel", name: "Cebola Caramelizada na Manteiga", price: 3.0 },
+      { id: "smash-maionese-verde", name: "Maionese Verde Artesanal da Casa", price: 2.5 },
+      { id: "smash-picles", name: "Picles Artesanal Agridoce", price: 2.0 },
+    ],
+  },
+  {
+    id: "bt-cheddar-melt",
+    tenantId: "tenant-burger-town",
+    name: "Burger Cheddar Melt Supremo",
+    description: "Hambúrguer alto de 180g selado no ponto ideal, piscina de queijo cheddar cremoso legítimo e cebola salteada no molho shoyu.",
+    price: 34.9,
+    image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80",
+    category: "lanches",
+    available: true,
+    options: [
+      { id: "melt-farofa-bacon", name: "Farofa Crocante de Bacon", price: 4.5 },
+      { id: "melt-cheddar-duplo", name: "Dose Dupla de Queijo Cheddar", price: 4.5 },
+      { id: "melt-aneis-cebola", name: "Anéis de Cebola Empanados Crocantes", price: 5.0 },
+      { id: "melt-bbq", name: "Molho Barbecue Defumado", price: 2.5 },
+      { id: "melt-sem-cebola", name: "Sem Cebola (Apenas Cheddar)", price: 0.0 },
+    ],
+  },
+  {
+    id: "bt-fritas-supreme",
+    tenantId: "tenant-burger-town",
+    name: "Batata Frita Supreme Cheddar & Bacon",
+    description: "Porção generosa de batatas rústicas douradas e crocantes cobertas com queijo cheddar cremoso e cubinhos crocantes de bacon artesanal.",
+    price: 24.9,
+    image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=600&q=80",
+    category: "porcoes",
+    available: true,
+    options: [
+      { id: "fritas-dobro-cheddar", name: "Cheddar Cremoso em Dobro", price: 5.0 },
+      { id: "fritas-dobro-bacon", name: "Bacon Crocante em Dobro", price: 5.0 },
+      { id: "fritas-molho-jalapeno", name: "Molho Jalapeño Suave Picante", price: 3.0 },
+    ],
+  },
+  {
+    id: "bt-combo-monster",
+    tenantId: "tenant-burger-town",
+    name: "Combo Monster Burger + Fritas + Refri",
+    description: "Smash Monster Duplo Bacon acompanhado de Batata Frita crocante individual e Refrigerante Lata 350ml geladinho.",
+    price: 44.9,
+    image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
+    category: "combos",
+    available: true,
+    options: [
+      { id: "combo-turbinar-fritas", name: "Turbinar Fritas com Cheddar e Bacon", price: 6.0 },
+      { id: "combo-refri-coca", name: "Coca-Cola Original 350ml", price: 0.0 },
+      { id: "combo-refri-zero", name: "Coca-Cola Sem Açúcar 350ml", price: 0.0 },
+      { id: "combo-refri-guarana", name: "Guaraná Antarctica 350ml", price: 0.0 },
+      { id: "combo-extra-bacon", name: "Bacon Extra no Burger", price: 4.5 },
+    ],
+  },
+
+  // ==========================================
+  // 3. PIZZARIA (tenant-pizza-bella)
+  // ==========================================
+  {
+    id: "pb-margherita",
+    tenantId: "tenant-pizza-bella",
+    name: "Pizza Margherita Especial Forno a Lenha",
+    description: "Molho de tomate pelado italiano San Marzano, mozzarella fatiada, rodelas de tomate fresco, manjericão e azeite extravirgem.",
+    price: 49.9,
+    image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=600&q=80",
+    category: "pizzas",
+    available: true,
+    options: [
+      { id: "pb-borda-catupiry", name: "Borda Recheada de Catupiry Original", price: 8.0 },
+      { id: "pb-borda-cheddar", name: "Borda Recheada de Cheddar Cremoso", price: 8.0 },
+      { id: "pb-queijo-extra", name: "Queijo Mozzarella Extra", price: 6.0 },
+    ],
+  },
+  {
+    id: "pb-calabresa",
+    tenantId: "tenant-pizza-bella",
+    name: "Pizza Calabresa Artesanal Defumada",
+    description: "Calabresa artesanal defumada fatiada, cebola roxa marinada no azeite e azeitonas pretas chilenas.",
+    price: 46.9,
+    image: "https://images.unsplash.com/photo-1534308983496-4fabb1a015ee?auto=format&fit=crop&w=600&q=80",
+    category: "pizzas",
+    available: true,
+    options: [
+      { id: "pb-cal-borda-catupiry", name: "Borda Recheada de Catupiry", price: 8.0 },
+      { id: "pb-cal-cebola-roxa", name: "Cebola Roxa Extra", price: 2.0 },
+      { id: "pb-cal-queijo", name: "Camada de Queijo Mozzarella", price: 6.0 },
+    ],
+  },
+
+  // ==========================================
+  // 4. SORVETERIA (tenant-sorvetes-imperial)
+  // ==========================================
+  {
+    id: "si-taca-imperial",
+    tenantId: "tenant-sorvetes-imperial",
+    name: "Taça Supreme Gelato & Frutas Vermelhas",
+    description: "Três bolas de gelato artesanal italiano, calda artesanal de amora e framboesa, chantilly fresco e castanhas caramelizadas.",
+    price: 26.0,
+    image: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=600&q=80",
+    category: "sobremesas",
+    available: true,
+    options: [
+      { id: "si-calda-choc", name: "Calda Quente de Chocolate Belga", price: 4.0 },
+      { id: "si-chantilly-extra", name: "Chantilly Fresco Extra", price: 3.0 },
+      { id: "si-castanhas", name: "Castanhas de Caju Picadas", price: 3.0 },
+    ],
+  },
+  {
+    id: "si-pote-1l",
+    tenantId: "tenant-sorvetes-imperial",
+    name: "Pote Térmico 1 Litro Gelato Artesanal",
+    description: "Pote selado e embalado em bolsa térmica com gelo seco. Escolha até 2 sabores artesanais.",
+    price: 42.0,
+    image: "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=600&q=80",
+    category: "sobremesas",
+    available: true,
+    options: [
+      { id: "si-sabor-pistache", name: "Pistache Puro da Sicília", price: 4.0 },
+      { id: "si-sabor-ninho-nutella", name: "Ninho Trufado com Nutella", price: 0.0 },
+      { id: "si-sabor-morango", name: "Morango Silvestre Cremoso", price: 0.0 },
+    ],
+  },
+
+  // ==========================================
+  // 5. JAPONESA (tenant-sushi-ya)
+  // ==========================================
+  {
+    id: "sy-combo-prime",
+    tenantId: "tenant-sushi-ya",
+    name: "Combo Tokyo Prime 24 Peças",
+    description: "8 sashimis de salmão fresco, 4 uramakis philadelphia, 4 jows salmão maçaricado com cream cheese, 4 niguiris e 4 hot rolls crocantes.",
+    price: 68.9,
+    image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=600&q=80",
+    category: "japonesa",
+    available: true,
+    options: [
+      { id: "sy-molho-tare", name: "Molho Tarê Artesanal Extra", price: 3.0 },
+      { id: "sy-gengibre-wasabi", name: "Porção Extra Gengibre & Wasabi", price: 3.0 },
+      { id: "sy-cream-cheese", name: "Cream Cheese Philadelphia Extra", price: 4.0 },
+    ],
+  },
+  {
+    id: "sy-temaki-salmao",
+    tenantId: "tenant-sushi-ya",
+    name: "Temaki Especial Salmão Completo",
+    description: "Alga nori crocante, arroz japonês temperado, cubos generosos de salmão fresco, cream cheese philadelphia e cebolinha picada.",
+    price: 28.9,
+    image: "https://images.unsplash.com/photo-1611143669185-af224c5e3252?auto=format&fit=crop&w=600&q=80",
+    category: "japonesa",
+    available: true,
+    options: [
+      { id: "sy-temaki-crocante", name: "Com Farofa de Empanado Panko Crocante", price: 2.5 },
+      { id: "sy-temaki-macaricado", name: "Salmão Maçaricado com Azeite Trufado", price: 3.5 },
+    ],
+  },
+
+  // ==========================================
+  // 6. SALGADOS (tenant-rei-dos-salgados)
+  // ==========================================
+  {
+    id: "rs-cento-festa",
+    tenantId: "tenant-rei-dos-salgados",
+    name: "Cento de Mini Salgados Fritos para Festa (100 un)",
+    description: "Fritos na hora! 30 coxinhas de frango, 25 bolinhas de queijo, 25 kibes com carne e 20 risoles de presunto e queijo.",
+    price: 75.0,
+    image: "https://images.unsplash.com/photo-1628294895950-9805252327bc?auto=format&fit=crop&w=600&q=80",
+    category: "salgados",
+    available: true,
+    options: [
+      { id: "rs-maionese-alho", name: "Pote de Maionese de Alho da Casa 150ml", price: 5.0 },
+      { id: "rs-molho-pimenta", name: "Molho de Pimenta Artesanal Defumada", price: 4.0 },
+    ],
+  },
+  {
+    id: "rs-coxinha-gigante",
+    tenantId: "tenant-rei-dos-salgados",
+    name: "Coxinha de Frango com Requeijão Cremoso (220g)",
+    description: "Massa fininha e crocante de batata, recheada de ponta a ponta com frango desfiado temperado e requeijão cremoso.",
+    price: 10.0,
+    image: "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?auto=format&fit=crop&w=600&q=80",
+    category: "salgados",
+    available: true,
+    options: [
+      { id: "rs-queijo-requeijao", name: "Recheio Duplo de Requeijão", price: 3.0 },
+    ],
+  },
+
+  // ==========================================
+  // 7. MARMITARIA (tenant-marmitaria-dona-maria)
+  // ==========================================
+  {
+    id: "md-marmita-executiva",
+    tenantId: "tenant-marmitaria-dona-maria",
+    name: "Marmitex Executiva Bife Acebolado com Fritas",
+    description: "Arroz branco soltinho, feijão carioquinha caseiro temperado com alho e louro, bife bovino macio acebolado, batatas fritas crocantes e saladinha fresca.",
+    price: 24.9,
+    image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
+    category: "marmitaria",
+    available: true,
+    options: [
+      { id: "md-ovo-frito", name: "Ovo Frito na Hora com Gema Mole", price: 3.0 },
+      { id: "md-farofa-bacon", name: "Porção de Farofa Caseira de Bacon", price: 3.5 },
+      { id: "md-feijao-extra", name: "Concha Extra de Feijão Temperado", price: 3.0 },
+      { id: "md-vinagrete", name: "Vinagrete Especial com Cheiro Verde", price: 2.5 },
+    ],
+  },
+  {
+    id: "md-parmegiana",
+    tenantId: "tenant-marmitaria-dona-maria",
+    name: "Marmitex Filé de Frango à Parmegiana",
+    description: "Filé de frango empanado crocante coberto com molho de tomate caseiro e queijo mozzarella gratinado. Acompanha arroz e purê de batatas cremoso.",
+    price: 27.9,
+    image: "https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?auto=format&fit=crop&w=600&q=80",
+    category: "marmitaria",
+    available: true,
+    options: [
+      { id: "md-pure-extra", name: "Purê de Batata Cremoso Extra", price: 4.0 },
+      { id: "md-queijo-gratinado", name: "Queijo Mozzarella Gratinado Duplo", price: 4.5 },
+    ],
+  },
+
+  // ==========================================
+  // 8. DOCES (tenant-doce-encanto)
+  // ==========================================
+  {
+    id: "de-bolo-vulcao",
+    tenantId: "tenant-doce-encanto",
+    name: "Fatia de Bolo Vulcão Ninho com Nutella",
+    description: "Massa de chocolate fofinha e úmida, com cascata farta de brigadeiro de Leite Ninho e cobertura generosa de Nutella pura.",
+    price: 18.9,
+    image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=600&q=80",
+    category: "docerias",
+    available: true,
+    options: [
+      { id: "de-morangos-frescos", name: "Morangos Frescos Fatiados", price: 4.0 },
+      { id: "de-brigadeiro-colher", name: "Potinho de Brigadeiro Belga de Colher", price: 5.0 },
+      { id: "de-raspas-choc", name: "Raspas de Chocolate Nobre", price: 2.5 },
+    ],
+  },
+  {
+    id: "de-copo-felicidade",
+    tenantId: "tenant-doce-encanto",
+    name: "Copo da Felicidade Morango do Amor 350ml",
+    description: "Camadas perfeitas de brownie úmido de chocolate belga, brigadeiro branco aveludado, morangos frescos e ganache de chocolate meio amargo.",
+    price: 21.0,
+    image: "https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=600&q=80",
+    category: "docerias",
+    available: true,
+    options: [
+      { id: "de-nutella-copo", name: "Dose Extra de Nutella", price: 4.0 },
+      { id: "de-ninho-polvilhado", name: "Leite Ninho Polvilhado", price: 2.0 },
+    ],
+  },
+
+  // ==========================================
+  // 9. CHURRASCARIA (tenant-sabor-e-brasa)
+  // ==========================================
+  {
+    id: "sb-picanha",
+    tenantId: "tenant-sabor-e-brasa",
+    name: "Picanha Nobre Fatiada na Brasa (500g)",
+    description: "Picanha nobre grelhada na churrasqueira a carvão no ponto perfeito. Acompanha arroz branco, farofa de ovos crocante, vinagrete e mandioca na manteiga de garrafa.",
+    price: 64.9,
+    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80",
+    category: "churrascaria",
+    available: true,
+    options: [
+      { id: "sb-queijo-coalho", name: "Espeto de Queijo Coalho com Melado", price: 12.0 },
+      { id: "sb-pao-alho", name: "Pão de Alho Recheado Crocante", price: 8.0 },
+      { id: "sb-mandioca-frita", name: "Porção Extra de Mandioca na Manteiga", price: 9.0 },
+    ],
+  },
+  {
+    id: "sb-costela",
+    tenantId: "tenant-sabor-e-brasa",
+    name: "Costela Bovina Assada no Bafo 12h (600g)",
+    description: "Costela bovina desmanchando no osso, defumada e marinada com especiarias. Acompanha farofa crocante e molho chimichurri da casa.",
+    price: 58.0,
+    image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=600&q=80",
+    category: "churrascaria",
+    available: true,
+    options: [
+      { id: "sb-chimichurri", name: "Molho Chimichurri Artesanal Extra", price: 3.5 },
+      { id: "sb-farofa-bacon", name: "Farofa de Bacon e Cebola", price: 4.0 },
+    ],
+  },
+
+  // ==========================================
+  // 10. BEBIDAS (tenant-adega-zero-grau)
+  // ==========================================
+  {
+    id: "zg-pack-heineken",
+    tenantId: "tenant-adega-zero-grau",
+    name: "Pack Cerveja Heineken Lata 350ml (6 Unidades Geladas)",
+    description: "Cerveja Heineken puro malte na temperatura ideal para consumo imediato, latas super geladas.",
+    price: 38.9,
+    image: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?auto=format&fit=crop&w=600&q=80",
+    category: "bebidas",
+    available: true,
+    options: [
+      { id: "zg-gelo-5kg", name: "Saco de Gelo Filtrado em Cubos 5kg", price: 10.0 },
+      { id: "zg-copos-descartaveis", name: "Pacote com 10 Copos Descartáveis 500ml", price: 5.0 },
+      { id: "zg-limao", name: "Limões Taiti Frescos Fatiados", price: 3.0 },
+    ],
+  },
+  {
+    id: "zg-combo-gin",
+    tenantId: "tenant-adega-zero-grau",
+    name: "Combo Gin Tanqueray 750ml + 4 Tônicas Schweppes",
+    description: "Garrafa de Gin importado Tanqueray London Dry 750ml com 4 latas de água tônica gelada.",
+    price: 139.9,
+    image: "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=600&q=80",
+    category: "bebidas",
+    available: true,
+    options: [
+      { id: "zg-especiarias", name: "Kit de Especiarias para Gin (Zimbro, Hibisco, Canela)", price: 12.0 },
+      { id: "zg-taca-acrilico", name: "Taça de Gin Acrílico Preta Personalizada", price: 9.0 },
+    ],
+  },
+  {
+    id: "zg-energetico-redbull",
+    tenantId: "tenant-adega-zero-grau",
+    name: "Energético Red Bull Energy Drink 250ml Gelado",
+    description: "Red Bull Energy Drink original super geladinho na lata.",
+    price: 11.0,
+    image: "https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80",
+    category: "bebidas",
+    available: true,
+    options: [
+      { id: "zg-redbull-sugarfree", name: "Trocar por Versão Sem Açúcar (Sugarfree)", price: 0.0 },
+    ],
+  },
+
+  // ==========================================
+  // 11. MS PREPARAÇÕES (tenant-ms-preparacoes)
+  // ==========================================
   {
     id: "msp-1",
     tenantId: "tenant-ms-preparacoes",
@@ -285,23 +971,25 @@ const initialProducts: Product[] = [
     category: "lanches",
     available: true,
     options: [
-      { id: "extra-bacon", name: "Bacon crocante extra", price: 4.5 },
-      { id: "extra-queijo", name: "Queijo duplo", price: 4.0 },
-      { id: "molho-especial", name: "Molho especial extra", price: 2.5 },
+      { id: "extra-bacon", name: "Bacon crocante extra em tiras", price: 4.5 },
+      { id: "extra-queijo", name: "Queijo duplo derretido", price: 4.0 },
+      { id: "extra-cheddar", name: "Cheddar cremoso fundido", price: 4.0 },
+      { id: "molho-especial", name: "Molho especial extra da casa", price: 2.5 },
     ],
   },
   {
     id: "msp-2",
     tenantId: "tenant-ms-preparacoes",
-    name: "Smash Burger Duplo Bacon",
+    name: "Smash Burger Duplo Bacon MS",
     description: "Dois smash burgers de 90g ultra crocantes, muito queijo cheddar cremoso derretido, fatias de bacon e cebola caramelizada.",
     price: 31.9,
     image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80",
     category: "lanches",
     available: true,
     options: [
-      { id: "extra-hamburguer", name: "Hambúrguer extra smash", price: 7.0 },
+      { id: "extra-hamburguer", name: "Hambúrguer extra smash 90g", price: 7.0 },
       { id: "extra-cheddar", name: "Cheddar cremoso extra", price: 3.5 },
+      { id: "extra-bacon-msp", name: "Bacon crocante extra", price: 4.5 },
     ],
   },
   {
@@ -313,7 +1001,10 @@ const initialProducts: Product[] = [
     image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
     category: "lanches",
     available: true,
-    options: [],
+    options: [
+      { id: "xtudo-cheddar", name: "Adicionar Cheddar Cremoso", price: 4.0 },
+      { id: "xtudo-bacon", name: "Dobro de Bacon Crocante", price: 5.0 },
+    ],
   },
   {
     id: "msp-4",
@@ -322,7 +1013,7 @@ const initialProducts: Product[] = [
     description: "Porção de batatas selecionadas com tempero secreto da casa e alecrim, servidas com maionese artesanal.",
     price: 18.0,
     image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=600&q=80",
-    category: "porções",
+    category: "porcoes",
     available: true,
     options: [
       { id: "cheddar-bacon", name: "Com Cheddar e Farofa de Bacon", price: 6.0 },
@@ -342,155 +1033,6 @@ const initialProducts: Product[] = [
       { id: "coca-zero", name: "Coca-Cola Zero", price: 0 },
       { id: "guarana", name: "Guaraná Antarctica", price: 0 },
     ],
-  },
-  // Burger Town products
-  ...mockProducts.map((p) => ({
-    ...p,
-    tenantId: "tenant-burger-town",
-  })),
-  // Pizza Bella products
-  {
-    id: "pizza-1",
-    tenantId: "tenant-pizza-bella",
-    name: "Pizza Margherita Especial",
-    description: "Molho de tomate pelado italiano, mozzarella de búfala, manjericão fresco e azeite trufado.",
-    price: 49.9,
-    image: "https://images.pexels.com/photos/1146760/pexels-photo-1146760.jpeg?auto=compress&cs=tinysrgb&w=600",
-    category: "pizzas",
-    available: true,
-    options: [
-      { id: "borda-catupiry", name: "Borda recheada com Catupiry", price: 8.0 },
-      { id: "borda-cheddar", name: "Borda recheada com Cheddar", price: 8.0 },
-      { id: "massa-fina", name: "Massa fininha e crocante", price: 0 },
-    ],
-  },
-  {
-    id: "pizza-2",
-    tenantId: "tenant-pizza-bella",
-    name: "Pizza Calabresa Artesanal",
-    description: "Calabresa artesanal defumada fatiada, cebola roxa marinada e azeitonas pretas chilenas.",
-    price: 46.0,
-    image: "https://images.pexels.com/photos/2619967/pexels-photo-2619967.jpeg?auto=compress&cs=tinysrgb&w=600",
-    category: "pizzas",
-    available: true,
-    options: [
-      { id: "borda-catupiry", name: "Borda recheada com Catupiry", price: 8.0 },
-      { id: "extra-queijo", name: "Queijo extra", price: 6.0 },
-    ],
-  },
-  {
-    id: "pizza-3",
-    tenantId: "tenant-pizza-bella",
-    name: "Pizza Quatro Queijos Nobres",
-    description: "Mozzarella especial, gorgonzola doce, provolone curado e catupiry original.",
-    price: 54.0,
-    image: "https://images.pexels.com/photos/825661/pexels-photo-825661.jpeg?auto=compress&cs=tinysrgb&w=600",
-    category: "pizzas",
-    available: true,
-    options: [
-      { id: "borda-catupiry", name: "Borda recheada com Catupiry", price: 8.0 },
-    ],
-  },
-  {
-    id: "pizza-drink-1",
-    tenantId: "tenant-pizza-bella",
-    name: "Refrigerante Lata 350ml",
-    description: "Coca-cola, Guaraná Antarctica ou Sprite gelados.",
-    price: 6.5,
-    image: "https://images.pexels.com/photos/50593/coca-cola-cold-drink-soft-drink-coke-50593.jpeg?auto=compress&cs=tinysrgb&w=600",
-    category: "bebidas",
-    available: true,
-    options: [
-      { id: "coca", name: "Coca-Cola Original", price: 0 },
-      { id: "coca-zero", name: "Coca-Cola Zero", price: 0 },
-      { id: "guarana", name: "Guaraná Antarctica", price: 0 },
-    ],
-  },
-  // Sorvetes & Gelatos Imperial
-  {
-    id: "gelato-1",
-    tenantId: "tenant-sorvetes-imperial",
-    name: "Pote Gelato Artesanal 500ml",
-    description: "Gelato italiano super cremoso batido diariamente. Escolha até 2 sabores incríveis.",
-    price: 38.0,
-    image: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=600&q=80",
-    category: "sobremesas",
-    available: true,
-    options: [
-      { id: "sabor-pistache", name: "Pistache Siciliano", price: 0 },
-      { id: "sabor-ninho", name: "Ninho Trufado com Nutella", price: 0 },
-      { id: "sabor-morango", name: "Morango Silvestre", price: 0 },
-    ],
-  },
-  {
-    id: "gelato-2",
-    tenantId: "tenant-sorvetes-imperial",
-    name: "Taça Suprema Ferrero & Nutella",
-    description: "Camadas generosas de gelato de baunilha, Nutella pura, bombons Ferrero Rocher e castanhas picadas.",
-    price: 32.5,
-    image: "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=600&q=80",
-    category: "sobremesas",
-    available: true,
-    options: [
-      { id: "extra-nutella", name: "Dose extra de Nutella", price: 5.0 },
-    ],
-  },
-  // Açaí do Vale & Cia
-  {
-    id: "acai-1",
-    tenantId: "tenant-acai-do-vale",
-    name: "Tigela Tradicional Açaí 500ml",
-    description: "Açaí puro premium batido na consistência perfeita, acompanha banana fresca fatiada, leite condensado e granola crocante.",
-    price: 24.9,
-    image: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80",
-    category: "acai",
-    available: true,
-    options: [
-      { id: "leite-ninho", name: "Leite Ninho em pó", price: 3.5 },
-      { id: "morango-fresco", name: "Morangos frescos", price: 4.0 },
-      { id: "pacoca", name: "Paçoca rolha triturada", price: 2.5 },
-    ],
-  },
-  {
-    id: "acai-2",
-    tenantId: "tenant-acai-do-vale",
-    name: "Barca Especial Açaí Turbinado 750ml",
-    description: "Açaí cremoso com morango, banana, kiwi, confetes, brigadeiro de panela e calda especial à escolha.",
-    price: 42.0,
-    image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
-    category: "acai",
-    available: true,
-    options: [
-      { id: "nutella-barca", name: "Nutella na barca", price: 6.0 },
-    ],
-  },
-  // Sabor & Brasa Grill
-  {
-    id: "grill-1",
-    tenantId: "tenant-sabor-e-brasa",
-    name: "Picanha na Brasa com Fritas e Arroz",
-    description: "Corte nobre de picanha maturada grelhada na brasa (350g in natura), arroz branco soltinho, feijão tropeiro e fritas crocantes.",
-    price: 59.9,
-    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80",
-    category: "pratos",
-    available: true,
-    options: [
-      { id: "ponto-carne-mal", name: "Ponto: Mal passada", price: 0 },
-      { id: "ponto-carne-ao-ponto", name: "Ponto: Ao ponto", price: 0 },
-      { id: "ponto-carne-bem", name: "Ponto: Bem passada", price: 0 },
-      { id: "vinagrete-extra", name: "Porção de vinagrete da casa", price: 5.0 },
-    ],
-  },
-  {
-    id: "grill-2",
-    tenantId: "tenant-sabor-e-brasa",
-    name: "Marmitex Executivo Bife Ancho",
-    description: "Bife ancho grelhado, arroz, feijão caseiro temperado, farofa crocante e salada mista.",
-    price: 36.0,
-    image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=600&q=80",
-    category: "pratos",
-    available: true,
-    options: [],
   },
 ].map((p, idx) => ({
   ...p,
@@ -905,25 +1447,33 @@ export const defaultCategories: Category[] = [
   { id: "bebidas", name: "Bebidas", icon: "🥤", order: 4, order_index: 4 },
   { id: "sobremesas", name: "Sobremesas", icon: "🍰", order: 5, order_index: 5 },
   { id: "pizzas", name: "Pizzas", icon: "🍕", order: 6, order_index: 6 },
-  { id: "pasteis", name: "Pastéis", icon: "🥟", order: 7, order_index: 7 },
-  { id: "acai", name: "Açaí", icon: "🍧", order: 8, order_index: 8 },
+  { id: "acai", name: "Açaí", icon: "🍧", order: 7, order_index: 7 },
+  { id: "japonesa", name: "Japonesa", icon: "🍣", order: 8, order_index: 8 },
+  { id: "salgados", name: "Salgados", icon: "🥟", order: 9, order_index: 9 },
+  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 10, order_index: 10 },
+  { id: "docerias", name: "Doces", icon: "🍰", order: 11, order_index: 11 },
+  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 12, order_index: 12 },
 ];
 
 export const defaultEstablishmentCategories: EstablishmentCategory[] = [
-  { id: "lanchonetes", name: "Lanchonetes", icon: "🍔", order: 1, order_index: 1, active: true },
-  { id: "pizzarias", name: "Pizzarias", icon: "🍕", order: 2, order_index: 2, active: true },
-  { id: "sorveteiras", name: "Sorveteiras", icon: "🍨", order: 3, order_index: 3, active: true },
-  { id: "acaiterias", name: "Açaíterias", icon: "🍧", order: 4, order_index: 4, active: true },
-  { id: "restaurantes", name: "Restaurantes", icon: "🥩", order: 5, order_index: 5, active: true },
-  { id: "docerias", name: "Docerias", icon: "🍰", order: 6, order_index: 6, active: true },
-  { id: "distribuidoras", name: "Distribuidoras", icon: "🍺", order: 7, order_index: 7, active: true },
+  { id: "todos", name: "Todos", icon: "🍽️", order: 0, order_index: 0, active: true },
+  { id: "acaiterias", name: "Açaíterias", icon: "🍧", order: 1, order_index: 1, active: true },
+  { id: "lanchonetes", name: "Hambúrgueres", icon: "🍔", order: 2, order_index: 2, active: true },
+  { id: "pizzarias", name: "Pizzarias", icon: "🍕", order: 3, order_index: 3, active: true },
+  { id: "sorveteiras", name: "Sorveterias", icon: "🍨", order: 4, order_index: 4, active: true },
+  { id: "japonesa", name: "Japonesa", icon: "🍣", order: 5, order_index: 5, active: true },
+  { id: "salgados", name: "Salgados", icon: "🥟", order: 6, order_index: 6, active: true },
+  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 7, order_index: 7, active: true },
+  { id: "docerias", name: "Doces", icon: "🍰", order: 8, order_index: 8, active: true },
+  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 9, order_index: 9, active: true },
+  { id: "distribuidoras", name: "Bebidas", icon: "🍺", order: 10, order_index: 10, active: true },
 ];
 
 export const defaultPlatformSettings: PlatformSettings = {
   logoUrl: "",
   bannerUrl: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1400&q=80",
   heroTitle: "Top Food - O Portal do Delivery",
-  heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
+  heroSubtitle: "O seu portal de delivery para as melhores lojas e restaurantes da sua cidade.",
   primaryColor: "#E63946",
   geminiApiKey: typeof process !== "undefined" && process?.env?.GEMINI_API_KEY ? process.env.GEMINI_API_KEY : "",
   adminPixKey: "topfood.financeiro@pix.com",
@@ -933,34 +1483,153 @@ export const defaultPlatformSettings: PlatformSettings = {
   updatedAt: Date.now(),
 };
 
-// Seed de stories ativos iniciais para teste imediato (válidos por 24h)
+// Seed de stories ativos com imagens chamativas para todas as 10 lojas (+ MS Preparações)
 export const initialStories: StoreStory[] = [
+  // 1. Açaiteria
   {
-    id: "story-ms-1",
-    tenantId: "tenant-ms-preparacoes",
-    mediaUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1080&q=80",
+    id: "story-acai-1",
+    tenantId: "tenant-acai-do-vale",
+    mediaUrl: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=1080&q=80",
     mediaType: "image",
-    caption: "🍔 Hambúrguer Artesanal quentinho na chapa! Peça o seu agora.",
+    caption: "🍧 Copo de 500ml montado com muito Ninho e Nutella! Peça pelo app.",
     createdAt: Date.now() - 2 * 3600000,
-    expiresAt: Date.now() + 22 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
   },
   {
-    id: "story-ms-2",
-    tenantId: "tenant-ms-preparacoes",
-    mediaUrl: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=1080&q=80",
+    id: "story-acai-2",
+    tenantId: "tenant-acai-do-vale",
+    mediaUrl: "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=1080&q=80",
     mediaType: "image",
-    caption: "🍟 Porção de batatas rústicas douradas com tempero especial da casa!",
+    caption: "🫐 Açaí puro batido cremoso com frutas frescas do dia!",
     createdAt: Date.now() - 1 * 3600000,
-    expiresAt: Date.now() + 23 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
   },
+  // 2. Hambúrgueres
   {
     id: "story-burger-1",
     tenantId: "tenant-burger-town",
-    mediaUrl: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1080&q=80",
+    mediaUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1080&q=80",
     mediaType: "image",
-    caption: "🔥 Super combo com entrega grátis hoje! Não perca.",
+    caption: "🍔 Smash Burger duplo com cheddar derretido e tiras crocantes de bacon!",
     createdAt: Date.now() - 3 * 3600000,
-    expiresAt: Date.now() + 21 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  {
+    id: "story-burger-2",
+    tenantId: "tenant-burger-town",
+    mediaUrl: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍟 Batata frita rústica crocante com cheddar cremoso e farofa de bacon.",
+    createdAt: Date.now() - 2 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 3. Pizzaria
+  {
+    id: "story-pizza-1",
+    tenantId: "tenant-pizza-bella",
+    mediaUrl: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍕 Saindo do forno a lenha agorinha! Massa de fermentação natural de 48h.",
+    createdAt: Date.now() - 4 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  {
+    id: "story-pizza-2",
+    tenantId: "tenant-pizza-bella",
+    mediaUrl: "https://images.unsplash.com/photo-1534308983496-4fabb1a015ee?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🔥 Borda recheada de Catupiry original grátis hoje!",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 4. Sorveteria
+  {
+    id: "story-sorvete-1",
+    tenantId: "tenant-sorvetes-imperial",
+    mediaUrl: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍨 Gelatos italianos artesanais super cremosos! Entrega com embalagem térmica.",
+    createdAt: Date.now() - 5 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 5. Japonesa
+  {
+    id: "story-sushi-1",
+    tenantId: "tenant-sushi-ya",
+    mediaUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍣 Combo Tokyo Prime: salmão maçaricado, hot roll e sashimi fresco!",
+    createdAt: Date.now() - 3 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  {
+    id: "story-sushi-2",
+    tenantId: "tenant-sushi-ya",
+    mediaUrl: "https://images.unsplash.com/photo-1611143669185-af224c5e3252?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🥢 Temaki crocante com cubos generosos de salmão e cream cheese!",
+    createdAt: Date.now() - 2 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 6. Salgados
+  {
+    id: "story-salgado-1",
+    tenantId: "tenant-rei-dos-salgados",
+    mediaUrl: "https://images.unsplash.com/photo-1628294895950-9805252327bc?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🥟 Coxinhas sequinhas e crocantes recheadas de frango com requeijão!",
+    createdAt: Date.now() - 2 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 7. Marmitaria
+  {
+    id: "story-marmita-1",
+    tenantId: "tenant-marmitaria-dona-maria",
+    mediaUrl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍱 Marmitex executiva: arroz soltinho, feijão caseiro, bife acebolado e fritas!",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 8. Doces
+  {
+    id: "story-doce-1",
+    tenantId: "tenant-doce-encanto",
+    mediaUrl: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍰 Bolo Vulcão Ninho com Nutella e fatias gourmet irresistíveis!",
+    createdAt: Date.now() - 4 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 9. Churrascaria
+  {
+    id: "story-churrasco-1",
+    tenantId: "tenant-sabor-e-brasa",
+    mediaUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🥩 Picanha na brasa suculenta ao ponto com farofa especial crocante!",
+    createdAt: Date.now() - 2 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // 10. Bebidas
+  {
+    id: "story-bebida-1",
+    tenantId: "tenant-adega-zero-grau",
+    mediaUrl: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍺 Cervejas estupidamente geladas prontas para entrega expressa em até 30 min!",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  // MS Preparações
+  {
+    id: "story-ms-1",
+    tenantId: "tenant-ms-preparacoes",
+    mediaUrl: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍔 Lanches artesanais preparados na hora com ingredientes frescos!",
+    createdAt: Date.now() - 2 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
   },
 ];
 
@@ -1319,27 +1988,22 @@ export class Database {
         }
       }
 
-      // 4. Se a tabela tenants do D1 estiver vazia, sincroniza dados de inicialização
+      // 4. Garante que todos os tenants, users, produtos, categorias e stories iniciais existam no D1
       try {
-        const countRes = await db.prepare("SELECT count(*) as total FROM tenants").first<{ total: number }>();
-        if (!countRes || Number(countRes.total) === 0) {
-          for (const t of initialTenants) {
-            await this.insertTenantRow(t);
-          }
-          for (const u of initialUsers) {
-            await this.insertUserRow(u);
-          }
-          for (const p of initialProducts) {
-            await this.insertProductRow(p);
-          }
+        for (const t of initialTenants) {
+          await this.insertTenantRow(t);
         }
-
-        // Seed establishment categories se estiver vazia
-        const catCountRes = await db.prepare("SELECT count(*) as total FROM establishment_categories").first<{ total: number }>();
-        if (!catCountRes || Number(catCountRes.total) === 0) {
-          for (const ec of defaultEstablishmentCategories) {
-            await this.insertEstablishmentCategoryRow(ec);
-          }
+        for (const u of initialUsers) {
+          await this.insertUserRow(u);
+        }
+        for (const p of initialProducts) {
+          await this.insertProductRow(p);
+        }
+        for (const ec of defaultEstablishmentCategories) {
+          await this.insertEstablishmentCategoryRow(ec);
+        }
+        for (const s of initialStories) {
+          await this.insertStoryRow(s);
         }
 
         // 5. Seed de pedidos e order_items se estiver vazia
@@ -1576,6 +2240,28 @@ export class Database {
     }
   }
 
+  private async insertStoryRow(s: StoreStory): Promise<void> {
+    if (!this.env?.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO store_stories (id, tenant_id, media_url, media_type, caption, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          s.id,
+          s.tenantId,
+          s.mediaUrl,
+          s.mediaType || "image",
+          s.caption || null,
+          s.createdAt,
+          s.expiresAt
+        )
+        .run();
+    } catch {
+      // ignore
+    }
+  }
+
   private async insertOrderRow(o: Order): Promise<void> {
     if (!this.env?.DB) return;
     try {
@@ -1684,6 +2370,13 @@ export class Database {
               globalStore.tenants[idx] = dt;
             } else {
               globalStore.tenants.push(dt);
+            }
+          }
+          // Garante que todas as 10 lojas do catálogo promocional estejam presentes
+          for (const initT of initialTenants) {
+            if (!d1Tenants.some((dt: Tenant) => dt.id === initT.id || dt.slug === initT.slug)) {
+              d1Tenants.push(initT);
+              this.insertTenantRow(initT).catch(() => {});
             }
           }
           return d1Tenants;
@@ -3078,6 +3771,14 @@ export class Database {
           .all<any>();
         if (res.results && res.results.length > 0) {
           return res.results.map((r: any) => this.mapProductRow(r));
+        } else {
+          const seeded = initialProducts.filter((p) => p.tenantId === resolvedId || p.tenantId === resolvedSlug);
+          if (seeded.length > 0) {
+            for (const sp of seeded) {
+              await this.insertProductRow(sp);
+            }
+            return seeded;
+          }
         }
       } catch (e) {
         console.warn("D1 getProducts error:", e);
@@ -4715,7 +5416,6 @@ export class Database {
               });
             }
           }
-          return map;
         }
       } catch (err) {
         console.warn("D1 getAllActiveStoriesGrouped warning:", err);
@@ -4725,8 +5425,19 @@ export class Database {
     for (const story of globalStore.stories) {
       if (story.expiresAt > now) {
         if (!map[story.tenantId]) map[story.tenantId] = [];
-        if (map[story.tenantId].length < 3) {
+        if (!map[story.tenantId].some((s) => s.id === story.id) && map[story.tenantId].length < 3) {
           map[story.tenantId].push(story);
+        }
+      }
+    }
+
+    // Garante que todas as lojas do catálogo promocional tenham stories ativos
+    for (const story of initialStories) {
+      if (story.expiresAt > now) {
+        if (!map[story.tenantId]) map[story.tenantId] = [];
+        if (!map[story.tenantId].some((s) => s.id === story.id) && map[story.tenantId].length < 3) {
+          map[story.tenantId].push(story);
+          this.insertStoryRow(story).catch(() => {});
         }
       }
     }
