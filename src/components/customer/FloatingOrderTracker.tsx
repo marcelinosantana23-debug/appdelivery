@@ -18,7 +18,6 @@ import type { Order, OrderStatus } from "@/types";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { useStore } from "@/context/StoreContext";
 import { formatPrice } from "@/utils/order";
-import { playOrderStatusUpdateChime } from "@/utils/audio";
 import {
   getActiveOrderData,
   updateActiveOrderStatus,
@@ -141,7 +140,7 @@ export function FloatingOrderTracker({
 
   // Aplica a alteração de status recebida em tempo real da cozinha/admin
   const applyStatusUpdate = useCallback(
-    (rawStatus: OrderStatus | string, updatedOrder?: Order | null, playSound = true) => {
+    (rawStatus: OrderStatus | string, updatedOrder?: Order | null, _playSound = true) => {
       const normStatus = normalizeOrderStatus(rawStatus);
       const prevStatus = statusRef.current;
 
@@ -159,11 +158,6 @@ export function FloatingOrderTracker({
         setStatus(normStatus);
         const now = new Date();
         setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-
-        // 2. Alerta sonoro agradável e instantâneo no celular do cliente
-        if (playSound) {
-          playOrderStatusUpdateChime(normStatus);
-        }
 
         // Atualiza o estado no localStorage (mantém a barra visível nas etapas intermediárias)
         updateActiveOrderStatus(normStatus);

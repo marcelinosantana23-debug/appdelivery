@@ -5,7 +5,6 @@ import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
-import { playOrderStatusUpdateChime } from "@/utils/audio";
 import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 
@@ -51,7 +50,6 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
 
     if (newStatus !== prevStatus) {
       statusRef.current = newStatus;
-      playOrderStatusUpdateChime(newStatus);
       updateActiveOrderStatus(newStatus);
     }
   }, []);

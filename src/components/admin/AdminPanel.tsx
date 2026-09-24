@@ -61,7 +61,6 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     tenants,
     soundEnabled,
     toggleSound,
-    playAlertSound,
     platformSettings,
     refreshOrders,
     refreshCurrentStore,
@@ -88,7 +87,6 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
   const [copiedStoreLink, setCopiedStoreLink] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
   const [isRefreshingData, setIsRefreshingData] = useState(false);
-  const lastOrderCount = useRef(orders.length);
 
   // Sincroniza o tenant visualizado com o currentTenant do contexto
   useEffect(() => {
@@ -190,38 +188,152 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     (o) => o.status !== "done" && o.status !== "cancelled"
   ).length;
 
-  useEffect(() => {
-    if (orders.length > lastOrderCount.current && soundEnabled) {
-      playNotificationSound();
-    }
-    lastOrderCount.current = orders.length;
-  }, [orders.length, soundEnabled]);
-
-  const playNotificationSound = () => {
+  // Web Audio chime nítido e exclusivo para notificação de novos pedidos no painel do lojista
+  const playNotificationSound = useCallback(() => {
     try {
       const AudioContextClass =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+
       const ctx = new AudioContextClass();
-      const notes = [880, 1100, 880, 1100];
-      notes.forEach((freq, i) => {
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+
+      const now = ctx.currentTime;
+      // Toque harmônico e expressivo: 3 tons ascendentes nítidos (A5 -> C#6 -> E6)
+      const notes = [
+        { freq: 880, start: 0.0, duration: 0.22, gain: 0.4 },
+        { freq: 1108.73, start: 0.16, duration: 0.25, gain: 0.45 },
+        { freq: 1318.51, start: 0.34, duration: 0.45, gain: 0.5 },
+      ];
+
+      notes.forEach(({ freq, start, duration, gain }) => {
         const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = freq;
+        const gainNode = ctx.createGain();
+
         osc.type = "sine";
-        const start = ctx.currentTime + i * 0.15;
-        gain.gain.setValueAtTime(0, start);
-        gain.gain.linearRampToValueAtTime(0.3, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.01, start + 0.13);
-        osc.start(start);
-        osc.stop(start + 0.15);
+        osc.frequency.setValueAtTime(freq, now + start);
+
+        gainNode.gain.setValueAtTime(0.001, now + start);
+        gainNode.gain.linearRampToValueAtTime(gain, now + start + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        osc.start(now + start);
+        osc.stop(now + start + duration);
       });
     } catch {
-      // Audio not available
+      // Audio não disponível ou bloqueado pelo navegador
     }
-  };
+  }, []);
+
+  // Evita disparar múltiplos alertas no mesmo instante (throttle de 2 segundos)
+  const lastSoundTimeRef = useRef<number>(0);
+  const triggerNotificationSound = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSoundTimeRef.current < 2000) return;
+    lastSoundTimeRef.current = now;
+    playNotificationSound();
+  }, [playNotificationSound]);
+
+  // Conjunto de IDs de pedidos já conhecidos pelo painel para não tocar som indevidamente na carga inicial
+  const knownAdminOrderIdsRef = useRef<Set<string>>(new Set());
+  const isInitialAdminMountRef = useRef<boolean>(true);
+  const ordersRef = useRef(orders);
+
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
+  // Inicializa o conjunto de IDs conhecidos com os pedidos atuais
+  useEffect(() => {
+    if (orders.length > 0 && isInitialAdminMountRef.current) {
+      orders.forEach((o) => {
+        if (o.id) {
+          knownAdminOrderIdsRef.current.add(o.id);
+          knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+        }
+      });
+      isInitialAdminMountRef.current = false;
+    }
+  }, [orders]);
+
+  // INTERVALO DE 5 SEGUNDOS (5000ms):
+  // Restrito EXCLUSIVAMENTE ao painel do lojista (AdminPanel.tsx) para buscar novos pedidos
+  // e tocar o som de notificação quando detectado novo pedido.
+  // Limpa o setInterval (clearInterval) ao sair da tela do lojista.
+  useEffect(() => {
+    if (!isAdminAuthed) return;
+
+    // Garante que os pedidos já existentes estão registrados antes de iniciar o polling
+    ordersRef.current.forEach((o) => {
+      if (o.id) {
+        knownAdminOrderIdsRef.current.add(o.id);
+        knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+      }
+    });
+
+    let isMounted = true;
+
+    const pollInterval = setInterval(async () => {
+      if (!isMounted) return;
+      try {
+        const freshOrders = await refreshOrders();
+        if (!isMounted || !freshOrders || !Array.isArray(freshOrders)) return;
+
+        // Detecta se há algum pedido verdadeiramente novo que não existia no painel
+        const hasNewOrder = freshOrders.some((o) => {
+          if (!o.id) return false;
+          const cleanId = o.id.replace(/^#/, "");
+          return !knownAdminOrderIdsRef.current.has(o.id) && !knownAdminOrderIdsRef.current.has(cleanId);
+        });
+
+        if (hasNewOrder && soundEnabled) {
+          triggerNotificationSound();
+        }
+
+        freshOrders.forEach((o) => {
+          if (o.id) {
+            knownAdminOrderIdsRef.current.add(o.id);
+            knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+          }
+        });
+      } catch {
+        // Falha temporária de conexão ignorada silenciosamente
+      }
+    }, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, [isAdminAuthed, refreshOrders, soundEnabled, triggerNotificationSound]);
+
+  // Sincronização em tempo real (SSE / Broadcast): se a lista `orders` receber um novo pedido no painel
+  useEffect(() => {
+    if (!isAdminAuthed || isInitialAdminMountRef.current) return;
+
+    const hasNewOrder = orders.some((o) => {
+      if (!o.id) return false;
+      const cleanId = o.id.replace(/^#/, "");
+      return !knownAdminOrderIdsRef.current.has(o.id) && !knownAdminOrderIdsRef.current.has(cleanId);
+    });
+
+    if (hasNewOrder && soundEnabled) {
+      triggerNotificationSound();
+    }
+
+    orders.forEach((o) => {
+      if (o.id) {
+        knownAdminOrderIdsRef.current.add(o.id);
+        knownAdminOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+      }
+    });
+  }, [orders, soundEnabled, isAdminAuthed, triggerNotificationSound]);
 
   if (!isAdminAuthed) {
     return <AdminLogin onBack={onExit} />;
@@ -359,7 +471,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
             onClick={() => {
               toggleSound();
               if (!soundEnabled) {
-                playAlertSound();
+                triggerNotificationSound();
               }
             }}
             className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl transition shrink-0 ${
