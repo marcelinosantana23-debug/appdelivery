@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Store,
   Plus,
@@ -57,9 +57,9 @@ import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { StoreQrCodePlate } from "./StoreQrCodePlate";
 
 interface SuperAdminPanelProps {
-  onManageStore: (tenant: Tenant) => void;
+  onManageStore: (tenant: Tenant) => void | Promise<void>;
   onExit: () => void;
-  onViewStoreFront?: (tenant: Tenant) => void;
+  onViewStoreFront?: (tenant: Tenant) => void | Promise<void>;
 }
 
 export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: SuperAdminPanelProps) {
@@ -85,6 +85,31 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     platformSettings,
     updatePlatformSettings,
   } = useStore();
+
+  const [navigatingTenantId, setNavigatingTenantId] = useState<string | null>(null);
+  const isTransitioningRef = useRef(false);
+
+  // Transição direta para gerenciamento da loja com prevenção contra cliques múltiplos e eventos pendentes
+  const handleManageStoreDirectly = useCallback(
+    async (e: React.MouseEvent, tenant: Tenant) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (isTransitioningRef.current) return;
+      isTransitioningRef.current = true;
+      setNavigatingTenantId(tenant.id);
+
+      try {
+        await onManageStore(tenant);
+      } finally {
+        setTimeout(() => {
+          isTransitioningRef.current = false;
+          setNavigatingTenantId(null);
+        }, 1000);
+      }
+    },
+    [onManageStore]
+  );
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "featured" | "demo" | "due_soon">("all");
@@ -1679,11 +1704,16 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
                             <button
                               type="button"
-                              onClick={() => onManageStore(t)}
-                              className="flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/20 transition"
+                              disabled={navigatingTenantId === t.id}
+                              onClick={(e) => handleManageStoreDirectly(e, t)}
+                              className="flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/20 transition disabled:opacity-50"
                               title="Acessar painel de administração da loja"
                             >
-                              <Settings className="h-3.5 w-3.5" />
+                              {navigatingTenantId === t.id ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Settings className="h-3.5 w-3.5" />
+                              )}
                               <span>Painel</span>
                             </button>
                           </div>
@@ -2257,11 +2287,16 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                             </button>
                             <button
                               type="button"
-                              onClick={() => onManageStore(t)}
-                              className="inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/30 transition"
+                              disabled={navigatingTenantId === t.id}
+                              onClick={(e) => handleManageStoreDirectly(e, t)}
+                              className="inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/30 transition disabled:opacity-50"
                               title="Acessar Painel de Administração desta Loja"
                             >
-                              <Settings className="h-3 w-3 shrink-0" />
+                              {navigatingTenantId === t.id ? (
+                                <RefreshCw className="h-3 w-3 shrink-0 animate-spin" />
+                              ) : (
+                                <Settings className="h-3 w-3 shrink-0" />
+                              )}
                               <span>Gerenciar</span>
                             </button>
                           </div>
@@ -2362,10 +2397,16 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                     <div className="border-t border-slate-800/80 bg-slate-950/40 px-3 py-2 flex flex-wrap items-center justify-between gap-1.5">
                       <div className="flex items-center flex-wrap gap-1.5 w-full sm:w-auto">
                         <button
-                          onClick={() => onManageStore(t)}
-                          className="flex-1 sm:flex-none justify-center flex items-center gap-1 rounded-lg bg-amber-500/15 py-1.5 px-2.5 text-[11px] font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25"
+                          type="button"
+                          disabled={navigatingTenantId === t.id}
+                          onClick={(e) => handleManageStoreDirectly(e, t)}
+                          className="flex-1 sm:flex-none justify-center flex items-center gap-1 rounded-lg bg-amber-500/15 py-1.5 px-2.5 text-[11px] font-semibold text-amber-300 border border-amber-500/30 transition hover:bg-amber-500/25 disabled:opacity-50"
                         >
-                          <Settings className="h-3 w-3 shrink-0" />
+                          {navigatingTenantId === t.id ? (
+                            <RefreshCw className="h-3 w-3 shrink-0 animate-spin" />
+                          ) : (
+                            <Settings className="h-3 w-3 shrink-0" />
+                          )}
                           <span>Gerenciar Loja</span>
                         </button>
 
@@ -2600,13 +2641,19 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <button
-                    onClick={() => {
-                      onManageStore(createdSuccess.tenant);
+                    type="button"
+                    disabled={navigatingTenantId === createdSuccess.tenant.id}
+                    onClick={(e) => {
                       setIsModalOpen(false);
+                      handleManageStoreDirectly(e, createdSuccess.tenant);
                     }}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500 shadow-md"
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500 shadow-md disabled:opacity-50"
                   >
-                    <Settings className="h-4 w-4" />
+                    {navigatingTenantId === createdSuccess.tenant.id ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Settings className="h-4 w-4" />
+                    )}
                     Acessar Painel desta Loja
                   </button>
                   <button

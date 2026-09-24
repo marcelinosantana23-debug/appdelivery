@@ -71,7 +71,7 @@ interface StoreContextValue {
   toggleStore: () => void;
   isStoreActive: boolean;
   currentSlug: string;
-  selectTenant: (slugOrId: string) => Promise<void>;
+  selectTenant: (slugOrId: string, preloadedTenant?: Tenant) => Promise<void>;
   refreshTenants: () => Promise<void>;
   refreshCurrentStore: () => Promise<void>;
   isLoadingStore: boolean;
@@ -882,7 +882,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [currentTenant?.slug, config?.slug, currentSlug]);
 
   const selectTenant = useCallback(
-    async (slugOrId: string) => {
+    async (slugOrId: string, preloadedTenant?: Tenant) => {
       setCurrentSlug(slugOrId);
       try {
         localStorage.setItem("topfood_last_store_slug", slugOrId);
@@ -890,6 +890,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // ignore
       }
       setCart(loadSavedCart(slugOrId));
+
+      // Sincronização imediata e síncrona do contexto da loja sem depender de ciclos assíncronos
+      const targetTenant = preloadedTenant || tenants.find((t) => t.slug === slugOrId || t.id === slugOrId);
+      if (targetTenant) {
+        setCurrentTenant(targetTenant);
+        const storeCfg = tenantToStoreConfig(targetTenant);
+        setConfig(storeCfg);
+        applyThemeColors(storeCfg);
+        try {
+          localStorage.setItem("delivery_tenant_session", JSON.stringify(targetTenant));
+        } catch {
+          // ignore
+        }
+      }
 
       // Update URL without reload ONLY if not currently on an admin or super-admin route
       if (typeof window !== "undefined") {
@@ -908,7 +922,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       await loadStoreBySlug(slugOrId);
     },
-    [loadStoreBySlug]
+    [tenants, loadStoreBySlug]
   );
 
   const refreshCurrentStore = useCallback(async () => {

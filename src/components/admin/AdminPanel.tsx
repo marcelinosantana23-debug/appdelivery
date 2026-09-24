@@ -84,11 +84,18 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
   });
 
   const [financialKey, setFinancialKey] = useState<number>(1);
-  const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(null);
+  const [superAdminViewingStore, setSuperAdminViewingStore] = useState<Tenant | null>(() => currentTenant || null);
   const [copiedStoreLink, setCopiedStoreLink] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
   const [isRefreshingData, setIsRefreshingData] = useState(false);
   const lastOrderCount = useRef(orders.length);
+
+  // Sincroniza o tenant visualizado com o currentTenant do contexto
+  useEffect(() => {
+    if (currentTenant) {
+      setSuperAdminViewingStore(currentTenant);
+    }
+  }, [currentTenant]);
 
   // Garante que o navegador exibe estritamente a URL /painel enquanto o lojista está no painel
   useEffect(() => {
@@ -220,12 +227,12 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     return <AdminLogin onBack={onExit} />;
   }
 
-  // If user is Super Admin and has not drilled down into an individual store, show the Super Admin Dashboard
-  if (isSuperAdmin && !superAdminViewingStore) {
+  // If user is Super Admin and has not selected any store at all, fallback to Super Admin Dashboard
+  if (isSuperAdmin && !merchantTenant) {
     return (
       <SuperAdminPanel
-        onManageStore={(tenant) => {
-          selectTenant(tenant.slug);
+        onManageStore={async (tenant) => {
+          await selectTenant(tenant.slug, tenant);
           setSuperAdminViewingStore(tenant);
         }}
         onExit={onExit}
@@ -366,14 +373,15 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
           </button>
 
           {/* Voltar ao Super Admin (se aplicável) */}
-          {isSuperAdmin && superAdminViewingStore && (
+          {isSuperAdmin && (
             <button
               type="button"
               onClick={() => {
+                setSuperAdminViewingStore(null);
                 if (onGoToSuperAdmin) {
                   onGoToSuperAdmin();
                 } else {
-                  setSuperAdminViewingStore(null);
+                  onExit();
                 }
               }}
               className="hidden sm:flex items-center gap-1 rounded-xl bg-amber-500/15 border border-amber-500/30 px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition shrink-0"

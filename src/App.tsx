@@ -518,6 +518,27 @@ function AppContent() {
     [currentTenant?.slug, config.slug]
   );
 
+  // Transição direta e unificada do Super Admin para gerenciamento da loja (1 único clique)
+  const handleSuperAdminManageStore = useCallback(
+    async (tenant: Tenant) => {
+      // 1. Sincroniza sessão/contexto do lojista imediatamente
+      const selectPromise = selectTenant(tenant.slug, tenant);
+      // 2. Redireciona imediatamente sem depender de ciclo intermediário de renderização
+      navigateTo("admin");
+      await selectPromise;
+    },
+    [selectTenant, navigateTo]
+  );
+
+  const handleSuperAdminViewStoreFront = useCallback(
+    async (tenant: Tenant) => {
+      const selectPromise = selectTenant(tenant.slug, tenant);
+      navigateTo("menu", tenant.slug);
+      await selectPromise;
+    },
+    [selectTenant, navigateTo]
+  );
+
   // Listen for browser back/forward navigation (HTML5 popstate event)
   useEffect(() => {
     const handlePopState = () => {
@@ -606,14 +627,8 @@ function AppContent() {
       // Authenticated Super Admin Dashboard
       return (
         <SuperAdminPanel
-          onManageStore={(tenant) => {
-            selectTenant(tenant.slug);
-            navigateTo("admin");
-          }}
-          onViewStoreFront={(tenant) => {
-            selectTenant(tenant.slug);
-            navigateTo("menu");
-          }}
+          onManageStore={handleSuperAdminManageStore}
+          onViewStoreFront={handleSuperAdminViewStoreFront}
           onExit={() => navigateTo("portal")}
         />
       );
