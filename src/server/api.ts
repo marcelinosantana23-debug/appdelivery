@@ -1821,18 +1821,32 @@ export async function handleUpdateSuperAdminCredentials(c: any) {
       );
     }
 
+    // Identifica o Super Admin autenticado a partir do token ou payload
+    const authUser = await authenticateRequestUser(c);
+    const targetUserId = authUser?.id || userId;
+
     const db = getDb(c);
-    const updatedUser = await db.updateSuperAdminCredentials(userId, cleanEmail, cleanPassword);
+    const updatedUser = await db.updateSuperAdminCredentials(targetUserId, cleanEmail, cleanPassword);
 
     if (!updatedUser) {
       return c.json({ success: false, error: "Usuário Super Admin não encontrado." }, 404);
+    }
+
+    // Invalidação no Cloudflare KV se disponível
+    try {
+      const kv = c.env?.KV || c.env?.TOPFOOD_KV;
+      if (kv) {
+        await kv.put("auth:invalidated:super_admin", String(Date.now()));
+      }
+    } catch {
+      // ignore
     }
 
     return c.json(
       {
         success: true,
         message:
-          "Credenciais do Super Admin atualizadas com sucesso! Sua sessão foi invalidada por segurança. Faça login novamente.",
+          "Credenciais do Super Admin atualizadas com sucesso! Sua sessão foi invalidada por segurança. Faça login novamente com suas novas credenciais.",
         user: updatedUser,
         sessionInvalidated: true,
       },
@@ -1850,6 +1864,10 @@ api.put("/superadmin/credentials", handleUpdateSuperAdminCredentials);
 api.put("/super-admin/credentials", handleUpdateSuperAdminCredentials);
 api.put("/api/superadmin/credentials", handleUpdateSuperAdminCredentials);
 api.put("/api/super-admin/credentials", handleUpdateSuperAdminCredentials);
+api.post("/superadmin/credentials", handleUpdateSuperAdminCredentials);
+api.post("/super-admin/credentials", handleUpdateSuperAdminCredentials);
+api.post("/api/superadmin/credentials", handleUpdateSuperAdminCredentials);
+api.post("/api/super-admin/credentials", handleUpdateSuperAdminCredentials);
 
 api.get("/platform/stats", async (c) => {
   const db = getDb(c);

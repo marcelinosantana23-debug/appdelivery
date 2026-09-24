@@ -10,6 +10,17 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Carrega credenciais do Super Admin persistidas em disco (para ambiente Node.js / preview)
+  try {
+    const credFile = path.resolve(process.cwd(), ".topfood_superadmin.json");
+    if (fs.existsSync(credFile)) {
+      const parsed = JSON.parse(fs.readFileSync(credFile, "utf-8"));
+      (globalThis as any).__TOPFOOD_SUPERADMIN__ = parsed;
+    }
+  } catch {
+    // ignore
+  }
+
   // Global CORS middleware for official domains and mobile app consumption
   app.use((req, res, next) => {
     const origin = req.get("origin");
