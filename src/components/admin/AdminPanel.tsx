@@ -18,13 +18,20 @@ import {
   Calendar,
   AlertTriangle,
   Send,
+  Volume2,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
 import { getSubscriptionInfo, generateProofWhatsAppUrl } from "@/utils/billing";
-import { playPendingOrderAlarm } from "@/utils/audio";
+import {
+  playPendingOrderAlarm,
+  unlockAudioContext,
+  isAudioUnlocked,
+  subscribeAudioUnlock,
+  playAudioActivatedConfirmation,
+} from "@/utils/audio";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminCustomers } from "./AdminCustomers";
@@ -190,6 +197,44 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     (o) => o.status !== "done" && o.status !== "cancelled"
   ).length;
 
+  // Estado de desbloqueio do áudio em dispositivos móveis (Safari iOS e Chrome Android)
+  const [audioUnlocked, setAudioUnlocked] = useState<boolean>(() => isAudioUnlocked());
+
+  useEffect(() => {
+    // Subscreve a alterações no estado de desbloqueio do áudio
+    const unsubscribe = subscribeAudioUnlock((unlocked) => {
+      setAudioUnlocked(unlocked);
+    });
+
+    // Desbloqueia automaticamente no primeiro toque ou clique na tela
+    const handleFirstTouch = async () => {
+      const ok = await unlockAudioContext();
+      if (ok) {
+        setAudioUnlocked(true);
+      }
+    };
+
+    window.addEventListener("touchstart", handleFirstTouch, { capture: true, passive: true });
+    window.addEventListener("touchend", handleFirstTouch, { capture: true, passive: true });
+    window.addEventListener("click", handleFirstTouch, { capture: true, passive: true });
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("touchstart", handleFirstTouch, true);
+      window.removeEventListener("touchend", handleFirstTouch, true);
+      window.removeEventListener("click", handleFirstTouch, true);
+    };
+  }, []);
+
+  const handleActivateAudio = useCallback(async () => {
+    const ok = await unlockAudioContext();
+    if (ok) {
+      setAudioUnlocked(true);
+      playAudioActivatedConfirmation();
+      showToast("Som do alarme ativado com sucesso!", "success");
+    }
+  }, [showToast]);
+
   // Identifica pedidos pendentes aguardando aceite do lojista (status 'received')
   const pendingOrders = orders.filter((o) => o.status === "received");
   const hasPendingOrders = pendingOrders.length > 0;
@@ -258,6 +303,34 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col w-full max-w-full overflow-x-hidden bg-slate-900 text-slate-100">
+      {/* Aviso discreto / Botão para ativar som do alarme em dispositivos móveis (Safari/Chrome) */}
+      {!audioUnlocked && soundEnabled && (
+        <div
+          id="mobile-audio-activation-banner"
+          onClick={handleActivateAudio}
+          className="bg-emerald-600/95 hover:bg-emerald-600 text-white px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs sm:text-sm font-medium shadow-md transition z-40 shrink-0 border-b border-emerald-400/40 cursor-pointer"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Volume2 className="h-4 w-4 shrink-0 text-emerald-200 animate-pulse" />
+            <span className="truncate">
+              <strong>Alarme de Pedidos:</strong> Toque na tela ou clique para ativar o som no celular
+            </span>
+          </div>
+          <button
+            type="button"
+            id="btn-activate-mobile-audio"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleActivateAudio();
+            }}
+            className="bg-white hover:bg-emerald-50 text-emerald-950 font-black px-3 py-1 rounded-xl text-xs transition shadow-xs shrink-0 cursor-pointer flex items-center gap-1.5 active:scale-95"
+          >
+            <Volume2 className="h-3.5 w-3.5 text-emerald-800" />
+            <span>Ativar Som do Alarme</span>
+          </button>
+        </div>
+      )}
+
       {/* Alerta de Pedido Pendente com botão para aceitar imediatamente e parar o alarme */}
       {hasPendingOrders && (
         <div className="bg-gradient-to-r from-red-600 via-amber-600 to-red-600 px-3 sm:px-4 py-2 text-white shadow-lg flex flex-wrap items-center justify-between gap-2.5 text-xs sm:text-sm animate-pulse z-30 shrink-0 border-b border-amber-400/40">

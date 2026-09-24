@@ -1,26 +1,159 @@
 // Web Audio API notification sound generator for real-time delivery orders
-// Generates an attention-grabbing chime without requiring external MP3 assets
+// Generates attention-grabbing alerts and chimes without requiring external MP3 assets
+// Fully optimized for mobile browsers (Safari iOS and Chrome Android) with autoplay unlock
 
 let sharedAudioCtx: AudioContext | null = null;
+type UnlockListener = (unlocked: boolean) => void;
+const unlockListeners = new Set<UnlockListener>();
 
-function getAudioContext(): AudioContext | null {
+function notifyUnlockListeners(unlocked: boolean) {
+  unlockListeners.forEach((listener) => {
+    try {
+      listener(unlocked);
+    } catch {
+      // ignore
+    }
+  });
+}
+
+/**
+ * Cria ou obtém a instância compartilhada do AudioContext.
+ * Trata estados 'suspended' e 'closed' com compatibilidade webkitAudioContext.
+ */
+export function getAudioContext(): AudioContext | null {
   try {
+    if (typeof window === "undefined") return null;
+    const AudioCtxClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtxClass) return null;
+
     if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
-      const AudioCtxClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (AudioCtxClass) {
-        sharedAudioCtx = new AudioCtxClass();
+      sharedAudioCtx = new AudioCtxClass();
+      if (sharedAudioCtx.state === "running") {
+        notifyUnlockListeners(true);
       }
     }
-    if (sharedAudioCtx && sharedAudioCtx.state === "suspended") {
+    if (sharedAudioCtx.state === "suspended" || (sharedAudioCtx.state as any) === "interrupted") {
       sharedAudioCtx.resume().catch(() => {});
     }
     return sharedAudioCtx;
   } catch (err) {
-    console.warn("Web Audio API not supported or blocked:", err);
+    console.warn("Web Audio API não suportada ou bloqueada:", err);
     return null;
   }
+}
+
+/**
+ * Verifica se o contexto de áudio já está ativo e pronto para reprodução sem restrições.
+ */
+export function isAudioUnlocked(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean(sharedAudioCtx && sharedAudioCtx.state === "running");
+}
+
+/**
+ * Permite que componentes React assinem alterações no estado de desbloqueio do áudio.
+ */
+export function subscribeAudioUnlock(listener: UnlockListener): () => void {
+  unlockListeners.add(listener);
+  // Notifica imediatamente com o estado atual
+  listener(isAudioUnlocked());
+  return () => {
+    unlockListeners.delete(listener);
+  };
+}
+
+/**
+ * Desbloqueia ativamente o AudioContext em dispositivos móveis (Safari iOS e Chrome Android).
+ * Deve ser chamado durante ou imediatamente após um evento de toque/clique do usuário.
+ * Reproduz um buffer silencioso para iniciar a pipeline de áudio de hardware do iOS.
+ */
+export async function unlockAudioContext(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return false;
+
+    if (ctx.state === "suspended" || (ctx.state as any) === "interrupted") {
+      await ctx.resume().catch(() => {});
+    }
+
+    // Toca um micropulso silencioso para forçar a liberação no iOS WebKit
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+
+    const isRunning = ctx.state === "running";
+    notifyUnlockListeners(isRunning);
+    return isRunning;
+  } catch (err) {
+    console.warn("Não foi possível desbloquear o AudioContext:", err);
+    return false;
+  }
+}
+
+/**
+ * Dispara um bip suave e instantâneo (0.08s) quando o usuário
+ * desbloqueia/ativa o áudio manualmente, dando feedback acústico imediato.
+ */
+export function playAudioActivatedConfirmation(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1046.5, now); // C6
+    gainNode.gain.setValueAtTime(0.001, now);
+    gainNode.gain.linearRampToValueAtTime(0.25, now + 0.015);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.08);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Registra listeners globais automáticos para desbloquear o áudio
+ * na primeiríssima interação (toque/clique) do usuário na página.
+ */
+let autoUnlockSetup = false;
+export function setupGlobalAutoUnlock(): void {
+  if (typeof window === "undefined" || autoUnlockSetup) return;
+  autoUnlockSetup = true;
+
+  const handleFirstInteraction = async () => {
+    const unlocked = await unlockAudioContext();
+    if (unlocked) {
+      window.removeEventListener("touchstart", handleFirstInteraction, true);
+      window.removeEventListener("touchend", handleFirstInteraction, true);
+      window.removeEventListener("click", handleFirstInteraction, true);
+      window.removeEventListener("pointerdown", handleFirstInteraction, true);
+    }
+  };
+
+  window.addEventListener("touchstart", handleFirstInteraction, { capture: true, passive: true });
+  window.addEventListener("touchend", handleFirstInteraction, { capture: true, passive: true });
+  window.addEventListener("click", handleFirstInteraction, { capture: true, passive: true });
+  window.addEventListener("pointerdown", handleFirstInteraction, { capture: true, passive: true });
+}
+
+// Inicializa automaticamente no carregamento do script no cliente
+if (typeof window !== "undefined") {
+  setupGlobalAutoUnlock();
 }
 
 /**
@@ -55,7 +188,6 @@ let lastNewOrderChimeTime = 0;
  * RESTRICTED EXCLUSIVELY TO STORE ADMIN ROUTE.
  */
 export function playNewOrderChime(): void {
-  // O som de notificação SÓ SEJA REPRODUZIDO se a rota atual for o Painel do Lojista
   if (!isStoreAdminRoute()) {
     return;
   }
@@ -69,6 +201,9 @@ export function playNewOrderChime(): void {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
 
     const now = ctx.currentTime;
 
@@ -101,7 +236,7 @@ export function playNewOrderChime(): void {
   }
 }
 
-let lastStatusChimeTime = 0;
+let lastCustomerConfirmTime = 0;
 
 /**
  * 1. Efeito sonoro curto de confirmação ("tricks" sonoro agradável) para o fluxo do cliente.
@@ -109,9 +244,21 @@ let lastStatusChimeTime = 0;
  * Utiliza Web Audio API nativa com harmônicos brilhantes de confirmação (sem arquivos externos).
  */
 export function playOrderSubmissionConfirmationSound(): void {
+  const nowMs = Date.now();
+  if (nowMs - lastCustomerConfirmTime < 300) {
+    return;
+  }
+  lastCustomerConfirmTime = nowMs;
+
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
+    // Aproveita a interação do usuário para desbloquear a pipeline
+    unlockAudioContext().catch(() => {});
 
     const now = ctx.currentTime;
 
@@ -150,7 +297,7 @@ let lastPendingAlarmTime = 0;
  * 2. Alarme sonoro para pedidos pendentes no Painel do Lojista.
  * Começa a tocar assim que chega um novo pedido e se repete automaticamente a cada 5 segundos
  * até que o lojista clique no botão para aceitar o pedido.
- * Utiliza Web Audio API nativa com sequência de bipes marcantes e bem audíveis.
+ * Utiliza Web Audio API nativa com sequência de bipes marcantes e bem audíveis no celular.
  */
 export function playPendingOrderAlarm(): void {
   if (!isStoreAdminRoute()) {
@@ -166,6 +313,9 @@ export function playPendingOrderAlarm(): void {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
 
     const now = ctx.currentTime;
 
@@ -201,13 +351,16 @@ export function playPendingOrderAlarm(): void {
   }
 }
 
+let lastStatusChimeTime = 0;
+
 /**
- * Toca um efeito sonoro suave e agradável (chime/pop) quando o status do pedido avança.
- * Utiliza a Web Audio API nativa sem depender de arquivos externos de áudio.
+ * Toca um efeito sonoro suave e agradável (chime/pop "tricks") quando o status do pedido avança
+ * na tela de acompanhamento do cliente.
+ * Recria nós dinamicamente para garantir reprodução imediata mesmo em navegadores móveis (Safari/Chrome).
  */
 export function playOrderStatusUpdateChime(_status?: string): void {
   const nowMs = Date.now();
-  if (nowMs - lastStatusChimeTime < 400) {
+  if (nowMs - lastStatusChimeTime < 250) {
     return;
   }
   lastStatusChimeTime = nowMs;
@@ -215,13 +368,17 @@ export function playOrderStatusUpdateChime(_status?: string): void {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
 
     const now = ctx.currentTime;
 
-    // Sequência suave de 2 notas ascendentes (E5 -> C6) em formato de pop/chime
+    // Sequência suave e alegre de 3 notas ascendentes ("tricks" suave: G5 -> C6 -> E6)
     const tones = [
-      { freq: 659.25, start: 0.0, duration: 0.14, gain: 0.25 }, // E5
-      { freq: 1046.50, start: 0.09, duration: 0.32, gain: 0.3 },  // C6
+      { freq: 783.99, start: 0.0, duration: 0.10, gain: 0.28 },  // G5
+      { freq: 1046.50, start: 0.07, duration: 0.14, gain: 0.32 }, // C6
+      { freq: 1318.51, start: 0.13, duration: 0.28, gain: 0.38 }, // E6
     ];
 
     tones.forEach(({ freq, start, duration, gain }) => {
@@ -232,7 +389,7 @@ export function playOrderStatusUpdateChime(_status?: string): void {
       osc.frequency.setValueAtTime(freq, now + start);
 
       gainNode.gain.setValueAtTime(0.001, now + start);
-      gainNode.gain.linearRampToValueAtTime(gain, now + start + 0.02);
+      gainNode.gain.linearRampToValueAtTime(gain, now + start + 0.015);
       gainNode.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
 
       osc.connect(gainNode);

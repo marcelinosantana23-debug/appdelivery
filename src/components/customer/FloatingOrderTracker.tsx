@@ -24,6 +24,7 @@ import {
   clearActiveOrder,
   normalizeOrderStatus,
 } from "@/utils/orderStorage";
+import { playOrderStatusUpdateChime } from "@/utils/audio";
 
 interface FloatingOrderTrackerProps {
   currentTenantSlug?: string;
@@ -158,6 +159,11 @@ export function FloatingOrderTracker({
         setStatus(normStatus);
         const now = new Date();
         setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+
+        // Toca o efeito sonoro suave ("tricks") em cada avanço do status
+        if (prevStatus) {
+          playOrderStatusUpdateChime(normStatus);
+        }
 
         // Atualiza o estado no localStorage (mantém a barra visível nas etapas intermediárias)
         updateActiveOrderStatus(normStatus);

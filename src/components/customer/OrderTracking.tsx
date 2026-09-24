@@ -7,21 +7,13 @@ import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
 import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
-import { playOrderStatusUpdateChime } from "@/utils/audio";
+import { playOrderStatusUpdateChime, unlockAudioContext } from "@/utils/audio";
 
 interface OrderTrackingProps {
   order: Order;
   onBack: () => void;
   onHome: () => void;
 }
-
-const STATUS_RANKS: Record<OrderStatus, number> = {
-  received: 0,
-  preparing: 1,
-  delivering: 2,
-  done: 3,
-  cancelled: -1,
-};
 
 export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrackingProps) {
   const { config } = useStore();
@@ -54,6 +46,23 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     { status: "done", label: isPickup ? "Retirado" : "Finalizado", icon: CheckCircle2 },
   ];
 
+  // Desbloqueia automaticamente o áudio na primeira interação do cliente na tela de rastreio
+  useEffect(() => {
+    const handleCustomerInteraction = async () => {
+      await unlockAudioContext();
+    };
+
+    window.addEventListener("touchstart", handleCustomerInteraction, { capture: true, passive: true });
+    window.addEventListener("touchend", handleCustomerInteraction, { capture: true, passive: true });
+    window.addEventListener("click", handleCustomerInteraction, { capture: true, passive: true });
+
+    return () => {
+      window.removeEventListener("touchstart", handleCustomerInteraction, true);
+      window.removeEventListener("touchend", handleCustomerInteraction, true);
+      window.removeEventListener("click", handleCustomerInteraction, true);
+    };
+  }, []);
+
   // Aplica atualização de status em tempo real por eventos (sem loops de polling)
   const applyStatus = useCallback((newStatus: OrderStatus, updatedOrder?: Order | null) => {
     const prevStatus = prevStatusRef.current;
@@ -63,11 +72,8 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       setOrder((prev) => (prev ? { ...prev, status: newStatus } : prev));
     }
 
-    const currentRank = STATUS_RANKS[prevStatus] ?? -1;
-    const newRank = STATUS_RANKS[newStatus] ?? -1;
-
-    // Dispara efeito sonoro suave quando o status avança e NÃO é o carregamento inicial
-    if (newRank > currentRank && !isInitialLoadRef.current) {
+    // Dispara efeito sonoro suave ("tricks") quando o status do pedido é atualizado e NÃO é o carregamento inicial
+    if (newStatus !== prevStatus && !isInitialLoadRef.current) {
       playOrderStatusUpdateChime(newStatus);
     }
 
@@ -81,6 +87,9 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
   // Busca manual sob demanda no banco D1 ao clicar no botão "Atualizar Status"
   const handleRefreshStatus = useCallback(async () => {
     if (isRefreshing) return;
+    // Garante que o áudio esteja ativo após a interação do toque
+    unlockAudioContext().catch(() => {});
+
     setIsRefreshing(true);
     setRefreshSuccess(false);
     const cleanId = (initialOrder?.id || order?.id || "").replace(/^#/, "");
@@ -132,6 +141,13 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     };
 
     loadInitialStatus();
+
+    // Timer de segurança para liberar o áudio caso a carga da API demore
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        isInitialLoadRef.current = false;
+      }
+    }, 600);
 
     // Conexão Server-Sent Events (SSE) para entrega instantânea baseada em eventos
     let eventSource: EventSource | null = null;
@@ -200,6 +216,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
 
     return () => {
       isMounted = false;
+      clearTimeout(safetyTimer);
       if (eventSource) {
         eventSource.close();
       }
