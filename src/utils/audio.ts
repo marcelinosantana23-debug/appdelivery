@@ -23,13 +23,43 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
+/**
+ * Verifica se a rota atual do navegador pertence ao Painel do Lojista (/admin ou /painel).
+ * Garante que qualquer notificação sonora de novos pedidos seja EXCLUSIVA do lojista.
+ */
+export function isStoreAdminRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname.toLowerCase();
+  return path.includes("/admin") || path.includes("/painel");
+}
+
+/**
+ * Utilitário seguro para execução de áudio (.play()).
+ * Garante que nenhuma chamada a .play() seja executada na tela do cliente,
+ * Checkout, Acompanhamento de Pedidos ou fora do painel do lojista.
+ */
+export function safePlayAudio(audio?: HTMLAudioElement | null): Promise<void> | void {
+  if (!isStoreAdminRoute()) {
+    return;
+  }
+  if (audio && typeof audio.play === "function") {
+    return audio.play().catch(() => {});
+  }
+}
+
 let lastNewOrderChimeTime = 0;
 
 /**
  * Plays a clear 3-tone ascending melodic chime (A5 -> C#6 -> E6)
  * Indicates a new customer order has arrived in real-time.
+ * RESTRICTED EXCLUSIVELY TO STORE ADMIN ROUTE.
  */
 export function playNewOrderChime(): void {
+  // O som de notificação SÓ SEJA REPRODUZIDO se a rota atual for o Painel do Lojista
+  if (!isStoreAdminRoute()) {
+    return;
+  }
+
   const nowMs = Date.now();
   if (nowMs - lastNewOrderChimeTime < 400) {
     return;
@@ -72,66 +102,11 @@ export function playNewOrderChime(): void {
 }
 
 /**
- * Toca um aviso sonoro agradável e curto no celular do cliente
- * disparado instantaneamente ao mudar de etapa (ex: Em Preparo, Saiu p/ Entrega, Concluído).
+ * Aviso sonoro de status desativado para clientes para manter a vitrine
+ * e acompanhamento 100% silenciosos conforme diretrizes do projeto.
  */
-export function playOrderStatusUpdateChime(status?: string): void {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
-
-    const now = ctx.currentTime;
-
-    let notes = [
-      { freq: 1046.5, start: 0.0, duration: 0.18, gain: 0.35 }, // C6
-      { freq: 1318.51, start: 0.12, duration: 0.3, gain: 0.4 },  // E6
-    ];
-
-    if (status === "preparing") {
-      // 2 tons suaves e acolhedores indicando que a cozinha iniciou a produção
-      notes = [
-        { freq: 698.46, start: 0.0, duration: 0.18, gain: 0.35 }, // F5
-        { freq: 880.0, start: 0.12, duration: 0.32, gain: 0.4 },   // A5
-      ];
-    } else if (status === "delivering") {
-      // 3 tons ascendentes alegres indicando que o motoboy saiu para entrega
-      notes = [
-        { freq: 783.99, start: 0.0, duration: 0.15, gain: 0.35 }, // G5
-        { freq: 987.77, start: 0.1, duration: 0.18, gain: 0.4 },  // B5
-        { freq: 1318.51, start: 0.22, duration: 0.4, gain: 0.45 }, // E6
-      ];
-    } else if (status === "done") {
-      // Acorde triunfal de conclusão e entrega do pedido
-      notes = [
-        { freq: 523.25, start: 0.0, duration: 0.2, gain: 0.3 },   // C5
-        { freq: 783.99, start: 0.12, duration: 0.22, gain: 0.35 }, // G5
-        { freq: 1046.5, start: 0.26, duration: 0.45, gain: 0.45 }, // C6
-      ];
-    }
-
-    notes.forEach(({ freq, start, duration, gain }) => {
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, now + start);
-
-      gainNode.gain.setValueAtTime(0.001, now + start);
-      gainNode.gain.linearRampToValueAtTime(gain, now + start + 0.02);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
-
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-
-      osc.start(now + start);
-      osc.stop(now + start + duration);
-    });
-  } catch (err) {
-    console.warn("Could not play status update chime:", err);
-  }
+export function playOrderStatusUpdateChime(_status?: string): void {
+  // Desativado por completo
+  return;
 }
 

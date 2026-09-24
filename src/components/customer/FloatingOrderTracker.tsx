@@ -140,7 +140,7 @@ export function FloatingOrderTracker({
 
   // Aplica a alteração de status recebida em tempo real da cozinha/admin
   const applyStatusUpdate = useCallback(
-    (rawStatus: OrderStatus | string, updatedOrder?: Order | null, _playSound = true) => {
+    (rawStatus: OrderStatus | string, updatedOrder?: Order | null) => {
       const normStatus = normalizeOrderStatus(rawStatus);
       const prevStatus = statusRef.current;
 

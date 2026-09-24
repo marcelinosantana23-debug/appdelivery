@@ -190,6 +190,14 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
 
   // Web Audio chime nítido e exclusivo para notificação de novos pedidos no painel do lojista
   const playNotificationSound = useCallback(() => {
+    // Verificação estrita: o som de novos pedidos SÓ SEJA REPRODUZIDO se a rota for o Painel do Lojista
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname.toLowerCase();
+      if (!path.includes("/admin") && !path.includes("/painel")) {
+        return;
+      }
+    }
+
     try {
       const AudioContextClass =
         window.AudioContext ||

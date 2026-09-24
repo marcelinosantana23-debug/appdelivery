@@ -508,6 +508,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const playAlertSound = useCallback(() => {
+    // Verificação estrita: o som SÓ SEJA REPRODUZIDO se a rota atual for o Painel do Lojista
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname.toLowerCase();
+      if (!path.includes("/admin") && !path.includes("/painel")) {
+        return;
+      }
+    }
     playNewOrderChime();
   }, []);
 
