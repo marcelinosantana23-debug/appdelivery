@@ -3,6 +3,19 @@ import type { CartItem, Product, ProductOption, Category, EstablishmentCategory,
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
 import {
+  loadCachedTenants,
+  saveCachedTenants,
+  loadCachedFeaturedStores,
+  saveCachedFeaturedStores,
+  loadCachedTopProducts,
+  saveCachedTopProducts,
+  loadCachedCategories,
+  saveCachedCategories,
+  haveTenantsChanged,
+  haveStoresRankedChanged,
+  preloadStoreImages,
+} from "@/utils/storeCache";
+import {
   fetchTenantsApi,
   fetchTenantDetailsApi,
   fetchTenantProductsApi,
@@ -77,6 +90,7 @@ interface StoreContextValue {
   isLoadingStore: boolean;
   isLoadingTenants: boolean;
   isLoadingPortal: boolean;
+  isRevalidatingTenants: boolean;
   storeNotFound: boolean;
 
   // Product & Category management (Tenant Admin)
@@ -412,7 +426,7 @@ function getInitialUrlSlug(): string {
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>(loadCachedTenants);
   const initialSlug = getInitialUrlSlug();
   
   // Hydrate currentTenant from sessionStorage / localStorage session
@@ -559,18 +573,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applyThemeColors(config);
   }, [config]);
 
-  // Load tenants list and ranked carousels
-  const [featuredStoresRanked, setFeaturedStoresRanked] = useState<FeaturedStoreRanked[]>([]);
-  const [topSellingProducts, setTopSellingProducts] = useState<TopSellingProduct[]>([]);
-  const [isLoadingTenants, setIsLoadingTenants] = useState<boolean>(true);
-  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(true);
+  // Load tenants list and ranked carousels with Stale-While-Revalidate local cache
+  const [featuredStoresRanked, setFeaturedStoresRanked] = useState<FeaturedStoreRanked[]>(loadCachedFeaturedStores);
+  const [topSellingProducts, setTopSellingProducts] = useState<TopSellingProduct[]>(loadCachedTopProducts);
+  const [isLoadingTenants, setIsLoadingTenants] = useState<boolean>(() => loadCachedTenants().length === 0);
+  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(() => loadCachedCategories().length === 0);
+  const [isRevalidatingTenants, setIsRevalidatingTenants] = useState<boolean>(false);
   const isLoadingPortal = isLoadingTenants || isLoadingCategories;
 
   const refreshFeaturedStoresRanked = useCallback(async () => {
     try {
       const res = await fetchFeaturedStoresRankedApi();
       if (res.success && res.stores) {
-        setFeaturedStoresRanked(res.stores);
+        setFeaturedStoresRanked((prev) => {
+          if (haveStoresRankedChanged(prev, res.stores)) {
+            saveCachedFeaturedStores(res.stores);
+            return res.stores;
+          }
+          return prev;
+        });
+        saveCachedFeaturedStores(res.stores);
       }
     } catch {
       // ignore
@@ -581,7 +603,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetchTopSellingProductsApi(10, 30);
       if (res.success && res.products) {
-        setTopSellingProducts(res.products);
+        setTopSellingProducts((prev) => {
+          const changed =
+            prev.length !== res.products.length ||
+            prev.some((p, i) => p.id !== res.products[i]?.id);
+          if (changed) {
+            saveCachedTopProducts(res.products);
+            return res.products;
+          }
+          return prev;
+        });
+        saveCachedTopProducts(res.products);
       }
     } catch {
       // ignore
@@ -589,38 +621,99 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshTenants = useCallback(async () => {
-    setIsLoadingTenants(true);
+    // Se não houver tenants em memória/cache, ativa o indicador para exibir skeleton leve
+    setTenants((curr) => {
+      if (curr.length === 0) {
+        setIsLoadingTenants(true);
+      }
+      return curr;
+    });
+    setIsRevalidatingTenants(true);
+
     try {
       const [tRes, fRes, pRes] = await Promise.all([
         fetchTenantsApi(),
         fetchFeaturedStoresRankedApi(),
         fetchTopSellingProductsApi(10, 30),
       ]);
+
       if (tRes.success && tRes.tenants) {
-        setTenants(tRes.tenants);
+        const nextTenants = tRes.tenants;
+        setTenants((prev) => {
+          if (haveTenantsChanged(prev, nextTenants)) {
+            saveCachedTenants(nextTenants);
+            preloadStoreImages(nextTenants);
+            return nextTenants;
+          }
+          return prev;
+        });
+        saveCachedTenants(nextTenants);
+        preloadStoreImages(nextTenants);
       }
+
       if (fRes.success && fRes.stores) {
-        setFeaturedStoresRanked(fRes.stores);
+        setFeaturedStoresRanked((prev) => {
+          if (haveStoresRankedChanged(prev, fRes.stores)) {
+            saveCachedFeaturedStores(fRes.stores);
+            return fRes.stores;
+          }
+          return prev;
+        });
+        saveCachedFeaturedStores(fRes.stores);
       }
+
       if (pRes.success && pRes.products) {
-        setTopSellingProducts(pRes.products);
+        setTopSellingProducts((prev) => {
+          const changed =
+            prev.length !== pRes.products.length ||
+            prev.some((p, i) => p.id !== pRes.products[i]?.id);
+          if (changed) {
+            saveCachedTopProducts(pRes.products);
+            return pRes.products;
+          }
+          return prev;
+        });
+        saveCachedTopProducts(pRes.products);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn("[StoreContext] Background revalidation failed, keeping local cache:", err);
     } finally {
       setIsLoadingTenants(false);
+      setIsRevalidatingTenants(false);
     }
   }, []);
 
-  // Categorias de estabelecimentos (Top Food Portal e Super Admin)
-  const [establishmentCategories, setEstablishmentCategories] = useState<EstablishmentCategory[]>([]);
+  // Categorias de estabelecimentos (Top Food Portal e Super Admin) com cache local imediato
+  const [establishmentCategories, setEstablishmentCategories] = useState<EstablishmentCategory[]>(loadCachedCategories);
 
   const refreshEstablishmentCategories = useCallback(async () => {
-    setIsLoadingCategories(true);
+    setEstablishmentCategories((curr) => {
+      if (curr.length === 0) {
+        setIsLoadingCategories(true);
+      }
+      return curr;
+    });
+
     try {
       const res = await fetchEstablishmentCategoriesApi();
       if (res.success && res.categories) {
-        setEstablishmentCategories(res.categories);
+        const nextCats = res.categories;
+        setEstablishmentCategories((prev) => {
+          const changed =
+            prev.length !== nextCats.length ||
+            prev.some(
+              (c, i) =>
+                c.id !== nextCats[i]?.id ||
+                c.name !== nextCats[i]?.name ||
+                c.order !== nextCats[i]?.order
+            );
+          if (changed) {
+            saveCachedCategories(nextCats);
+            return nextCats;
+          }
+          return prev;
+        });
+        saveCachedCategories(nextCats);
       }
     } catch {
       // ignore
@@ -807,8 +900,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // Initial load
+  // Initial load com pré-carregamento imediato de imagens em cache
   useEffect(() => {
+    const cached = loadCachedTenants();
+    if (cached.length > 0) {
+      preloadStoreImages(cached);
+    }
     refreshTenants();
     refreshEstablishmentCategories();
     refreshPlatformSettings();
@@ -2308,6 +2405,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         isLoadingStore,
         isLoadingTenants,
         isLoadingPortal,
+        isRevalidatingTenants,
         storeNotFound,
         addProduct,
         editProduct,

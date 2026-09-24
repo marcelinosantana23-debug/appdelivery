@@ -54,6 +54,23 @@ async function startServer() {
     next(err);
   });
 
+  // HTTP Cache-Control header middleware for images and icons
+  app.use((req, res, next) => {
+    const p = req.path.toLowerCase();
+    if (
+      p.endsWith(".png") ||
+      p.endsWith(".jpg") ||
+      p.endsWith(".jpeg") ||
+      p.endsWith(".webp") ||
+      p.endsWith(".svg") ||
+      p.endsWith(".ico") ||
+      p.endsWith(".avif")
+    ) {
+      res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+    }
+    next();
+  });
+
   // Hono API router mounted at /api
   app.use("/api", async (req, res) => {
     try {
@@ -235,7 +252,16 @@ async function startServer() {
       }
     });
 
-    app.use(express.static(distPath));
+    app.use(
+      express.static(distPath, {
+        maxAge: "1d",
+        setHeaders: (res, filePath) => {
+          if (/\.(jpg|jpeg|png|gif|webp|svg|ico|avif)$/i.test(filePath)) {
+            res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+          }
+        },
+      })
+    );
     app.get("*all", (req, res, next) => {
       if (req.path.startsWith("/api") || req.path === "/health") {
         return next();

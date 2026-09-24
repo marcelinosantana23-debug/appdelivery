@@ -23,11 +23,15 @@ export function TopFoodPortal({
   onStoreAdminClick,
   onSuperAdminClick,
 }: TopFoodPortalProps) {
-  const { tenants, establishmentCategories, isLoadingTenants, isLoadingPortal } = useStore();
+  const {
+    tenants,
+    establishmentCategories,
+    isLoadingTenants,
+    isLoadingPortal,
+    isRevalidatingTenants,
+  } = useStore();
   const [activeCategory, setActiveCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
-
-  const isLoading = isLoadingTenants || isLoadingPortal;
 
   // Apenas lojas ativas no marketplace, com destaque/patrocinadas primeiro por prioridade decrescente
   const activeTenants = useMemo(() => {
@@ -43,6 +47,9 @@ export function TopFoodPortal({
         return (b.createdAt || 0) - (a.createdAt || 0);
       });
   }, [tenants]);
+
+  // Exibe skeleton screens leves apenas no primeiro acesso do usuário (quando o cache local estiver vazio)
+  const isFirstLoad = (isLoadingTenants || isLoadingPortal) && activeTenants.length === 0;
 
   // Lista consolidada de categorias cadastradas no Cloudflare D1
   const allCategories = useMemo<EstablishmentCategory[]>(() => {
@@ -122,7 +129,7 @@ export function TopFoodPortal({
         {/* Carrosséis do Topo da Vitrine Principal */}
         {!searchQuery && activeCategory === "todos" && (
           <>
-            {isLoading ? (
+            {isFirstLoad ? (
               <div className="space-y-6">
                 <PortalCarouselSkeleton title="Lojas em Destaque" badge="⭐ Top Destaques" />
                 <PortalCarouselSkeleton title="Mais Pedidos" badge="🔥 Ranking Geral" icon="🔥" />
@@ -158,7 +165,7 @@ export function TopFoodPortal({
               </span>
             </h2>
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {isLoading ? (
+              {isFirstLoad ? (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="inline-block h-3.5 w-24 bg-gray-200 dark:bg-slate-800 animate-pulse rounded" />
                   <span className="text-gray-400 dark:text-gray-500 text-[11px]">Buscando estabelecimentos...</span>
@@ -167,6 +174,12 @@ export function TopFoodPortal({
                 <>
                   {totalFilteredCount}{" "}
                   {totalFilteredCount === 1 ? "opção disponível" : "opções disponíveis"} no Top Food
+                  {isRevalidatingTenants && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />
+                      <span>Atualizando em segundo plano...</span>
+                    </span>
+                  )}
                   {activeCategory !== "todos" && (
                     <button
                       type="button"
@@ -183,7 +196,7 @@ export function TopFoodPortal({
         </div>
 
         {/* Listagem Agrupada em Carrosséis Horizontais por Categoria */}
-        {isLoading ? (
+        {isFirstLoad ? (
           <PortalStoreListSkeleton />
         ) : displayedGroups.length > 0 ? (
           <div className="space-y-6">

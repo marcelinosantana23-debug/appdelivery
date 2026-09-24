@@ -448,6 +448,7 @@ function AppContent() {
     selectTenant,
     currentTenant,
     config,
+    tenants,
     toasts,
     dismissToast,
   } = useStore();
@@ -603,7 +604,8 @@ function AppContent() {
       return (
         <TopFoodPortal
           onSelectStore={(slug) => {
-            selectTenant(slug);
+            const found = (tenants || []).find((t) => t.slug === slug || t.id === slug);
+            selectTenant(slug, found);
             navigateTo("menu", slug);
           }}
           onStoreAdminClick={() => navigateTo("admin")}

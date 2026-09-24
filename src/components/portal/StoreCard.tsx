@@ -59,6 +59,7 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
               alt={`Foto da loja ${tenant.name}`}
               className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
               loading="lazy"
+              decoding="async"
             />
           ) : (
             <div
@@ -123,6 +124,7 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
                 alt={`Story de ${tenant.name}`}
                 className="h-full w-full object-cover rounded-[8px]"
                 loading="lazy"
+                decoding="async"
               />
             ) : (
               <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[10px]" />
@@ -246,6 +248,7 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
               alt={`Story de ${tenant.name}`}
               className="h-full w-full object-cover rounded-[8px]"
               loading="lazy"
+              decoding="async"
             />
           ) : (
             <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[9px]" />

@@ -24,6 +24,7 @@ export function StoreLogo({
         alt={getSafeDisplayName(name, "Logomarca da loja")}
         className={className}
         loading="lazy"
+        decoding="async"
       />
     );
   }
