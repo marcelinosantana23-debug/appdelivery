@@ -32,6 +32,7 @@ import {
   subscribeAudioUnlock,
   playAudioActivatedConfirmation,
 } from "@/utils/audio";
+import { registerMerchantPushToken, unregisterMerchantPushToken } from "@/utils/pushNotifications";
 import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminCustomers } from "./AdminCustomers";
@@ -234,6 +235,15 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
       showToast("Som do alarme ativado com sucesso!", "success");
     }
   }, [showToast]);
+
+  // Registra automaticamente o token de notificação Push da sessão do Lojista logado
+  useEffect(() => {
+    if (isAdminAuthed && config?.slug) {
+      registerMerchantPushToken(config.slug, currentUser?.id).catch((err) => {
+        console.warn("[Push] Registro inicial de push ignorado:", err);
+      });
+    }
+  }, [isAdminAuthed, config?.slug, currentUser?.id]);
 
   // Identifica pedidos pendentes aguardando aceite do lojista (status 'received')
   const pendingOrders = orders.filter((o) => o.status === "received");
@@ -522,7 +532,8 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
           <button
             id="admin-header-logout-btn"
             type="button"
-            onClick={() => {
+            onClick={async () => {
+              await unregisterMerchantPushToken(config?.slug);
               logout();
               setSuperAdminViewingStore(null);
             }}

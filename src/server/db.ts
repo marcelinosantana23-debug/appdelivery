@@ -1723,6 +1723,7 @@ class MemoryStore {
   customers: Customer[] = [...initialCustomers];
   platformSettings: PlatformSettings = { ...defaultPlatformSettings };
   stories: StoreStory[] = [...initialStories];
+  merchantPushTokens: Map<string, Array<{ token: string; platform: string; userId?: string; isLoggedIn: boolean; updatedAt: number }>> = new Map();
 
   // Helper to slugify
   slugify(text: string): string {
@@ -5541,5 +5542,94 @@ export class Database {
     });
 
     return globalStore.stories.length < initialLen;
+  }
+
+  // ===================== PUSH NOTIFICATIONS (FCM / APNs) =====================
+
+  /**
+   * Salva o token de notificação de um lojista autenticado.
+   * Marca o status como ativo (isLoggedIn: true) para permitir envio de novos pedidos.
+   */
+  async saveMerchantPushToken(
+    tenantId: string,
+    tokenData: { token: string; platform: string; userId?: string }
+  ): Promise<void> {
+    const cleanTenant = tenantId.toLowerCase().trim();
+    const now = Date.now();
+
+    // 1. Atualiza memória global
+    let currentTokens = globalStore.merchantPushTokens.get(cleanTenant) || [];
+    currentTokens = currentTokens.filter((t) => t.token !== tokenData.token);
+    currentTokens.push({
+      token: tokenData.token,
+      platform: tokenData.platform || "android",
+      userId: tokenData.userId,
+      isLoggedIn: true,
+      updatedAt: now,
+    });
+    globalStore.merchantPushTokens.set(cleanTenant, currentTokens);
+
+    // 2. Persiste no Cloudflare KV se disponível
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`push_tokens:${cleanTenant}`, JSON.stringify(currentTokens));
+      } catch (err) {
+        console.warn("KV put push_tokens error:", err);
+      }
+    }
+  }
+
+  /**
+   * Remove ou desativa o token quando o lojista desloga do painel.
+   * Garante a CONDIÇÃO 2: nenhuma notificação é enviada com o lojista deslogado.
+   */
+  async removeMerchantPushToken(tenantId: string, token: string): Promise<void> {
+    const cleanTenant = tenantId.toLowerCase().trim();
+
+    // 1. Atualiza memória global (remove ou marca isLoggedIn = false)
+    let currentTokens = globalStore.merchantPushTokens.get(cleanTenant) || [];
+    currentTokens = currentTokens.filter((t) => t.token !== token);
+    globalStore.merchantPushTokens.set(cleanTenant, currentTokens);
+
+    // 2. Persiste no Cloudflare KV
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        await kv.put(`push_tokens:${cleanTenant}`, JSON.stringify(currentTokens));
+      } catch (err) {
+        console.warn("KV put push_tokens error:", err);
+      }
+    }
+  }
+
+  /**
+   * Retorna os tokens de notificação ativos da sessão do lojista.
+   * Retorna APENAS se o lojista estiver autenticado (isLoggedIn === true).
+   */
+  async getActiveMerchantPushTokens(
+    tenantId: string
+  ): Promise<Array<{ token: string; platform: string; userId?: string; isLoggedIn: boolean }>> {
+    const cleanTenant = tenantId.toLowerCase().trim();
+
+    // 1. Tenta buscar no Cloudflare KV
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        const raw = await kv.get(`push_tokens:${cleanTenant}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            return parsed.filter((t) => t.isLoggedIn === true && t.token);
+          }
+        }
+      } catch {
+        // fallback para memória
+      }
+    }
+
+    // 2. Fallback para memória global
+    const memTokens = globalStore.merchantPushTokens.get(cleanTenant) || [];
+    return memTokens.filter((t) => t.isLoggedIn === true && t.token);
   }
 }

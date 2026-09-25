@@ -4,6 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { sign, verify } from "hono/jwt";
 import { Database } from "./db";
 import { orderEvents } from "./events";
+import { sendNewOrderPushNotification } from "./services/fcm";
 import {
   analyzeMenuWithGemini,
   generateProductImageUrl,
@@ -1445,6 +1446,11 @@ api.post("/pedidos", async (c) => {
       statusHistory: [{ status: statusInicial, timestamp: Date.now() }],
     });
 
+    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
+    sendNewOrderPushNotification(loja.id, novoPedido, c.env, () => db).catch((pushErr) => {
+      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+    });
+
     return c.json({
       success: true,
       message: "Pedido registrado com sucesso no Cloudflare D1/KV!",
@@ -2827,6 +2833,12 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
 
     const body = await parseIncomingOrderPayload(c);
     const order = await db.createOrder(tenant.id, body);
+
+    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
+    sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
+      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+    });
+
     return c.json({ success: true, order }, 201);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao criar pedido" }, 500);
@@ -2896,6 +2908,12 @@ api.post("/orders", async (c) => {
     }
 
     const order = await db.createOrder(tenant.id, body);
+
+    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
+    sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
+      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+    });
+
     return c.json({ success: true, order }, 201);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao registrar pedido" }, 500);
@@ -3634,6 +3652,79 @@ api.get("/api/merchant/stories", async (c) => {
 
 api.post("/api/merchant/stories", handleCreateStory);
 api.delete("/api/merchant/stories/:id", handleDeleteStory);
+
+// =========================================================================
+// PUSH TOKENS DO LOJISTA (FCM / APNs)
+// =========================================================================
+
+// POST /api/admin/push-token - Registrar token da sessão do lojista logado
+api.post("/admin/push-token", async (c) => {
+  try {
+    const db = getDb(c);
+    const body = await c.req.json();
+    const { tenantId, token, platform, userId } = body;
+
+    if (!tenantId || !token) {
+      return c.json({ success: false, error: "tenantId e token são obrigatórios" }, 400);
+    }
+
+    await db.saveMerchantPushToken(tenantId, {
+      token,
+      platform: platform || "web",
+      userId,
+    });
+
+    return c.json({
+      success: true,
+      message: "Token de notificação push ativado com sucesso para esta sessão.",
+    }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// DELETE /api/admin/push-token - Desativar token quando o lojista desloga
+api.delete("/admin/push-token", async (c) => {
+  try {
+    const db = getDb(c);
+    const body = await c.req.json().catch(() => ({}));
+    const tenantId = body.tenantId || c.req.query("tenantId");
+    const token = body.token || c.req.query("token");
+
+    if (tenantId && token) {
+      await db.removeMerchantPushToken(tenantId, token);
+    }
+
+    return c.json({
+      success: true,
+      message: "Token de notificação push revogado (sessão finalizada).",
+    }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// GET /api/admin/push-status - Verificar se há sessão de lojista ativa para a loja
+api.get("/admin/push-status", async (c) => {
+  try {
+    const db = getDb(c);
+    const tenantId = c.req.query("tenantId") || c.req.query("slug");
+
+    if (!tenantId) {
+      return c.json({ success: false, error: "tenantId é obrigatório" }, 400);
+    }
+
+    const activeTokens = await db.getActiveMerchantPushTokens(tenantId);
+    return c.json({
+      success: true,
+      isMerchantLoggedIn: activeTokens.length > 0,
+      activeTokensCount: activeTokens.length,
+      devices: activeTokens.map((t) => t.platform),
+    }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
 
 export default api;
 
