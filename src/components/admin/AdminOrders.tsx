@@ -21,8 +21,10 @@ import {
   Download,
   FileCheck,
   RefreshCw,
+  Sun,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { formatPrice } from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
 
@@ -45,6 +47,13 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [viewingReceiptOrder, setViewingReceiptOrder] = useState<Order | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const topAnchorRef = useRef<HTMLDivElement>(null);
+
+  // Screen Wake Lock API: mantém a tela acesa continuamente exclusivamente nesta tela de pedidos
+  const {
+    isSupported: isWakeLockSupported,
+    isActive: isWakeLockActive,
+    toggle: toggleWakeLock,
+  } = useScreenWakeLock(true);
 
   const activeOrdersCount = orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length;
   const pendingOrdersCount = orders.filter((o) => o.status === "received").length;
@@ -128,6 +137,52 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
               {allOrdersCount}
             </span>
           </button>
+
+          {/* Indicador Discreto: Tela Acesa (Screen Wake Lock) */}
+          {isWakeLockSupported && (
+            <button
+              id="admin-orders-wakelock-btn"
+              type="button"
+              onClick={async () => {
+                await toggleWakeLock();
+                showToast(
+                  !isWakeLockActive
+                    ? "Tela Acesa ativada: o aparelho não entrará em repouso nesta tela."
+                    : "Tela Acesa desativada: o aparelho seguirá o descanso de tela padrão.",
+                  "info"
+                );
+              }}
+              title={
+                isWakeLockActive
+                  ? "Modo Tela Acesa ativo: o aparelho não entrará em repouso enquanto você estiver na tela de pedidos. Clique para pausar."
+                  : "Modo Tela Acesa pausado: clique para manter a tela sempre acesa."
+              }
+              className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold transition shadow-2xs cursor-pointer border ${
+                isWakeLockActive
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                  : "bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              <span className="relative flex h-2 w-2">
+                {isWakeLockActive && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                )}
+                <span
+                  className={`relative inline-flex rounded-full h-2 w-2 ${
+                    isWakeLockActive ? "bg-emerald-500" : "bg-slate-400"
+                  }`}
+                />
+              </span>
+              <Sun
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  isWakeLockActive ? "text-amber-500" : "text-slate-400"
+                }`}
+              />
+              <span className="whitespace-nowrap">
+                {isWakeLockActive ? "Tela Acesa" : "Tela Normal"}
+              </span>
+            </button>
+          )}
 
           {/* Botão Atualizar Pedidos direto na barra sticky */}
           <button
