@@ -54,95 +54,73 @@ export const MANIFEST_JSON_CONTENT = JSON.stringify({
   ],
 });
 
-export const SW_SCRIPT_CONTENT = `// Service Worker para Top Food PWA
-const CACHE_NAME = "topfood-pwa-v1";
-
-const PRECACHE_ASSETS = [
-  "/",
-  "/index.html",
-  "/manifest.json",
-  "/icon.svg",
-  "/icon-maskable.svg",
-  "/icon-192.png",
-  "/icon-512.png",
-  "/apple-touch-icon.png"
-];
-
+export const SW_SCRIPT_CONTENT = `// Service Worker para Top Food PWA - Compatível com PWABuilder e Android APK
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
-  );
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches
-      .keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_NAME) {
-              return caches.delete(cacheName);
-            }
-          })
-        );
-      })
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  if (!url.protocol.startsWith("http")) {
-    return;
-  }
-
-  if (url.pathname.startsWith("/api/")) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (request.method === "GET" && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
-
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
-        })
-        .catch(() => caches.match("/index.html") || caches.match("/"))
-    );
-    return;
-  }
+  if (!event.request.url.startsWith("http")) return;
 
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      const fetchPromise = fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => cachedResponse);
+    fetch(event.request).catch(() => {
+      if (event.request.mode === "navigate") {
+        return caches.match("/index.html") || caches.match("/");
+      }
+      return new Response("Offline", { status: 503, statusText: "Offline" });
+    })
+  );
+});
 
-      return cachedResponse || fetchPromise;
+// Suporte a Push Notifications em segundo plano / tela apagada
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    if (event.data) data = event.data.json();
+  } catch {
+    data = { notification: { title: "🚨 NOVO PEDIDO RECEBIDO!", body: event.data ? event.data.text() : "" } };
+  }
+  const notification = data.notification || {};
+  const customData = data.data || {};
+  const title = notification.title || "🚨 NOVO PEDIDO RECEBIDO!";
+  const options = {
+    body: notification.body || "Você recebeu um novo pedido na sua lanchonete!",
+    icon: notification.icon || "/icon-192.png",
+    badge: notification.badge || "/icon-192.png",
+    vibrate: [500, 150, 500, 150, 1000],
+    tag: \`pedido-\${customData.orderId || Date.now()}\`,
+    renotify: true,
+    requireInteraction: true,
+    silent: false,
+    data: {
+      url: customData.url || "/admin?tab=orders",
+      orderId: customData.orderId,
+      tenantSlug: customData.tenantSlug,
+    },
+    actions: [
+      { action: "ver_pedidos", title: "Ver Pedidos" },
+      { action: "abrir_painel", title: "Abrir Painel" },
+    ],
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/admin?tab=orders";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes("/admin") && "focus" in client) {
+          if ("navigate" in client && targetUrl) client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });

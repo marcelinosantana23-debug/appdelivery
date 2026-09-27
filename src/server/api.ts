@@ -5,6 +5,7 @@ import { sign, verify } from "hono/jwt";
 import { Database } from "./db";
 import { orderEvents } from "./events";
 import { sendNewOrderPushNotification } from "./services/fcm";
+import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT } from "./pwaAssets";
 import {
   analyzeMenuWithGemini,
   generateProductImageUrl,
@@ -254,6 +255,31 @@ api.get("/cloudflare/status", (c) => {
       ? "Cloudflare D1 e KV operando em produção via bindings do Cloudflare Workers."
       : "Operando em modo de desenvolvimento local com persistência resiliente.",
   }, 200);
+});
+
+// -----------------------------------------------------------------------------
+// PWA SERVICE WORKER & MANIFEST (PWABUILDER & ANDROID APK READY)
+// -----------------------------------------------------------------------------
+
+api.get("/sw.js", (_c) => {
+  return new Response(SW_SCRIPT_CONTENT, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Service-Worker-Allowed": "/",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+    },
+  });
+});
+
+api.get("/manifest.json", (_c) => {
+  return new Response(MANIFEST_JSON_CONTENT, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/manifest+json; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
 });
 
 // -----------------------------------------------------------------------------

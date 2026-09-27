@@ -35,6 +35,21 @@
       });
     </script>
 
+    <!-- Registro Oficial do Service Worker para PWA / PWABuilder -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function (reg) {
+              console.log('Service Worker registrado com sucesso:', reg.scope);
+            })
+            .catch(function (err) {
+              console.error('Erro ao registrar Service Worker:', err);
+            });
+        });
+      }
+    </script>
+
     <!-- Título e Descrição Principal -->
     <title>Top Food - O Portal do Delivery</title>
     <meta name="description" content="O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes." />

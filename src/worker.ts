@@ -56,21 +56,7 @@ app.onError((err, c) => {
   );
 });
 
-// 1. Mount all /api routes FIRST
-app.route("/api", api);
-app.route("/", api);
-
-// 2. Health check route specifically
-app.get("/health", (c) => {
-  return c.json({
-    name: "Top Food Delivery API",
-    platform: "Cloudflare Workers",
-    status: "online",
-    docs: "/api/health",
-  });
-});
-
-// 3. PWA Service Worker route with explicit headers required by Android Chrome
+// 1. PWA Service Worker route with explicit headers required by Android Chrome & PWABuilder
 app.get("/sw.js", async (c) => {
   const assets = c.env?.ASSETS;
   if (assets && typeof assets.fetch === "function") {
@@ -98,7 +84,7 @@ app.get("/sw.js", async (c) => {
   });
 });
 
-// 4. PWA Web App Manifest route with strict manifest Content-Type
+// 2. PWA Web App Manifest route with strict manifest Content-Type
 app.get("/manifest.json", async (c) => {
   const assets = c.env?.ASSETS;
   if (assets && typeof assets.fetch === "function") {
@@ -123,6 +109,20 @@ app.get("/manifest.json", async (c) => {
     },
   });
 });
+
+// 3. Health check route specifically
+app.get("/health", (c) => {
+  return c.json({
+    name: "Top Food Delivery API",
+    platform: "Cloudflare Workers",
+    status: "online",
+    docs: "/api/health",
+  });
+});
+
+// 4. Mount /api routes
+app.route("/api", api);
+app.route("/", api);
 
 // 4.1. Redirecionamento de manifest dinâmico por vitrine
 app.get("/manifest/:slug", (c) => {
