@@ -5,7 +5,7 @@ import { sign, verify } from "hono/jwt";
 import { Database } from "./db";
 import { orderEvents } from "./events";
 import { sendNewOrderPushNotification } from "./services/fcm";
-import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT } from "./pwaAssets";
+import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT, ASSET_LINKS_CONTENT } from "./pwaAssets";
 import {
   analyzeMenuWithGemini,
   generateProductImageUrl,
@@ -279,6 +279,13 @@ api.get("/manifest.json", (_c) => {
       "Content-Type": "application/manifest+json; charset=utf-8",
       "Cache-Control": "public, max-age=3600",
     },
+  });
+});
+
+api.get("/.well-known/assetlinks.json", (c) => {
+  return c.json(ASSET_LINKS_CONTENT, 200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "public, max-age=86400",
   });
 });
 

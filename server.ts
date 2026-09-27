@@ -5,6 +5,7 @@ import workerApp from "./src/worker";
 import { Database } from "./src/server/db";
 import { injectStorePwaMetaTags } from "./src/server/pwaMeta";
 import { isAllowedOrigin } from "./src/server/security";
+import { ASSET_LINKS_CONTENT } from "./src/server/pwaAssets";
 
 async function startServer() {
   const app = express();
@@ -196,6 +197,12 @@ async function startServer() {
     res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.sendFile(manifestPath);
+  });
+
+  app.get("/.well-known/assetlinks.json", (_req, res) => {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.json(ASSET_LINKS_CONTENT);
   });
 
   // Dynamic manifest redirect for stores: /manifest/:slug.json -> /api/manifest/:slug.json

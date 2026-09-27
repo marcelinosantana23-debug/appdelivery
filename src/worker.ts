@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import api from "./server/api";
 import type { Env } from "./server/types";
-import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT } from "./server/pwaAssets";
+import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT, ASSET_LINKS_CONTENT } from "./server/pwaAssets";
 import { injectStorePwaMetaTags } from "./server/pwaMeta";
 import { isAllowedOrigin, sanitizeErrorMessage } from "./server/security";
 
@@ -110,7 +110,15 @@ app.get("/manifest.json", async (c) => {
   });
 });
 
-// 3. Health check route specifically
+// 3. Android Digital Asset Links (Trusted Web Activity - TWA validation)
+app.get("/.well-known/assetlinks.json", (c) => {
+  return c.json(ASSET_LINKS_CONTENT, 200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "public, max-age=86400",
+  });
+});
+
+// 4. Health check route specifically
 app.get("/health", (c) => {
   return c.json({
     name: "Top Food Delivery API",

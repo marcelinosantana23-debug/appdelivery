@@ -1,4 +1,17 @@
 // Embedded PWA static content fallback for Cloudflare Workers when ASSETS binding is unavailable
+export const ASSET_LINKS_CONTENT = [
+  {
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "dev.workers.msapp.top_food.twa",
+      sha256_cert_fingerprints: [
+        "CC:27:8A:FC:BF:94:E3:40:15:22:BE:C4:39:33:2E:FD:F9:38:0C:72:87:49:57:26:75:51:BC:68:1B:85:4B:CF",
+      ],
+    },
+  },
+];
+
 export const MANIFEST_JSON_CONTENT = JSON.stringify({
   id: "/",
   name: "Top Food - Delivery",
