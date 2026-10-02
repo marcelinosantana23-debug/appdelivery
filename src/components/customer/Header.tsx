@@ -1,9 +1,10 @@
-import { Clock, MapPin, Store, AlertTriangle, Bike, Sparkles, ArrowLeft } from "lucide-react";
+import { Clock, MapPin, AlertTriangle, Bike, Sparkles, UtensilsCrossed } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName } from "@/utils/storeFormat";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
+import { LocalitySelector } from "@/components/portal/LocalitySelector";
 
 interface HeaderProps {
   onAdminClick?: () => void;
@@ -13,7 +14,8 @@ interface HeaderProps {
 }
 
 export function Header(props: HeaderProps = {}) {
-  const { isStoreOpen, isStoreActive, config, getStoreActiveStories, openStoreStoriesModal } = useStore();
+  const { isStoreOpen, isStoreActive, config, currentTenant, getStoreActiveStories, openStoreStoriesModal } = useStore();
+  const storeLocality = currentTenant?.localidade || config.localidade || "Gargaú";
 
   const hasBanner = Boolean(config.bannerImage);
   const stories = getStoreActiveStories(config.id || config.slug);
@@ -53,44 +55,39 @@ export function Header(props: HeaderProps = {}) {
 
         {/* Top Floating Toolbar - Clean customer-facing interface em UMA ÚNICA LINHA horizontal */}
         <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-4xl px-2.5 sm:px-4 pt-2.5 sm:pt-3">
-          <div className="flex flex-row flex-nowrap items-center justify-between gap-1.5 sm:gap-2 w-full">
-            {/* CANTO ESQUERDO: Botão "← Início" e o nome/ícone da loja */}
-            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 shrink">
-              {props.onBackToPortal && (
+          <div className="flex flex-row flex-nowrap items-center justify-between gap-2 w-full h-8 sm:h-9">
+            {/* LADO ESQUERDO: Botão "Top Food" (Voltar ao Portal) + Pílula Estática de Localidade da Loja */}
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink">
+              {props.onBackToPortal ? (
                 <button
                   type="button"
                   onClick={props.onBackToPortal}
-                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-black/45 hover:bg-black/65 px-2 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs transition active:scale-95 cursor-pointer group h-7"
-                  title="Ver todas as lojas no Top Food"
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-black/45 hover:bg-black/65 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs transition active:scale-95 cursor-pointer group h-7"
+                  title="Voltar ao portal Top Food"
                 >
-                  <ArrowLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 transition-transform group-hover:-translate-x-0.5" />
-                  <span className="hidden xs:inline">Início</span>
+                  <UtensilsCrossed className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0 group-hover:rotate-12 transition-transform" />
+                  <span className="whitespace-nowrap">Top Food</span>
                 </button>
+              ) : (
+                <div className="flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-black/45 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs h-7">
+                  <UtensilsCrossed className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0" />
+                  <span className="whitespace-nowrap">Top Food</span>
+                </div>
               )}
 
-              {/* Clean store badge with store name */}
-              <div
-                className="flex items-center gap-1 rounded-full border border-white/20 bg-black/45 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs min-w-0 h-7"
-                title={config.name}
-              >
-                <Store className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
-                <span className="truncate max-w-[85px] xs:max-w-[130px] sm:max-w-[220px] font-bold">
-                  {config.name}
-                </span>
-              </div>
-            </div>
-
-            {/* MEIO: Botão de "Instalar App" em tamanho compacto/menor (some automaticamente quando instalado) */}
-            <div className="flex items-center justify-center shrink-0 mx-1">
-              <PWAInstallButton
-                variant="header"
-                className="h-7 px-2 py-1 text-[11px] sm:text-xs"
+              {/* Pílula de Localidade Estática para esta loja (sem seta e sem evento de clique) */}
+              <LocalitySelector
+                isStatic={true}
+                staticLabel={storeLocality}
               />
             </div>
 
-            {/* CANTO DIREITO: O botão de recarga (ícone circular 🔄 sem texto) colado logo ao lado da badge de status da loja */}
-            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
-              {/* Botão de recarga circular 🔄 sem texto */}
+            {/* LADO DIREITO: Botão "Instalar" + Atualizar (🔄 circular) + Status da Loja */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
+              <PWAInstallButton
+                variant="header"
+                className="h-7 px-2 py-1 text-[10px] sm:text-xs"
+              />
               <GlobalReloadButton
                 variant="glass"
                 showLabel={false}

@@ -277,6 +277,7 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
     showFeaturedCarousel: t.showFeaturedCarousel !== false,
     status: t.status,
     isOpen: t.isOpen,
+    localidade: t.localidade || "Gargaú",
   };
 }
 

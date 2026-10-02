@@ -26,6 +26,7 @@ export interface StoreConfig {
   status?: "active" | "inactive";
   isOpen?: boolean;
   businessType?: string;
+  localidade?: string;
   geminiApiKey?: string;
 }
 
@@ -54,6 +55,7 @@ export const defaultStoreConfig: StoreConfig = {
   showFeaturedCarousel: true,
   status: "active",
   isOpen: true,
+  localidade: "Gargaú",
   geminiApiKey: "",
 };
 

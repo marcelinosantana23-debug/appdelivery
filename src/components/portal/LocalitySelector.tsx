@@ -4,15 +4,23 @@ import { MapPin, Check } from "lucide-react";
 
 interface LocalitySelectorProps {
   className?: string;
+  isStatic?: boolean;
+  staticLabel?: string;
 }
 
-export function LocalitySelector({ className = "" }: LocalitySelectorProps) {
+export function LocalitySelector({
+  className = "",
+  isStatic = false,
+  staticLabel,
+}: LocalitySelectorProps) {
   const { localities, selectedLocality, setSelectedLocality } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fecha o dropdown ao clicar fora
+  // Fecha o dropdown ao clicar fora (apenas no modo interativo)
   useEffect(() => {
+    if (isStatic) return;
+
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -34,7 +42,7 @@ export function LocalitySelector({ className = "" }: LocalitySelectorProps) {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, isStatic]);
 
   const handleSelect = (loc: string) => {
     setSelectedLocality(loc);
@@ -46,8 +54,26 @@ export function LocalitySelector({ className = "" }: LocalitySelectorProps) {
     ? localities
     : ["Gargaú", "Barra do Itabapoana", "São Francisco (Centro)"];
 
-  const currentDisplay = selectedLocality || displayLocalities[0] || "Gargaú";
+  const currentDisplay = staticLabel?.trim() || selectedLocality || displayLocalities[0] || "Gargaú";
 
+  // 1. COMPORTAMENTO ESTÁTICO (Vitrine da Loja):
+  // Exibe estaticamente a localidade da loja sem seta (▾) e sem evento de clique
+  if (isStatic) {
+    return (
+      <div
+        className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-full border border-white/20 bg-black/45 text-white/95 backdrop-blur-md shadow-xs px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] xs:text-[11px] sm:text-xs font-semibold h-7 select-none max-w-[115px] xs:max-w-[155px] sm:max-w-[210px] shrink min-w-0 pointer-events-none cursor-default ${className}`}
+        title={`Localidade: ${currentDisplay}`}
+      >
+        <span className="text-[11px] sm:text-xs shrink-0">📍</span>
+        <span className="truncate">
+          {currentDisplay}
+        </span>
+      </div>
+    );
+  }
+
+  // 2. COMPORTAMENTO INTERATIVO (Tela Inicial/Home):
+  // Permite clicar e alternar localidades através do dropdown com a seta (▾)
   return (
     <div ref={dropdownRef} className={`relative inline-flex items-center min-w-0 ${className}`}>
       {/* Botão Pílula / Cápsula colada ao lado do Logo */}
