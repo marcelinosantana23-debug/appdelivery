@@ -187,6 +187,8 @@ export interface Order {
   paymentDetails?: string;
   pixReceiptUrl?: string;
   pix_receipt_url?: string;
+  location_url?: string;
+  locationUrl?: string;
   address?: {
     street: string;
     number: string;

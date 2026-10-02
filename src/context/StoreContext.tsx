@@ -1645,6 +1645,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         paymentDetails: order.paymentDetails,
         pixReceiptUrl: order.pixReceiptUrl || order.pix_receipt_url,
         pix_receipt_url: order.pix_receipt_url || order.pixReceiptUrl,
+        location_url: order.location_url || order.locationUrl,
+        locationUrl: order.locationUrl || order.location_url,
         address: order.address,
         changeFor: order.changeFor,
         subtotal: order.subtotal,

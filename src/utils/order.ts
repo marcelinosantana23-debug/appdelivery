@@ -47,6 +47,10 @@ export function buildWhatsAppMessage(order: Order, config: StoreConfig): string 
     lines.push(`Bairro: ${order.address.district}`);
     if (order.address.complement) lines.push(`Complemento: ${order.address.complement}`);
     if (order.address.reference) lines.push(`Referência: ${order.address.reference}`);
+    const locUrl = order.location_url || order.locationUrl;
+    if (locUrl) {
+      lines.push(`📍 *Rota do GPS:* ${locUrl}`);
+    }
   }
   lines.push("");
   lines.push("*PAGAMENTO:*");
@@ -66,6 +70,70 @@ export function buildWhatsAppMessage(order: Order, config: StoreConfig): string 
   }
 
   return encodeURIComponent(lines.join("\n"));
+}
+
+export function buildMotoboyWhatsAppMessage(order: Order, config: StoreConfig): string {
+  const lines: string[] = [];
+  lines.push(`🛵 *ENTREGA DE PEDIDO - ${config.name}*`);
+  lines.push(`*Pedido:* ${order.id}`);
+  lines.push(`*Cliente:* ${order.customerName}`);
+  lines.push(`*Telefone:* ${order.customerPhone}`);
+  lines.push("");
+  lines.push("*ENDEREÇO DE ENTREGA:*");
+  if (order.address) {
+    lines.push(`Rua: ${order.address.street}, Nº ${order.address.number}`);
+    lines.push(`Bairro: ${order.address.district}`);
+    if (order.address.complement) lines.push(`Complemento: ${order.address.complement}`);
+    if (order.address.reference) lines.push(`Ponto de Referência: ${order.address.reference}`);
+  }
+  const locUrl = order.location_url || order.locationUrl;
+  if (locUrl) {
+    lines.push(`📍 *Rota do GPS:* ${locUrl}`);
+  }
+  lines.push("");
+  lines.push("*PAGAMENTO / COBRANÇA:*");
+  if (order.paymentMethod === "pix") {
+    lines.push("✓ *PAGO VIA PIX* (Não cobrar nada do cliente)");
+  } else if (order.paymentMethod === "card") {
+    const cardDetail = order.cardType === "credit" ? "Crédito" : order.cardType === "debit" ? "Débito" : "Cartão";
+    lines.push(`💳 *LEVAR MÁQUINA DE CARTÃO* (${cardDetail})`);
+    lines.push(`*Cobrar do Cliente:* ${formatPrice(order.total, config)}`);
+  } else if (order.paymentMethod === "cash") {
+    if (order.changeFor) {
+      const trocoCalculado = parseFloat(order.changeFor) - order.total;
+      lines.push(`💵 *DINHEIRO* - Paga com R$ ${order.changeFor}`);
+      lines.push(`*Levar de Troco:* ${formatPrice(Math.max(0, trocoCalculado), config)}`);
+      lines.push(`*Cobrar do Cliente:* ${formatPrice(order.total, config)}`);
+    } else {
+      lines.push(`💵 *DINHEIRO* - Sem troco (valor exato)`);
+      lines.push(`*Cobrar do Cliente:* ${formatPrice(order.total, config)}`);
+    }
+  }
+  lines.push("");
+  lines.push(`*VALOR TOTAL DO PEDIDO:* ${formatPrice(order.total, config)}`);
+  lines.push("");
+  lines.push("*ITENS A ENTREGAR:*");
+  order.items.forEach((item) => {
+    lines.push(`• ${item.quantity}x ${item.product.name}`);
+    if (item.selectedOptions && item.selectedOptions.length > 0) {
+      lines.push(`  + ${item.selectedOptions.map((o) => o.name).join(", ")}`);
+    }
+    if (item.notes) {
+      lines.push(`  Obs: ${item.notes}`);
+    }
+  });
+
+  return encodeURIComponent(lines.join("\n"));
+}
+
+export function getMotoboyWhatsAppUrl(order: Order, config: StoreConfig, motoboyPhone?: string): string {
+  const text = buildMotoboyWhatsAppMessage(order, config);
+  if (motoboyPhone && motoboyPhone.trim()) {
+    const cleanPhone = motoboyPhone.replace(/\D/g, "");
+    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+    return `https://wa.me/${formattedPhone}?text=${text}`;
+  }
+  return `https://api.whatsapp.com/send?text=${text}`;
 }
 
 export function getWhatsAppUrl(order: Order, config: StoreConfig): string {

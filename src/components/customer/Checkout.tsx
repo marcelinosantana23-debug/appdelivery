@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Clock,
   ShoppingBag,
+  ExternalLink,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
@@ -83,6 +84,11 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   const [isProcessingReceipt, setIsProcessingReceipt] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // GPS Location State
+  const [gpsLocationUrl, setGpsLocationUrl] = useState<string>("");
+  const [isCapturingGps, setIsCapturingGps] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
 
   // Success Screen State
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
@@ -189,6 +195,43 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     }
   };
 
+  const handleCaptureGps = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setGpsError("Seu navegador ou dispositivo não possui suporte para captura de GPS.");
+      return;
+    }
+
+    setIsCapturingGps(true);
+    setGpsError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const mapsUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
+        setGpsLocationUrl(mapsUrl);
+        setIsCapturingGps(false);
+      },
+      (error) => {
+        setIsCapturingGps(false);
+        console.warn("Erro ao capturar localização GPS:", error);
+        if (error.code === 1) {
+          setGpsError("Permissão de localização negada. Ative o GPS no navegador ou preencha o endereço digitado.");
+        } else if (error.code === 2) {
+          setGpsError("Sinal de GPS indisponível no momento. Preencha o endereço manualmente.");
+        } else if (error.code === 3) {
+          setGpsError("Tempo esgotado ao buscar GPS. Tente novamente ou digite o endereço.");
+        } else {
+          setGpsError("Não foi possível obter sua localização GPS. Você pode digitar o endereço normalmente.");
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!customerName.trim()) e.customerName = "Informe seu nome";
@@ -249,6 +292,8 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       paymentDetails,
       pixReceiptUrl: paymentMethod === "pix" ? pixReceipt?.dataUrl : undefined,
       pix_receipt_url: paymentMethod === "pix" ? pixReceipt?.dataUrl : undefined,
+      location_url: orderType === "delivery" && gpsLocationUrl ? gpsLocationUrl : undefined,
+      locationUrl: orderType === "delivery" && gpsLocationUrl ? gpsLocationUrl : undefined,
       address: orderType === "delivery" ? address : undefined,
       changeFor: paymentMethod === "cash" && needsChange ? changeFor : undefined,
       subtotal: cartSubtotal,
@@ -389,6 +434,23 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                       <p className="text-[11px] text-amber-800 bg-amber-50 rounded px-1.5 py-0.5 mt-1 inline-block font-medium">
                         Ref: {submittedOrder.address.reference}
                       </p>
+                    )}
+                    {(submittedOrder.location_url || submittedOrder.locationUrl) && (
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          Localização GPS enviada com sucesso!
+                        </span>
+                        <a
+                          href={submittedOrder.location_url || submittedOrder.locationUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-black text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-0.5"
+                        >
+                          <span>Ver no Mapa</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -600,6 +662,56 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   </div>
                 </div>
               )}
+
+              {orderType === "delivery" && (
+                <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                  {!gpsLocationUrl ? (
+                    <button
+                      type="button"
+                      onClick={handleCaptureGps}
+                      disabled={isCapturingGps}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 hover:text-red-700 transition cursor-pointer"
+                    >
+                      {isCapturingGps ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-red-600" />
+                          <span>Obtendo coordenadas GPS...</span>
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="h-3.5 w-3.5 text-red-600" />
+                          <span>📍 Anexar Minha Localização Exata (GPS)</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                        <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3]" />
+                        Localização GPS anexada ✓
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={gpsLocationUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-semibold text-emerald-700 underline"
+                        >
+                          Ver no mapa
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setGpsLocationUrl("")}
+                          className="text-slate-400 hover:text-red-500"
+                          title="Remover GPS"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -669,6 +781,73 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   placeholder="Próx. à padaria / portaria"
                 />
               </div>
+
+              {/* Recurso de Captura de Localização GPS */}
+              <div className="pt-2 border-t border-slate-100">
+                {!gpsLocationUrl ? (
+                  <div className="space-y-1.5">
+                    <button
+                      type="button"
+                      id="btn-attach-gps-checkout"
+                      onClick={handleCaptureGps}
+                      disabled={isCapturingGps}
+                      className="flex items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-red-300 bg-red-50/60 hover:bg-red-50 hover:border-red-400 py-2.5 px-3 text-xs font-bold text-red-700 transition cursor-pointer active:scale-98 disabled:opacity-60 shadow-2xs"
+                    >
+                      {isCapturingGps ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin text-red-600" />
+                          <span>Obtendo coordenadas do GPS...</span>
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="h-4 w-4 text-red-600 shrink-0" />
+                          <span>📍 Anexar Minha Localização Exata (GPS)</span>
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[11px] text-slate-500 text-center">
+                      Opcional: envia o ponto exato no Google Maps para o motoboy não errar a entrega.
+                    </p>
+                    {gpsError && (
+                      <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800 flex items-start gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <span className="flex-1">{gpsError}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border-2 border-emerald-400 bg-emerald-50/90 p-3 flex items-center justify-between gap-2 shadow-xs animate-fade-in">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500 text-white shrink-0 shadow-xs">
+                        <Check className="h-4 w-4 stroke-[3]" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-emerald-950 truncate">
+                          ✓ Localização GPS anexada ao pedido!
+                        </p>
+                        <a
+                          href={gpsLocationUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline inline-flex items-center gap-1 mt-0.5"
+                        >
+                          <span>Ver no Google Maps</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setGpsLocationUrl("")}
+                      className="rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 transition cursor-pointer"
+                      title="Remover localização GPS"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {hasSavedProfile && (
                 <div className="flex justify-end pt-1">
                   <button

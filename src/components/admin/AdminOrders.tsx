@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
-import { formatPrice } from "@/utils/order";
+import { formatPrice, getMotoboyWhatsAppUrl } from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
 
 const statusFlow: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }>; color: string }[] = [
@@ -375,12 +375,25 @@ function OrderCard({
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-0.5 font-bold transition"
+                className="flex items-center gap-1 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-0.5 font-bold transition text-xs"
                 title="Conversar com o cliente no WhatsApp"
               >
                 <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
                 <span>WhatsApp</span>
               </a>
+              {order.orderType === "delivery" && (
+                <a
+                  href={getMotoboyWhatsAppUrl(order, config)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 font-bold transition text-xs"
+                  title="Enviar rota do GPS e dados do pedido para o WhatsApp do Motoboy"
+                >
+                  <Bike className="h-3.5 w-3.5 text-amber-700" />
+                  <span>Motoboy</span>
+                </a>
+              )}
             </div>
           </div>
 
@@ -414,20 +427,54 @@ function OrderCard({
                   ) : (
                     <p className="text-[11px] text-slate-400 italic mt-0.5">Ponto de referência não informado</p>
                   )}
+                  {/* Confirmação de Localização GPS Anexada */}
+                  {(order.location_url || order.locationUrl) && (
+                    <div className="mt-1.5 flex items-center justify-between gap-2 rounded-lg bg-emerald-50 border border-emerald-300 px-2.5 py-1 text-emerald-950 text-[11px] font-bold">
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span>Localização GPS anexada ao pedido</span>
+                      </span>
+                      <a
+                        href={order.location_url || order.locationUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-0.5 text-blue-700 hover:text-blue-900 underline font-black"
+                      >
+                        <span>Abrir GPS</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
                 </div>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    `${order.address.street}, ${order.address.number}, ${order.address.district}`
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline shrink-0"
-                  title="Abrir rota no Google Maps"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  <span>Maps</span>
-                </a>
+                {(order.location_url || order.locationUrl) ? (
+                  <a
+                    href={order.location_url || order.locationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-3 py-2 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+                    title="Abrir rota e coordenadas exatas do GPS no Google Maps"
+                  >
+                    <MapPin className="h-3.5 w-3.5 text-white" />
+                    <span>📍 Ver no Mapa</span>
+                    <ExternalLink className="h-3 w-3 opacity-90" />
+                  </a>
+                ) : (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      `${order.address.street}, ${order.address.number}, ${order.address.district}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline shrink-0"
+                    title="Abrir rota no Google Maps"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    <span>Maps</span>
+                  </a>
+                )}
               </div>
             </div>
           ) : (
@@ -569,6 +616,19 @@ function OrderCard({
       {/* Actions */}
       {!isCancelled && !isDone && (
         <div className="flex flex-col sm:flex-row gap-2 border-t border-gray-100 px-4 py-3 w-full">
+          {order.orderType === "delivery" && (
+            <a
+              href={getMotoboyWhatsAppUrl(order, config)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-amber-950 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+              title="Abrir WhatsApp para enviar dados do pedido e rota GPS ao motoboy"
+            >
+              <Bike className="h-4 w-4 text-amber-700" />
+              <span>Enviar p/ Motoboy</span>
+            </a>
+          )}
           {canAdvance && (
             <button
               id={`advance-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}

@@ -1459,6 +1459,7 @@ api.post("/pedidos", async (c) => {
     const comprovante = body.pix_receipt_url || body.pixReceiptUrl || body.comprovantePix || body.receipt || undefined;
     const tipoCartao = body.cardType || body.card_type || body.tipoCartao || undefined;
     const detalhesPgto = body.paymentDetails || body.payment_details || undefined;
+    const locationUrl = body.location_url || body.locationUrl || undefined;
 
     const novoPedido = await db.createOrder(loja.id, {
       customerName: cliente.trim(),
@@ -1469,6 +1470,8 @@ api.post("/pedidos", async (c) => {
       paymentDetails: detalhesPgto,
       pixReceiptUrl: comprovante,
       pix_receipt_url: comprovante,
+      location_url: locationUrl,
+      locationUrl: locationUrl,
       address: endereco,
       changeFor: trocoPara,
       subtotal,

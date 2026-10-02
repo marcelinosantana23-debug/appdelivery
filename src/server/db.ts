@@ -1971,6 +1971,7 @@ export class Database {
           card_type TEXT,
           payment_details TEXT,
           pix_receipt_url TEXT,
+          location_url TEXT,
           address_json TEXT DEFAULT '{}',
           change_for TEXT,
           subtotal REAL NOT NULL,
@@ -2088,6 +2089,7 @@ export class Database {
         "ALTER TABLE orders ADD COLUMN pix_receipt_url TEXT",
         "ALTER TABLE orders ADD COLUMN card_type TEXT",
         "ALTER TABLE orders ADD COLUMN payment_details TEXT",
+        "ALTER TABLE orders ADD COLUMN location_url TEXT",
         "ALTER TABLE products ADD COLUMN addon_group_ids TEXT DEFAULT '[]'",
         "ALTER TABLE tenants ADD COLUMN localidade TEXT DEFAULT 'Gargaú'"
       ];
@@ -2458,10 +2460,10 @@ export class Database {
       await this.env.DB.prepare(
         `INSERT OR IGNORE INTO orders (
           id, tenant_id, customer_name, customer_phone, order_type, payment_method,
-          card_type, payment_details, pix_receipt_url,
+          card_type, payment_details, pix_receipt_url, location_url,
           address_json, change_for, subtotal, delivery_fee, total, status,
           items_json, status_history_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           o.id,
@@ -2473,6 +2475,7 @@ export class Database {
           o.cardType || null,
           o.paymentDetails || null,
           o.pixReceiptUrl || o.pix_receipt_url || null,
+          o.location_url || o.locationUrl || null,
           JSON.stringify(o.address || {}),
           o.changeFor || "",
           o.subtotal,
@@ -4729,6 +4732,7 @@ export class Database {
     const rawCardType = (orderData as any).cardType || (orderData as any).card_type || undefined;
     const rawPaymentDetails = (orderData as any).paymentDetails || (orderData as any).payment_details || undefined;
     const rawReceipt = (orderData as any).pixReceiptUrl || (orderData as any).pix_receipt_url || (orderData as any).receipt || undefined;
+    const rawLocationUrl = (orderData as any).location_url || (orderData as any).locationUrl || undefined;
 
     const newOrder: Order = {
       ...orderData,
@@ -4738,6 +4742,8 @@ export class Database {
       paymentDetails: rawPaymentDetails,
       pixReceiptUrl: rawReceipt,
       pix_receipt_url: rawReceipt,
+      location_url: rawLocationUrl,
+      locationUrl: rawLocationUrl,
       createdAt: Date.now(),
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
@@ -4748,10 +4754,10 @@ export class Database {
         await this.env.DB.prepare(
           `INSERT INTO orders (
             id, tenant_id, customer_name, customer_phone, order_type, payment_method,
-            card_type, payment_details, pix_receipt_url,
+            card_type, payment_details, pix_receipt_url, location_url,
             address_json, change_for, subtotal, delivery_fee, total, status,
             items_json, status_history_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newOrder.id,
@@ -4763,6 +4769,7 @@ export class Database {
             newOrder.cardType || null,
             newOrder.paymentDetails || null,
             newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
+            newOrder.location_url || newOrder.locationUrl || null,
             JSON.stringify(newOrder.address || {}),
             newOrder.changeFor || "",
             newOrder.subtotal,
@@ -5328,6 +5335,8 @@ export class Database {
       paymentDetails: row.payment_details || undefined,
       pixReceiptUrl: row.pix_receipt_url || undefined,
       pix_receipt_url: row.pix_receipt_url || undefined,
+      location_url: row.location_url || undefined,
+      locationUrl: row.location_url || undefined,
       address: this.safeJsonParse(row.address_json, undefined),
       changeFor: row.change_for,
       subtotal: Number(row.subtotal),

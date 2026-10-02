@@ -455,6 +455,22 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
               <p>Bairro: {order.address.district}</p>
               {order.address.complement && <p>Complemento: {order.address.complement}</p>}
               {order.address.reference && <p>Referência: {order.address.reference}</p>}
+              {(order.location_url || order.locationUrl) && (
+                <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                  <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    Localização GPS anexada ✓
+                  </span>
+                  <a
+                    href={order.location_url || order.locationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-bold text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Ver no Mapa
+                  </a>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-gray-600">
