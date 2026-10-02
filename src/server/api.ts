@@ -2113,14 +2113,45 @@ api.put("/tenants/:slugOrId/credentials", async (c) => {
   }
 });
 
+// -----------------------------------------------------------------------------
+// LOCALIDADES / REGIÕES (SELECT DISTINCT nas lojas ativas)
+// GET /api/localities e GET /localities
+// -----------------------------------------------------------------------------
+api.get("/api/localities", async (c) => {
+  try {
+    const db = getDb(c);
+    const localities = await db.getDistinctLocalities();
+    return c.json({ success: true, localities }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao consultar localidades", localities: [] }, 500);
+  }
+});
+
+api.get("/localities", async (c) => {
+  try {
+    const db = getDb(c);
+    const localities = await db.getDistinctLocalities();
+    return c.json({ success: true, localities }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao consultar localidades", localities: [] }, 500);
+  }
+});
+
 api.post("/tenants", async (c) => {
   try {
     const body = await c.req.json();
-    const { name, slug, email, password, whatsapp, pixKey, pixKeyType, deliveryFee, address, primaryColor, bannerImage, businessType, category } = body;
+    const { name, slug, email, password, whatsapp, pixKey, pixKeyType, deliveryFee, address, primaryColor, bannerImage, businessType, category, localidade } = body;
 
     if (!name || !email || !password) {
       return c.json(
         { success: false, error: "Nome da loja, e-mail e senha do cliente são obrigatórios" },
+        400
+      );
+    }
+
+    if (!localidade || !String(localidade).trim()) {
+      return c.json(
+        { success: false, error: "O campo Localidade / Região é obrigatório (ex: Gargaú, Barra do Itabapoana)" },
         400
       );
     }
@@ -2138,6 +2169,7 @@ api.post("/tenants", async (c) => {
       primaryColor: primaryColor || "#E63946",
       bannerImage: bannerImage || "",
       businessType: businessType || category || "Lanchonetes",
+      localidade: String(localidade).trim(),
     });
 
     const user = await db.createUser({
@@ -2181,6 +2213,10 @@ api.put("/tenants/:slugOrId", async (c) => {
       return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
     }
 
+    if (body.localidade !== undefined && !String(body.localidade).trim()) {
+      return c.json({ success: false, error: "O campo Localidade / Região não pode ficar vazio." }, 400);
+    }
+
     if (body.adminPassword || body.adminEmail) {
       const credEmail = (body.adminEmail || body.email || tenant.email).trim().toLowerCase();
       const credPass = (body.adminPassword || "").trim();
@@ -2189,7 +2225,12 @@ api.put("/tenants/:slugOrId", async (c) => {
       }
     }
 
-    const updated = await db.updateTenant(tenant.id, body);
+    const payload = {
+      ...body,
+      ...(body.localidade !== undefined ? { localidade: String(body.localidade).trim() } : {}),
+    };
+
+    const updated = await db.updateTenant(tenant.id, payload);
     return c.json({ success: true, tenant: updated }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao atualizar" }, 500);
@@ -2480,6 +2521,102 @@ api.post("/tenants/:slugOrId/categories", async (c) => {
   }
 });
 
+// ===================== ADDON GROUPS (GRUPOS DE COMPLEMENTOS / ADICIONAIS) =====================
+
+api.get("/tenants/:slugOrId/addons", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+    const addonGroups = await db.getAddonGroupsByTenant(tenant.id);
+    return c.json({ success: true, addonGroups, grupos: addonGroups }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao listar grupos de adicionais" }, 500);
+  }
+});
+
+api.get("/tenants/:slugOrId/addon-groups", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+    const addonGroups = await db.getAddonGroupsByTenant(tenant.id);
+    return c.json({ success: true, addonGroups, grupos: addonGroups }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao listar grupos de adicionais" }, 500);
+  }
+});
+
+api.post("/tenants/:slugOrId/addons", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+    const body = await c.req.json();
+    const name = body.name || body.nome;
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return c.json({ success: false, error: "O nome do grupo de adicionais é obrigatório." }, 400);
+    }
+    const addonGroup = await db.createAddonGroup(tenant.id, {
+      name: name.trim(),
+      description: body.description || body.descricao || "",
+      minSelection: Number(body.minSelection ?? body.min_selection ?? 0),
+      maxSelection: Number(body.maxSelection ?? body.max_selection ?? 0),
+      required: Boolean(body.required || body.obrigatorio),
+      items: Array.isArray(body.items) ? body.items : (Array.isArray(body.itens) ? body.itens : []),
+      position: body.position ? Number(body.position) : undefined,
+    });
+    return c.json({ success: true, addonGroup, grupo: addonGroup }, 201);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao criar grupo de adicionais" }, 500);
+  }
+});
+
+api.put("/tenants/:slugOrId/addons/:groupId", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const groupId = c.req.param("groupId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+    const body = await c.req.json();
+    const updated = await db.updateAddonGroup(groupId, body);
+    if (!updated) {
+      return c.json({ success: false, error: "Grupo de adicionais não encontrado." }, 404);
+    }
+    return c.json({ success: true, addonGroup: updated, grupo: updated }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao atualizar grupo de adicionais" }, 500);
+  }
+});
+
+api.delete("/tenants/:slugOrId/addons/:groupId", async (c) => {
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const groupId = c.req.param("groupId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    if (!tenant) {
+      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    }
+    await db.deleteAddonGroup(groupId);
+    return c.json({ success: true, message: "Grupo de adicionais excluído com sucesso." }, 200);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message || "Erro ao excluir grupo de adicionais" }, 500);
+  }
+});
+
 api.get("/tenants/:slugOrId/products", async (c) => {
   const db = getDb(c);
   const slugOrId = c.req.param("slugOrId");
@@ -2489,11 +2626,25 @@ api.get("/tenants/:slugOrId/products", async (c) => {
     return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
   }
 
-  const products = await db.getProductsByTenant(tenant.id);
+  const [products, addonGroups] = await Promise.all([
+    db.getProductsByTenant(tenant.id),
+    db.getAddonGroupsByTenant(tenant.id),
+  ]);
+
+  // Enriquecer produtos com seus respectivos grupos de adicionais
+  const enrichedProducts = products.map((p) => {
+    if (p.addonGroupIds && p.addonGroupIds.length > 0) {
+      const groups = addonGroups.filter((g) => p.addonGroupIds!.includes(g.id));
+      return { ...p, addonGroups: groups };
+    }
+    return p;
+  });
+
   return c.json({
     success: true,
-    products,
-    produtos: products,
+    products: enrichedProducts,
+    produtos: enrichedProducts,
+    addonGroups,
     loja: { id: tenant.id, nome: tenant.name, slug: tenant.slug },
   }, 200);
 });

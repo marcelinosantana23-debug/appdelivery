@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings, TopSellingProduct, FeaturedStoreRanked, StoreStory } from "@/types";
+import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings, TopSellingProduct, FeaturedStoreRanked, StoreStory, AddonGroup } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
 import {
@@ -31,6 +31,10 @@ import {
   reorderTenantProductsApi,
   fetchTenantCategoriesApi,
   createTenantCategoryApi,
+  fetchTenantAddonGroupsApi,
+  createTenantAddonGroupApi,
+  updateTenantAddonGroupApi,
+  deleteTenantAddonGroupApi,
   createTenantOrderApi,
   updateOrderStatusApi,
   loginApi,
@@ -51,6 +55,7 @@ import {
   activateTenantSubscriptionApi,
   confirmTenantPaymentApi,
   updateTenantMonthlyFeeApi,
+  fetchLocalitiesApi,
 } from "@/services/api";
 import { StoreStoriesModal } from "@/components/common/StoreStoriesModal";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
@@ -93,7 +98,7 @@ interface StoreContextValue {
   isRevalidatingTenants: boolean;
   storeNotFound: boolean;
 
-  // Product & Category management (Tenant Admin)
+  // Product, Category & Addons management (Tenant Admin)
   addProduct: (product: Omit<Product, "id" | "tenantId"> & { newCategoryName?: string }) => Promise<Product | null>;
   editProduct: (productId: string, partial: Partial<Product> & { newCategoryName?: string }) => Promise<void>;
   removeProduct: (productId: string) => Promise<void>;
@@ -101,6 +106,11 @@ interface StoreContextValue {
   storeCategories: Category[];
   createCategory: (name: string, icon?: string) => Promise<Category | null>;
   refreshCategories: () => Promise<void>;
+  addonGroups: AddonGroup[];
+  refreshAddonGroups: () => Promise<void>;
+  createAddonGroup: (group: Omit<AddonGroup, "id" | "tenantId">) => Promise<AddonGroup | null>;
+  updateAddonGroup: (groupId: string, partial: Partial<AddonGroup>) => Promise<AddonGroup | null>;
+  deleteAddonGroup: (groupId: string) => Promise<boolean>;
 
   // Customer Shopping cart
   cart: CartItem[];
@@ -139,6 +149,12 @@ interface StoreContextValue {
     password: string
   ) => Promise<{ success: boolean; error?: string; message?: string }>;
 
+  // Localidades / Regiões
+  localities: string[];
+  selectedLocality: string;
+  setSelectedLocality: (loc: string) => void;
+  refreshLocalities: () => Promise<string[]>;
+
   // Super Admin actions & Establishment Categories
   establishmentCategories: EstablishmentCategory[];
   createEstablishmentCategory: (
@@ -164,6 +180,7 @@ interface StoreContextValue {
     businessType?: string;
     isFeatured?: boolean;
     priorityOrder?: number;
+    localidade?: string;
   }) => Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string }>;
   toggleTenantStatus: (slugOrId: string, status: TenantStatus) => Promise<boolean>;
   activateSubscription: (
@@ -482,6 +499,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [storeCategories, setStoreCategories] = useState<Category[]>(defaultMockCategories);
+  const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   // Inicializa o carrinho com os itens salvos para esta loja/sessão
   const [cart, setCart] = useState<CartItem[]>(() => loadSavedCart(initialSlug));
@@ -751,6 +769,84 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [refreshEstablishmentCategories]
   );
 
+  // Localidades dinâmicas registradas no Cloudflare D1
+  const [localities, setLocalities] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("topfood_cached_localities");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return ["Gargaú", "Barra do Itabapoana", "São Francisco (Centro)"];
+  });
+
+  const [selectedLocality, setSelectedLocalityState] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("topfood_selected_locality");
+        if (saved && saved.trim()) return saved.trim();
+      } catch {
+        // ignore
+      }
+    }
+    return "Gargaú";
+  });
+
+  const setSelectedLocality = useCallback((loc: string) => {
+    const trimmed = loc.trim();
+    setSelectedLocalityState(trimmed);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("topfood_selected_locality", trimmed);
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  const refreshLocalities = useCallback(async (): Promise<string[]> => {
+    try {
+      const res = await fetchLocalitiesApi();
+      if (res.success && Array.isArray(res.localities) && res.localities.length > 0) {
+        setLocalities(res.localities);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("topfood_cached_localities", JSON.stringify(res.localities));
+          } catch {
+            // ignore
+          }
+        }
+        setSelectedLocalityState((current) => {
+          if (current && res.localities.includes(current)) {
+            return current;
+          }
+          const stored = typeof window !== "undefined" ? localStorage.getItem("topfood_selected_locality") : null;
+          if (stored && res.localities.includes(stored)) {
+            return stored;
+          }
+          const fallback = res.localities[0] || "Gargaú";
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("topfood_selected_locality", fallback);
+            } catch {
+              // ignore
+            }
+          }
+          return fallback;
+        });
+        return res.localities;
+      }
+    } catch (e) {
+      console.warn("Erro ao buscar localidades:", e);
+    }
+    return [];
+  }, []);
+
   // Platform Settings (Vitrine e Marketing)
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
     logoUrl: "",
@@ -866,15 +962,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setConfig(storeCfg);
         applyThemeColors(storeCfg);
 
-        // Fetch ONLY this tenant's products, orders, and categories from database
-        const [pRes, oRes, cRes] = await Promise.all([
+        // Fetch ONLY this tenant's products, orders, categories, and addon groups from database
+        const [pRes, oRes, cRes, agRes] = await Promise.all([
           fetchTenantProductsApi(t.id),
           fetchTenantOrdersApi(t.id),
           fetchTenantCategoriesApi(t.id),
+          fetchTenantAddonGroupsApi(t.id),
         ]);
 
         if (cRes.success && cRes.categories && cRes.categories.length > 0) {
           setStoreCategories(cRes.categories);
+        }
+
+        if (agRes.success && Array.isArray(agRes.addonGroups)) {
+          setAddonGroups(agRes.addonGroups);
         }
 
         let loadedProducts = (pRes.success && pRes.products) ? pRes.products : [];
@@ -907,21 +1008,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // Initial load com pré-carregamento imediato de imagens em cache
+  // Initial load: executa EXATAMENTE UMA VEZ na inicialização do app (Zero polling / loops)
+  const initialLoadDoneRef = useRef(false);
+
   useEffect(() => {
+    if (initialLoadDoneRef.current) return;
+    initialLoadDoneRef.current = true;
+
     const cached = loadCachedTenants();
     if (cached.length > 0) {
       preloadStoreImages(cached);
     }
     refreshTenants();
     refreshEstablishmentCategories();
+    refreshLocalities();
     refreshPlatformSettings();
     if (currentSlug) {
       loadStoreBySlug(currentSlug);
     } else {
       setIsLoadingStore(false);
     }
-  }, [currentSlug, refreshTenants, refreshEstablishmentCategories, refreshPlatformSettings, loadStoreBySlug]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Quando a rota mudar para uma loja específica
+  useEffect(() => {
+    if (currentSlug) {
+      loadStoreBySlug(currentSlug);
+    }
+  }, [currentSlug, loadStoreBySlug]);
 
   // Sincroniza cor primária dinâmica da vitrine quando nenhum estabelecimento com tema próprio estiver selecionado
   useEffect(() => {
@@ -1273,6 +1388,95 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return null;
     },
     [currentTenant]
+  );
+
+  // ---------------- GRUPOS DE ADICIONAIS / COMPLEMENTOS ----------------
+  const refreshAddonGroups = useCallback(async () => {
+    const activeTenantId = currentTenant?.id || currentTenant?.slug || currentSlug;
+    if (!activeTenantId) return;
+    try {
+      const res = await fetchTenantAddonGroupsApi(activeTenantId);
+      if (res.success && Array.isArray(res.addonGroups)) {
+        setAddonGroups(res.addonGroups);
+      }
+    } catch (e) {
+      console.warn("Erro ao recarregar grupos de adicionais:", e);
+    }
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug]);
+
+  const createAddonGroup = useCallback(
+    async (group: Omit<AddonGroup, "id" | "tenantId">): Promise<AddonGroup | null> => {
+      const activeTenantId = currentTenant?.id || currentTenant?.slug || currentSlug;
+      if (!activeTenantId) {
+        showToast("Selecione uma loja para criar o grupo de adicionais.", "warning");
+        return null;
+      }
+      try {
+        const res = await createTenantAddonGroupApi(activeTenantId, group);
+        if (res.success && res.addonGroup) {
+          setAddonGroups((prev) => {
+            const exists = prev.some((g) => g.id === res.addonGroup!.id);
+            if (exists) return prev.map((g) => (g.id === res.addonGroup!.id ? res.addonGroup! : g));
+            return [...prev, res.addonGroup!];
+          });
+          showToast(`Grupo "${res.addonGroup.name}" criado com sucesso!`, "success");
+          return res.addonGroup;
+        } else {
+          showToast(res.error || "Erro ao salvar grupo de adicionais.", "error");
+        }
+      } catch (e: any) {
+        console.warn("Erro ao criar grupo de adicionais:", e);
+        showToast("Erro na comunicação ao salvar grupo.", "error");
+      }
+      return null;
+    },
+    [currentTenant?.id, currentTenant?.slug, currentSlug, showToast]
+  );
+
+  const updateAddonGroup = useCallback(
+    async (groupId: string, partial: Partial<AddonGroup>): Promise<AddonGroup | null> => {
+      const activeTenantId = currentTenant?.id || currentTenant?.slug || currentSlug;
+      if (!activeTenantId) return null;
+      // Atualização otimista
+      setAddonGroups((prev) =>
+        prev.map((g) => (g.id === groupId ? { ...g, ...partial } : g))
+      );
+      try {
+        const res = await updateTenantAddonGroupApi(activeTenantId, groupId, partial);
+        if (res.success && res.addonGroup) {
+          setAddonGroups((prev) =>
+            prev.map((g) => (g.id === groupId ? res.addonGroup! : g))
+          );
+          showToast("Grupo de adicionais atualizado!", "success");
+          return res.addonGroup;
+        }
+      } catch (e) {
+        console.warn("Erro ao atualizar grupo de adicionais:", e);
+        showToast("Falha ao sincronizar alterações do grupo.", "error");
+      }
+      return null;
+    },
+    [currentTenant?.id, currentTenant?.slug, currentSlug, showToast]
+  );
+
+  const deleteAddonGroup = useCallback(
+    async (groupId: string): Promise<boolean> => {
+      const activeTenantId = currentTenant?.id || currentTenant?.slug || currentSlug;
+      if (!activeTenantId) return false;
+      setAddonGroups((prev) => prev.filter((g) => g.id !== groupId));
+      try {
+        const res = await deleteTenantAddonGroupApi(activeTenantId, groupId);
+        if (res.success) {
+          showToast("Grupo de adicionais excluído.", "info");
+          return true;
+        }
+      } catch (e) {
+        console.warn("Erro ao excluir grupo de adicionais:", e);
+        showToast("Erro ao excluir grupo de adicionais.", "error");
+      }
+      return false;
+    },
+    [currentTenant?.id, currentTenant?.slug, currentSlug, showToast]
   );
 
   const reorderProducts = useCallback(
@@ -1901,14 +2105,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       businessType?: string;
       isFeatured?: boolean;
       priorityOrder?: number;
+      localidade?: string;
     }) => {
       const res = await createTenantApi(data);
       if (res.success && res.tenant) {
-        await refreshTenants();
+        await Promise.all([refreshTenants(), refreshLocalities()]);
       }
       return res;
     },
-    [refreshTenants]
+    [refreshTenants, refreshLocalities]
   );
 
   const toggleTenantStatus = useCallback(
@@ -2409,6 +2614,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         storeCategories,
         createCategory,
         refreshCategories,
+        addonGroups,
+        refreshAddonGroups,
+        createAddonGroup,
+        updateAddonGroup,
+        deleteAddonGroup,
         cart,
         addToCart,
         updateCartQuantity,
@@ -2443,6 +2653,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         confirmMonthlyPayment,
         cancelSubscription,
         deleteTenant,
+        localities,
+        selectedLocality,
+        setSelectedLocality,
+        refreshLocalities,
         establishmentCategories,
         createEstablishmentCategory,
         deleteEstablishmentCategory,

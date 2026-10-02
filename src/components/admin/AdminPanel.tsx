@@ -6,6 +6,7 @@ import {
   LogOut,
   Package,
   UtensilsCrossed,
+  Layers,
   Settings,
   CornerUpLeft,
   Copy,
@@ -37,6 +38,7 @@ import { AdminLogin } from "./AdminLogin";
 import { AdminOrders } from "./AdminOrders";
 import { AdminCustomers } from "./AdminCustomers";
 import { AdminMenu } from "./AdminMenu";
+import { AdminAddons } from "./AdminAddons";
 import { AdminSettings } from "./AdminSettings";
 import { AdminFinancialReport } from "./AdminFinancialReport";
 import { SuperAdminPanel } from "./SuperAdminPanel";
@@ -52,7 +54,7 @@ interface AdminPanelProps {
   initialTab?: AdminTab;
 }
 
-type AdminTab = "orders" | "financial" | "customers" | "menu" | "qrcode" | "settings";
+type AdminTab = "orders" | "financial" | "customers" | "menu" | "addons" | "qrcode" | "settings";
 
 export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initialTab }: AdminPanelProps) {
   const {
@@ -75,6 +77,8 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     refreshCurrentStore,
     showToast,
     refreshCategories,
+    refreshAddonGroups,
+    addonGroups,
     updateOrderStatus,
   } = useStore();
 
@@ -86,6 +90,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
       if (t === "financial" || t === "financeiro" || t === "faturamento") return "financial";
       if (t === "customers" || t === "clientes") return "customers";
       if (t === "menu" || t === "cardapio") return "menu";
+      if (t === "addons" || t === "adicionais" || t === "complementos") return "addons";
       if (t === "qrcode" || t === "qr" || t === "placa") return "qrcode";
       if (t === "settings" || t === "config") return "settings";
     }
@@ -139,6 +144,8 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
         setFinancialKey((k) => k + 1);
       } else if (tab === "menu") {
         await refreshCategories();
+      } else if (tab === "addons") {
+        await refreshAddonGroups();
       }
 
       showToast("Pedidos e dados atualizados com sucesso!", "success");
@@ -595,6 +602,19 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
             Cardápio
           </TabButton>
           <TabButton
+            id="tab-btn-addons"
+            active={tab === "addons"}
+            onClick={() => handleTabChange("addons")}
+            icon={<Layers className="h-4 w-4 text-amber-400" />}
+          >
+            Adicionais
+            {addonGroups.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-300 border border-slate-700">
+                {addonGroups.length}
+              </span>
+            )}
+          </TabButton>
+          <TabButton
             id="tab-btn-qrcode"
             active={tab === "qrcode"}
             onClick={() => handleTabChange("qrcode")}
@@ -808,6 +828,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
           {tab === "financial" && <AdminFinancialReport key={financialKey} />}
           {tab === "customers" && <AdminCustomers />}
           {tab === "menu" && <AdminMenu />}
+          {tab === "addons" && <AdminAddons />}
           {tab === "qrcode" && <StoreQrCodePlate />}
           {tab === "settings" && <AdminSettings />}
         </ErrorBoundary>

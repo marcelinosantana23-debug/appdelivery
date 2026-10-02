@@ -13,6 +13,7 @@ import type {
   TopSellingProduct,
   FeaturedStoreRanked,
   StoreStory,
+  AddonGroup,
 } from "@/types";
 
 const BASE_URL = "/api";
@@ -115,6 +116,19 @@ export async function fetchTenantDetailsApi(slugOrId: string): Promise<{ success
   }
 }
 
+export async function fetchLocalitiesApi(): Promise<{ success: boolean; localities: string[]; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/localities`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.localities)) {
+      return { success: true, localities: data.localities };
+    }
+    return { success: false, localities: [], error: data.error };
+  } catch (err: any) {
+    return { success: false, localities: [], error: err.message };
+  }
+}
+
 export async function createTenantApi(data: {
   name: string;
   slug?: string;
@@ -130,6 +144,7 @@ export async function createTenantApi(data: {
   businessType?: string;
   isFeatured?: boolean;
   priorityOrder?: number;
+  localidade?: string;
 }): Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string; message?: string }> {
   try {
     const res = await fetch(`${BASE_URL}/tenants`, {
@@ -359,6 +374,74 @@ export async function createTenantCategoryApi(
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(category),
     });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ===================== GRUPOS DE ADICIONAIS / COMPLEMENTOS =====================
+
+export async function fetchTenantAddonGroupsApi(
+  slugOrId: string
+): Promise<{ success: boolean; addonGroups: AddonGroup[]; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/addons`);
+    const data = await res.json();
+    return { success: true, addonGroups: data.addonGroups || data.grupos || [] };
+  } catch (err: any) {
+    return { success: false, addonGroups: [], error: err.message };
+  }
+}
+
+export async function createTenantAddonGroupApi(
+  slugOrId: string,
+  group: Omit<AddonGroup, "id" | "tenantId">
+): Promise<{ success: boolean; addonGroup?: AddonGroup; error?: string }> {
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/addons`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify(group),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateTenantAddonGroupApi(
+  slugOrId: string,
+  groupId: string,
+  partial: Partial<AddonGroup>
+): Promise<{ success: boolean; addonGroup?: AddonGroup; error?: string }> {
+  try {
+    const res = await fetch(
+      `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/addons/${encodeURIComponent(groupId)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(partial),
+      }
+    );
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteTenantAddonGroupApi(
+  slugOrId: string,
+  groupId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(
+      `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/addons/${encodeURIComponent(groupId)}`,
+      {
+        method: "DELETE",
+        headers: { ...getAuthHeaders() },
+      }
+    );
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };

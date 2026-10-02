@@ -16,6 +16,7 @@ import type {
   TopSellingProduct,
   FeaturedStoreRanked,
   StoreStory,
+  AddonGroup,
 } from "./types";
 import { orderEvents } from "./events";
 import { hashPassword, verifyPassword } from "./security";
@@ -50,6 +51,7 @@ const initialTenants: Tenant[] = [
     isFeatured: true,
     priorityOrder: 10,
     businessType: "Açaíterias",
+    localidade: "Gargaú",
     rating: 4.9,
     ratingCount: 245,
     status: "active",
@@ -120,6 +122,7 @@ const initialTenants: Tenant[] = [
     isFeatured: true,
     priorityOrder: 8,
     businessType: "Pizzarias",
+    localidade: "Barra do Itabapoana",
     rating: 4.8,
     ratingCount: 310,
     status: "active",
@@ -155,6 +158,7 @@ const initialTenants: Tenant[] = [
     isFeatured: true,
     priorityOrder: 7,
     businessType: "Sorveterias",
+    localidade: "São Francisco (Centro)",
     rating: 4.9,
     ratingCount: 192,
     status: "active",
@@ -190,6 +194,7 @@ const initialTenants: Tenant[] = [
     isFeatured: true,
     priorityOrder: 6,
     businessType: "Japonesa",
+    localidade: "São Francisco (Centro)",
     rating: 4.9,
     ratingCount: 410,
     status: "active",
@@ -225,6 +230,7 @@ const initialTenants: Tenant[] = [
     isFeatured: true,
     priorityOrder: 5,
     businessType: "Salgados",
+    localidade: "Gargaú",
     rating: 4.8,
     ratingCount: 275,
     status: "active",
@@ -260,6 +266,7 @@ const initialTenants: Tenant[] = [
     isFeatured: true,
     priorityOrder: 4,
     businessType: "Marmitaria",
+    localidade: "Barra do Itabapoana",
     rating: 4.9,
     ratingCount: 520,
     status: "active",
@@ -547,6 +554,7 @@ const initialProducts: Product[] = [
     image: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80",
     category: "acai",
     available: true,
+    addonGroupIds: ["addon-acai-complementos", "addon-acai-frutas", "addon-acai-cremes"],
     options: [
       { id: "acai-ninho", name: "Leite em Pó Ninho", price: 3.5 },
       { id: "acai-granola", name: "Granola Tradicional Crocante", price: 2.5 },
@@ -567,6 +575,7 @@ const initialProducts: Product[] = [
     image: "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=600&q=80",
     category: "acai",
     available: true,
+    addonGroupIds: ["addon-acai-complementos", "addon-acai-frutas", "addon-acai-cremes"],
     options: [
       { id: "acai-creme-ninho", name: "Creme de Ninho Artesanal Trufado", price: 4.5 },
       { id: "acai-creme-avela", name: "Creme de Avelã Nutella", price: 5.0 },
@@ -620,6 +629,7 @@ const initialProducts: Product[] = [
     image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
     category: "lanches",
     available: true,
+    addonGroupIds: ["addon-burger-extras", "addon-burger-molhos"],
     options: [
       { id: "smash-extra-bacon", name: "Bacon Crocante Extra em Tiras", price: 5.0 },
       { id: "smash-extra-cheddar", name: "Cheddar Cremoso Fundido", price: 4.0 },
@@ -1633,6 +1643,113 @@ export const initialStories: StoreStory[] = [
   },
 ];
 
+export const initialAddonGroups: AddonGroup[] = [
+  // 1. Açaiteria (tenant-acai-do-vale)
+  {
+    id: "addon-acai-complementos",
+    tenantId: "tenant-acai-do-vale",
+    name: "Complementos Tradicionais",
+    description: "Escolha seus acompanhamentos secos favoritos",
+    minSelection: 0,
+    maxSelection: 0,
+    required: false,
+    items: [
+      { id: "item-ninho", name: "Leite em Pó Ninho", price: 3.5, available: true },
+      { id: "item-granola", name: "Granola Tradicional Crocante", price: 2.5, available: true },
+      { id: "item-pacoca", name: "Paçoca de Amendoim Rolha", price: 2.0, available: true },
+      { id: "item-gotas", name: "Gotas de Chocolate Nobre", price: 3.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 10 * 86400000,
+  },
+  {
+    id: "addon-acai-frutas",
+    tenantId: "tenant-acai-do-vale",
+    name: "Frutas Frescas",
+    description: "Frutas selecionadas do dia picadas na hora",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-morango", name: "Morango Fresco Picado", price: 4.5, available: true },
+      { id: "item-banana", name: "Banana Fatiada Fresca", price: 2.0, available: true },
+      { id: "item-kiwi", name: "Kiwi Fatiado", price: 4.0, available: true },
+    ],
+    position: 2,
+    createdAt: Date.now() - 10 * 86400000,
+  },
+  {
+    id: "addon-acai-cremes",
+    tenantId: "tenant-acai-do-vale",
+    name: "Cremes e Coberturas",
+    description: "Cremes artesanais e caldas generosas",
+    minSelection: 0,
+    maxSelection: 2,
+    required: false,
+    items: [
+      { id: "item-nutella", name: "Nutella Pura Original", price: 5.0, available: true },
+      { id: "item-leite-cond", name: "Leite Condensado Cremoso", price: 2.5, available: true },
+      { id: "item-creme-ninho", name: "Creme de Ninho Trufado", price: 4.5, available: true },
+      { id: "item-mel", name: "Mel Silvestre Orgânico", price: 3.0, available: true },
+    ],
+    position: 3,
+    createdAt: Date.now() - 10 * 86400000,
+  },
+  // 2. Burger Town (tenant-burger-town)
+  {
+    id: "addon-burger-extras",
+    tenantId: "tenant-burger-town",
+    name: "Adicionais de Lanches",
+    description: "Turbine seu burger com ingredientes extras faturados",
+    minSelection: 0,
+    maxSelection: 5,
+    required: false,
+    items: [
+      { id: "item-bacon", name: "Bacon Crocante em Fatias", price: 4.0, available: true },
+      { id: "item-cheddar", name: "Queijo Cheddar Cremoso", price: 3.5, available: true },
+      { id: "item-hamburguer", name: "Hambúrguer Extra Artesanal 120g", price: 7.0, available: true },
+      { id: "item-ovo", name: "Ovo Frito na Chapa", price: 2.5, available: true },
+      { id: "item-cebola-caram", name: "Cebola Caramelizada Especial", price: 3.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 20 * 86400000,
+  },
+  {
+    id: "addon-burger-molhos",
+    tenantId: "tenant-burger-town",
+    name: "Molhos Especiais da Casa",
+    description: "Potes de molho artesanal de 50ml",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-maio-alho", name: "Maionese Verde Temperada com Alho", price: 3.0, available: true },
+      { id: "item-barbecue", name: "Molho Barbecue Defumado", price: 2.5, available: true },
+      { id: "item-molho-especial", name: "Molho Especial Burger Town", price: 3.0, available: true },
+    ],
+    position: 2,
+    createdAt: Date.now() - 20 * 86400000,
+  },
+  // 3. MS Preparações (tenant-ms-preparacoes)
+  {
+    id: "addon-ms-ingredientes",
+    tenantId: "tenant-ms-preparacoes",
+    name: "Adicionais Especiais",
+    description: "Adicione mais sabor ao seu pedido",
+    minSelection: 0,
+    maxSelection: 4,
+    required: false,
+    items: [
+      { id: "item-ms-bacon", name: "Bacon em Tiras Crocantes", price: 4.0, available: true },
+      { id: "item-ms-queijo", name: "Queijo Prato Duplo", price: 3.5, available: true },
+      { id: "item-ms-catupiry", name: "Catupiry Original", price: 4.0, available: true },
+      { id: "item-ms-ovo", name: "Ovo Frito Caipira", price: 2.5, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 5 * 86400000,
+  },
+];
+
 export interface OrderItemRecord {
   id: string;
   orderId: string;
@@ -1723,6 +1840,7 @@ class MemoryStore {
   customers: Customer[] = [...initialCustomers];
   platformSettings: PlatformSettings = { ...defaultPlatformSettings };
   stories: StoreStory[] = [...initialStories];
+  addonGroups: AddonGroup[] = [...initialAddonGroups];
   merchantPushTokens: Map<string, Array<{ token: string; platform: string; userId?: string; isLoggedIn: boolean; updatedAt: number }>> = new Map();
 
   // Helper to slugify
@@ -1786,6 +1904,7 @@ export class Database {
           primary_dark TEXT DEFAULT '#C1121F',
           primary_light TEXT DEFAULT '#F77F00',
           accent_color TEXT DEFAULT '#FCBF49',
+          localidade TEXT NOT NULL DEFAULT 'Gargaú',
           status TEXT DEFAULT 'active',
           subscription_status TEXT DEFAULT 'demo',
           billing_day INTEGER,
@@ -1898,6 +2017,19 @@ export class Database {
           caption TEXT,
           created_at INTEGER NOT NULL,
           expires_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS addon_groups (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          min_selection INTEGER DEFAULT 0,
+          max_selection INTEGER DEFAULT 0,
+          required INTEGER DEFAULT 0,
+          items_json TEXT NOT NULL DEFAULT '[]',
+          position INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
         )`
       ];
 
@@ -1955,7 +2087,9 @@ export class Database {
         "ALTER TABLE tenants ADD COLUMN monthly_fee REAL DEFAULT 49.90",
         "ALTER TABLE orders ADD COLUMN pix_receipt_url TEXT",
         "ALTER TABLE orders ADD COLUMN card_type TEXT",
-        "ALTER TABLE orders ADD COLUMN payment_details TEXT"
+        "ALTER TABLE orders ADD COLUMN payment_details TEXT",
+        "ALTER TABLE products ADD COLUMN addon_group_ids TEXT DEFAULT '[]'",
+        "ALTER TABLE tenants ADD COLUMN localidade TEXT DEFAULT 'Gargaú'"
       ];
 
       for (const alter of alterQueries) {
@@ -1969,9 +2103,11 @@ export class Database {
       // 3. Índices de performance e Views
       const indexQueries = [
         "CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug)",
+        "CREATE INDEX IF NOT EXISTS idx_tenants_localidade ON tenants(localidade)",
         "CREATE INDEX IF NOT EXISTS idx_tenants_featured ON tenants(is_featured, priority_order)",
         "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
         "CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_addon_groups_tenant ON addon_groups(tenant_id)",
         "CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id)",
         "CREATE INDEX IF NOT EXISTS idx_establishment_categories_order ON establishment_categories(order_index)",
         "CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id)",
@@ -1989,7 +2125,7 @@ export class Database {
         }
       }
 
-      // 4. Garante que todos os tenants, users, produtos, categorias e stories iniciais existam no D1
+      // 4. Garante que todos os tenants, users, produtos, categorias, stories e grupos de adicionais iniciais existam no D1
       try {
         for (const t of initialTenants) {
           await this.insertTenantRow(t);
@@ -2005,6 +2141,9 @@ export class Database {
         }
         for (const s of initialStories) {
           await this.insertStoryRow(s);
+        }
+        for (const ag of initialAddonGroups) {
+          await this.insertAddonGroupRow(ag);
         }
 
         // 5. Seed de pedidos e order_items se estiver vazia
@@ -2088,10 +2227,10 @@ export class Database {
           id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
           delivery_fee, min_order, estimated_time, address, hours, tagline,
           announcement, logo, banner, banner_image, primary_color, secondary_color,
-          primary_dark, primary_light, accent_color, status, is_open,
+          primary_dark, primary_light, accent_color, localidade, status, is_open,
           is_featured, priority_order,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           t.id,
@@ -2117,6 +2256,7 @@ export class Database {
           t.primaryDark,
           t.primaryLight,
           t.accentColor,
+          t.localidade || "Gargaú",
           t.status,
           t.isOpen ? 1 : 0,
           t.isFeatured ? 1 : 0,
@@ -2132,9 +2272,9 @@ export class Database {
             id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
             delivery_fee, min_order, estimated_time, address, hours, tagline,
             announcement, logo, banner, banner_image, primary_color, secondary_color,
-            primary_dark, primary_light, accent_color, status, is_open,
+            primary_dark, primary_light, accent_color, localidade, status, is_open,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             t.id,
@@ -2160,6 +2300,7 @@ export class Database {
             t.primaryDark,
             t.primaryLight,
             t.accentColor,
+            t.localidade || "Gargaú",
             t.status,
             t.isOpen ? 1 : 0,
             t.createdAt,
@@ -2199,8 +2340,8 @@ export class Database {
     if (!this.env?.DB) return;
     try {
       await this.env.DB.prepare(
-        `INSERT OR IGNORE INTO products (id, tenant_id, name, description, price, category, image, available, options_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR IGNORE INTO products (id, tenant_id, name, description, price, category, image, available, options_json, addon_group_ids, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           p.id,
@@ -2212,11 +2353,59 @@ export class Database {
           p.image || "",
           p.available ? 1 : 0,
           JSON.stringify(p.options || []),
+          JSON.stringify(p.addonGroupIds || []),
           p.createdAt
         )
         .run();
     } catch {
-      // ignore
+      try {
+        await this.env.DB.prepare(
+          `INSERT OR IGNORE INTO products (id, tenant_id, name, description, price, category, image, available, options_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            p.id,
+            p.tenantId,
+            p.name,
+            p.description || "",
+            p.price,
+            p.category,
+            p.image || "",
+            p.available ? 1 : 0,
+            JSON.stringify(p.options || []),
+            p.createdAt
+          )
+          .run();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  private async insertAddonGroupRow(g: AddonGroup): Promise<void> {
+    if (!this.env?.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO addon_groups (
+          id, tenant_id, name, description, min_selection, max_selection, required, items_json, position, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          g.id,
+          g.tenantId,
+          g.name,
+          g.description || "",
+          g.minSelection || 0,
+          g.maxSelection || 0,
+          g.required ? 1 : (g.minSelection && g.minSelection > 0 ? 1 : 0),
+          JSON.stringify(g.items || []),
+          g.position ?? 0,
+          g.createdAt || Date.now(),
+          g.updatedAt || Date.now()
+        )
+        .run();
+    } catch (e) {
+      console.warn("D1 insertAddonGroupRow error:", e);
     }
   }
 
@@ -2476,6 +2665,39 @@ export class Database {
     return this.getTenantByIdOrSlug(slug);
   }
 
+  // Retorna a lista única de localidades cadastradas nas lojas ativas
+  async getDistinctLocalities(): Promise<string[]> {
+    await this.ensureTables();
+    if (this.env?.DB) {
+      try {
+        const res = await this.env.DB.prepare(
+          "SELECT DISTINCT localidade FROM tenants WHERE status != 'inactive' AND localidade IS NOT NULL AND TRIM(localidade) != '' ORDER BY localidade ASC"
+        ).all<{ localidade: string }>();
+        if (res.results && res.results.length > 0) {
+          const list = res.results
+            .map((r: any) => r.localidade?.trim())
+            .filter(Boolean) as string[];
+          if (list.length > 0) {
+            return list;
+          }
+        }
+      } catch (e) {
+        console.warn("D1 getDistinctLocalities failed, fallback to memory:", e);
+      }
+    }
+
+    const activeTenants = globalStore.tenants.filter((t) => t.status !== "inactive");
+    const unique = Array.from(
+      new Set(
+        activeTenants
+          .map((t) => (t.localidade || "Gargaú").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+    return unique.length > 0 ? unique : ["Gargaú", "Barra do Itabapoana", "São Francisco (Centro)"];
+  }
+
   async createTenant(data: {
     name: string;
     slug?: string;
@@ -2492,6 +2714,7 @@ export class Database {
     tagline?: string;
     description?: string;
     businessType?: string;
+    localidade?: string;
   }): Promise<Tenant> {
     const slug = data.slug
       ? globalStore.slugify(data.slug)
@@ -2542,6 +2765,7 @@ export class Database {
       primaryLight: "#F77F00",
       accentColor: "#FCBF49",
       businessType: data.businessType?.trim() || "Lanchonetes",
+      localidade: data.localidade?.trim() || "Gargaú",
       status: "active",
       isOpen: true,
       createdAt: Date.now(),
@@ -2556,9 +2780,9 @@ export class Database {
             id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
             delivery_fee, min_order, estimated_time, address, hours, tagline,
             announcement, logo, banner, banner_image, primary_color, secondary_color,
-            primary_dark, primary_light, accent_color, business_type, status, is_open,
+            primary_dark, primary_light, accent_color, business_type, localidade, status, is_open,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newTenant.id,
@@ -2585,6 +2809,7 @@ export class Database {
             newTenant.primaryLight,
             newTenant.accentColor,
             newTenant.businessType || "Lanchonetes",
+            newTenant.localidade || "Gargaú",
             newTenant.status,
             newTenant.isOpen ? 1 : 0,
             newTenant.createdAt,
@@ -2601,8 +2826,8 @@ export class Database {
             `INSERT OR REPLACE INTO tenants (
               id, name, slug, email, phone, whatsapp, pix_key,
               delivery_fee, address, hours, tagline, logo,
-              primary_color, business_type, status, is_open, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              primary_color, business_type, localidade, status, is_open, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
             .bind(
               newTenant.id,
@@ -2619,6 +2844,7 @@ export class Database {
               newTenant.logo,
               newTenant.primaryColor,
               newTenant.businessType || "Lanchonetes",
+              newTenant.localidade || "Gargaú",
               newTenant.status,
               newTenant.isOpen ? 1 : 0,
               newTenant.createdAt,
@@ -2703,9 +2929,15 @@ export class Database {
             ? Number((partial as any).monthly_fee)
             : (tenant.monthlyFee || 49.9));
 
+    const localidadeVal =
+      partial.localidade !== undefined
+        ? partial.localidade.trim()
+        : tenant.localidade || "Gargaú";
+
     const updated: Tenant = {
       ...tenant,
       ...partial,
+      localidade: localidadeVal,
       isFeatured: isFeaturedVal,
       priorityOrder: priorityOrderVal,
       subscriptionStatus: subscriptionStatusVal,
@@ -2724,7 +2956,7 @@ export class Database {
             name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
             delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
             logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-            accent_color = ?, business_type = ?, status = ?, is_open = ?,
+            accent_color = ?, business_type = ?, localidade = ?, status = ?, is_open = ?,
             is_featured = ?, priority_order = ?,
             subscription_status = ?, billing_day = ?, last_payment_at = ?, monthly_fee = ?,
             updated_at = ?
@@ -2746,6 +2978,7 @@ export class Database {
             updated.primaryLight,
             updated.accentColor,
             updated.businessType || "Lanchonetes",
+            updated.localidade || "Gargaú",
             updated.status,
             updated.isOpen ? 1 : 0,
             updated.isFeatured ? 1 : 0,
@@ -2766,7 +2999,7 @@ export class Database {
               name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
               delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
               logo = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-              accent_color = ?, business_type = ?, status = ?, is_open = ?, updated_at = ?
+              accent_color = ?, business_type = ?, localidade = ?, status = ?, is_open = ?, updated_at = ?
             WHERE id = ?`
           )
             .bind(
@@ -2784,6 +3017,7 @@ export class Database {
               updated.primaryLight,
               updated.accentColor,
               updated.businessType || "Lanchonetes",
+              updated.localidade || "Gargaú",
               updated.status,
               updated.isOpen ? 1 : 0,
               updated.updatedAt,
@@ -3809,6 +4043,8 @@ export class Database {
       id: `prod-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tenantId,
       available: product.available !== undefined ? Boolean(product.available) : true,
+      options: product.options || [],
+      addonGroupIds: Array.isArray(product.addonGroupIds) ? product.addonGroupIds : [],
       position: assignedPosition,
       ordem: assignedPosition,
       createdAt: Date.now(),
@@ -3817,8 +4053,8 @@ export class Database {
     if (this.env?.DB) {
       try {
         await this.env.DB.prepare(
-          `INSERT INTO products (id, tenant_id, name, description, price, category, image, available, options_json, position, ordem, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO products (id, tenant_id, name, description, price, category, image, available, options_json, addon_group_ids, position, ordem, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newProduct.id,
@@ -3830,17 +4066,18 @@ export class Database {
             newProduct.image || "",
             newProduct.available ? 1 : 0,
             JSON.stringify(newProduct.options || []),
+            JSON.stringify(newProduct.addonGroupIds || []),
             newProduct.position ?? 0,
             newProduct.ordem ?? 0,
             newProduct.createdAt
           )
           .run();
       } catch (e) {
-        console.warn("D1 createProduct error:", e);
+        console.warn("D1 createProduct error with addon_group_ids, trying fallback:", e);
         try {
           await this.env.DB.prepare(
-            `INSERT INTO products (id, tenant_id, name, description, price, category, image, available, options_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO products (id, tenant_id, name, description, price, category, image, available, options_json, position, ordem, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
             .bind(
               newProduct.id,
@@ -3852,6 +4089,8 @@ export class Database {
               newProduct.image || "",
               newProduct.available ? 1 : 0,
               JSON.stringify(newProduct.options || []),
+              newProduct.position ?? 0,
+              newProduct.ordem ?? 0,
               newProduct.createdAt
             )
             .run();
@@ -3907,7 +4146,7 @@ export class Database {
       try {
         await this.ensureTables();
         await this.env.DB.prepare(
-          `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ?, position = ?, ordem = ? WHERE id = ?`
+          `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ?, addon_group_ids = ?, position = ?, ordem = ? WHERE id = ?`
         )
           .bind(
             updated.name,
@@ -3917,16 +4156,17 @@ export class Database {
             updated.image,
             updated.available ? 1 : 0,
             JSON.stringify(updated.options || []),
+            JSON.stringify(updated.addonGroupIds || []),
             updated.position ?? updated.ordem ?? 0,
             updated.ordem ?? updated.position ?? 0,
             productId
           )
           .run();
       } catch (e) {
-        console.warn("D1 updateProduct error with position, trying legacy:", e);
+        console.warn("D1 updateProduct error with addon_group_ids, trying fallback:", e);
         try {
           await this.env.DB.prepare(
-            `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ? WHERE id = ?`
+            `UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, available = ?, options_json = ?, position = ?, ordem = ? WHERE id = ?`
           )
             .bind(
               updated.name,
@@ -3936,6 +4176,8 @@ export class Database {
               updated.image,
               updated.available ? 1 : 0,
               JSON.stringify(updated.options || []),
+              updated.position ?? updated.ordem ?? 0,
+              updated.ordem ?? updated.position ?? 0,
               productId
             )
             .run();
@@ -3998,6 +4240,240 @@ export class Database {
         await kv.delete(`products:${resolvedSlug}`);
       } catch (e) {
         console.warn("KV invalidate products error:", e);
+      }
+    }
+
+    return true;
+  }
+
+  // ===================== ADDON GROUPS (GRUPOS DE COMPLEMENTOS / ADICIONAIS) =====================
+
+  async getAddonGroupsByTenant(tenantId: string): Promise<AddonGroup[]> {
+    await this.ensureTables();
+    const tenant = await this.getTenantByIdOrSlug(tenantId);
+    const resolvedId = tenant ? tenant.id : tenantId;
+    const resolvedSlug = tenant ? tenant.slug : tenantId;
+
+    if (this.env?.DB) {
+      try {
+        const res = await this.env.DB.prepare(
+          "SELECT * FROM addon_groups WHERE tenant_id = ? OR tenant_id = ? ORDER BY position ASC, created_at ASC"
+        )
+          .bind(resolvedId, resolvedSlug)
+          .all<any>();
+
+        if (res.results && res.results.length > 0) {
+          const groups = res.results.map((r: any) => this.mapAddonGroupRow(r));
+          // Sincroniza memória
+          for (const g of groups) {
+            const idx = (globalStore.addonGroups || []).findIndex((x) => x.id === g.id);
+            if (idx >= 0) {
+              globalStore.addonGroups[idx] = g;
+            } else {
+              if (!globalStore.addonGroups) globalStore.addonGroups = [];
+              globalStore.addonGroups.push(g);
+            }
+          }
+          return groups;
+        } else {
+          // Se não houver no D1, verifica se há sementes para esse tenant
+          const seeded = initialAddonGroups.filter(
+            (g) => g.tenantId === resolvedId || g.tenantId === resolvedSlug
+          );
+          if (seeded.length > 0) {
+            for (const sg of seeded) {
+              await this.insertAddonGroupRow(sg);
+            }
+            return seeded;
+          }
+        }
+      } catch (e) {
+        console.warn("D1 getAddonGroupsByTenant error:", e);
+      }
+    }
+
+    const memTenant = globalStore.tenants.find((t) => t.id === tenantId || t.slug === tenantId);
+    const memId = memTenant ? memTenant.id : resolvedId;
+    const memSlug = memTenant ? memTenant.slug : resolvedSlug;
+
+    return (globalStore.addonGroups || [])
+      .filter((g) => g.tenantId === memId || g.tenantId === memSlug)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }
+
+  async getAddonGroupById(groupId: string): Promise<AddonGroup | null> {
+    if (!groupId) return null;
+    await this.ensureTables();
+
+    if (this.env?.DB) {
+      try {
+        const row = await this.env.DB.prepare("SELECT * FROM addon_groups WHERE id = ? LIMIT 1")
+          .bind(groupId)
+          .first<any>();
+        if (row) {
+          return this.mapAddonGroupRow(row);
+        }
+      } catch (e) {
+        console.warn("D1 getAddonGroupById error:", e);
+      }
+    }
+
+    return (globalStore.addonGroups || []).find((g) => g.id === groupId) || null;
+  }
+
+  async createAddonGroup(
+    tenantId: string,
+    data: Omit<AddonGroup, "id" | "tenantId">
+  ): Promise<AddonGroup> {
+    await this.ensureTables();
+    const tenant = await this.getTenantByIdOrSlug(tenantId);
+    const resolvedTenantId = tenant ? tenant.id : tenantId;
+
+    const currentGroups = await this.getAddonGroupsByTenant(resolvedTenantId);
+    const maxPos = currentGroups.reduce((max, g) => Math.max(max, g.position ?? 0), 0);
+
+    const minSel = Number(data.minSelection ?? 0);
+    const maxSel = Number(data.maxSelection ?? 0);
+
+    const newGroup: AddonGroup = {
+      id: `ag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      tenantId: resolvedTenantId,
+      name: data.name.trim(),
+      description: data.description?.trim() || "",
+      minSelection: minSel,
+      maxSelection: maxSel,
+      required: minSel > 0,
+      items: Array.isArray(data.items)
+        ? data.items.map((it, idx) => ({
+            id: it.id || `ai-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 5)}`,
+            name: it.name.trim(),
+            price: Number(it.price) || 0,
+            available: it.available !== false,
+          }))
+        : [],
+      position: data.position ?? maxPos + 1,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare(
+          `INSERT INTO addon_groups (
+            id, tenant_id, name, description, min_selection, max_selection, required, items_json, position, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            newGroup.id,
+            newGroup.tenantId,
+            newGroup.name,
+            newGroup.description,
+            newGroup.minSelection,
+            newGroup.maxSelection,
+            newGroup.required ? 1 : 0,
+            JSON.stringify(newGroup.items),
+            newGroup.position,
+            newGroup.createdAt,
+            newGroup.updatedAt
+          )
+          .run();
+      } catch (e) {
+        console.warn("D1 createAddonGroup error:", e);
+      }
+    }
+
+    if (!globalStore.addonGroups) {
+      globalStore.addonGroups = [];
+    }
+    globalStore.addonGroups.push(newGroup);
+
+    return newGroup;
+  }
+
+  async updateAddonGroup(
+    groupId: string,
+    partial: Partial<AddonGroup>
+  ): Promise<AddonGroup | null> {
+    const existing = await this.getAddonGroupById(groupId);
+    if (!existing) return null;
+
+    const minSel = partial.minSelection !== undefined ? Number(partial.minSelection) : existing.minSelection;
+    const maxSel = partial.maxSelection !== undefined ? Number(partial.maxSelection) : existing.maxSelection;
+
+    const updated: AddonGroup = {
+      ...existing,
+      ...partial,
+      name: partial.name !== undefined ? partial.name.trim() : existing.name,
+      description: partial.description !== undefined ? (partial.description || "").trim() : existing.description,
+      minSelection: minSel,
+      maxSelection: maxSel,
+      required: minSel > 0,
+      items: Array.isArray(partial.items)
+        ? partial.items.map((it, idx) => ({
+            id: it.id || `ai-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 5)}`,
+            name: it.name.trim(),
+            price: Number(it.price) || 0,
+            available: it.available !== false,
+          }))
+        : existing.items,
+      updatedAt: Date.now(),
+    };
+
+    if (this.env?.DB) {
+      try {
+        await this.ensureTables();
+        await this.env.DB.prepare(
+          `UPDATE addon_groups SET
+            name = ?, description = ?, min_selection = ?, max_selection = ?, required = ?, items_json = ?, position = ?, updated_at = ?
+           WHERE id = ?`
+        )
+          .bind(
+            updated.name,
+            updated.description || "",
+            updated.minSelection,
+            updated.maxSelection,
+            updated.required ? 1 : 0,
+            JSON.stringify(updated.items),
+            updated.position ?? 0,
+            updated.updatedAt,
+            groupId
+          )
+          .run();
+      } catch (e) {
+        console.warn("D1 updateAddonGroup error:", e);
+      }
+    }
+
+    const idx = (globalStore.addonGroups || []).findIndex((g) => g.id === groupId);
+    if (idx >= 0) {
+      globalStore.addonGroups[idx] = updated;
+    } else {
+      globalStore.addonGroups.push(updated);
+    }
+
+    return updated;
+  }
+
+  async deleteAddonGroup(groupId: string): Promise<boolean> {
+    await this.ensureTables();
+
+    if (this.env?.DB) {
+      try {
+        await this.env.DB.prepare("DELETE FROM addon_groups WHERE id = ?")
+          .bind(groupId)
+          .run();
+      } catch (e) {
+        console.warn("D1 deleteAddonGroup error:", e);
+      }
+    }
+
+    globalStore.addonGroups = (globalStore.addonGroups || []).filter((g) => g.id !== groupId);
+
+    // Também desvincula dos produtos que tinham este grupo
+    for (const p of globalStore.products) {
+      if (p.addonGroupIds && p.addonGroupIds.includes(groupId)) {
+        p.addonGroupIds = p.addonGroupIds.filter((id) => id !== groupId);
+        await this.updateProduct(p.id, { addonGroupIds: p.addonGroupIds });
       }
     }
 
@@ -4737,6 +5213,7 @@ export class Database {
       isFeatured: row.is_featured !== undefined ? Boolean(row.is_featured) : Boolean(row.isFeatured || false),
       priorityOrder: Number(row.priority_order !== undefined ? row.priority_order : (row.priorityOrder || 0)),
       businessType: row.business_type || row.category || "Lanchonetes",
+      localidade: row.localidade || row.bairro || "Gargaú",
       rating: Number(row.rating) || 4.9,
       ratingCount: Number(row.rating_count) || 120,
       status: (row.status === "inactive" ? "inactive" : "active") as TenantStatus,
@@ -4815,10 +5292,27 @@ export class Database {
       image: row.image || "",
       available: isAvail,
       options: this.safeJsonParse(row.options_json, []),
+      addonGroupIds: this.safeJsonParse(row.addon_group_ids, []),
       position,
       ordem: position,
       order: position,
       createdAt: Number(row.created_at) || Date.now(),
+    };
+  }
+
+  private mapAddonGroupRow(row: any): AddonGroup {
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      name: row.name,
+      description: row.description || "",
+      minSelection: Number(row.min_selection ?? row.minSelection ?? 0),
+      maxSelection: Number(row.max_selection ?? row.maxSelection ?? 0),
+      required: Boolean(row.required || (row.min_selection && row.min_selection > 0)),
+      items: this.safeJsonParse(row.items_json || row.items, []),
+      position: Number(row.position ?? 0),
+      createdAt: Number(row.created_at) || Date.now(),
+      updatedAt: Number(row.updated_at) || Date.now(),
     };
   }
 

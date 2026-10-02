@@ -1014,18 +1014,39 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         <Section title="Resumo do pedido">
           <div className="space-y-2 rounded-xl bg-gray-50 p-4">
             {cart.map((item) => (
-              <div key={item.id} className="flex justify-between text-sm">
-                <span className="text-gray-600">
-                  {item.quantity}x {item.product.name}
-                </span>
-                <span className="font-medium text-gray-700">
-                  {formatPrice(
-                    item.quantity *
-                      (item.product.price +
-                        item.selectedOptions.reduce((s, o) => s + o.price, 0)),
-                    config
-                  )}
-                </span>
+              <div key={item.id} className="space-y-0.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-700 font-medium">
+                    {item.quantity}x {item.product.name}
+                  </span>
+                  <span className="font-bold text-gray-800">
+                    {formatPrice(
+                      item.quantity *
+                        (item.product.price +
+                          item.selectedOptions.reduce((s, o) => s + (o?.price || 0), 0)),
+                      config
+                    )}
+                  </span>
+                </div>
+                {item.selectedOptions && item.selectedOptions.length > 0 && (
+                  <div className="text-xs text-gray-500 pl-4 space-y-0.5">
+                    {item.selectedOptions.map((opt) => (
+                      <div key={opt.id} className="flex justify-between">
+                        <span>+ {opt.name}</span>
+                        {opt.price > 0 && (
+                          <span className="font-mono text-gray-400">
+                            +{formatPrice(opt.price, config)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {item.notes && (
+                  <div className="text-xs italic text-gray-400 pl-4">
+                    Obs: {item.notes}
+                  </div>
+                )}
               </div>
             ))}
             <div className="border-t border-gray-200 pt-2">

@@ -447,6 +447,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     primaryColor: "#E63946",
     bannerImage: "",
     businessType: "Lanchonetes",
+    localidade: "Gargaú",
     isFeatured: false,
     priorityOrder: 0,
     monthlyFee: 49.90,
@@ -567,6 +568,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     adminEmail: "",
     adminPassword: "",
     businessType: "Lanchonetes",
+    localidade: "",
     isFeatured: false,
     priorityOrder: 0,
   });
@@ -646,6 +648,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       adminEmail: (tenant as any).adminEmail || tenant.email || `admin@${tenant.slug}.com`,
       adminPassword: (tenant as any).adminPassword || "123456",
       businessType: tenant.businessType || "Lanchonetes",
+      localidade: tenant.localidade || "Gargaú",
       isFeatured: Boolean(tenant.isFeatured),
       priorityOrder: Number(tenant.priorityOrder) || 0,
       monthlyFee: tenant.monthlyFee !== undefined ? tenant.monthlyFee : 49.9,
@@ -697,6 +700,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         menuLayout: configForm.menuLayout,
         showFeaturedCarousel: configForm.showFeaturedCarousel,
         businessType: configForm.businessType || "Lanchonetes",
+        localidade: configForm.localidade?.trim() || "Gargaú",
         isFeatured: Boolean(configForm.isFeatured),
         priorityOrder: Number(configForm.priorityOrder) || 0,
         monthlyFee: !isNaN(Number(configForm.monthlyFee)) ? Number(configForm.monthlyFee) : 49.9,
@@ -792,6 +796,11 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
 
     if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim()) {
       setFormError("Por favor, preencha o Nome da Loja, E-mail e Senha do Cliente.");
+      return;
+    }
+
+    if (!formData.localidade || !formData.localidade.trim()) {
+      setFormError("Por favor, preencha a Localidade / Região da loja (ex: Gargaú, Barra do Itabapoana).");
       return;
     }
 
@@ -1434,6 +1443,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                               <div className="font-bold text-white text-sm">
                                 {getSafeDisplayName(t.name, "Lanchonete")}
                               </div>
+                              <div className="text-[11px] text-amber-300 flex items-center gap-1 font-medium">
+                                <span>📍</span>
+                                <span>{t.localidade || "Gargaú"}</span>
+                              </div>
                               <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
                                 <span>{t.whatsapp}</span>
                                 <span className="text-slate-600">•</span>
@@ -1851,8 +1864,16 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       </button>
                     </div>
 
-                    {/* Linha 2: Badges e Selos (Demo/Plano, Destaque/P10, Ativa/Pausada) - Sempre visíveis e sem truncamento */}
+                    {/* Linha 2: Badges e Selos (Demo/Plano, Localidade, Destaque/P10, Ativa/Pausada) - Sempre visíveis e sem truncamento */}
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1 border-t border-slate-800/50 w-full">
+                      {/* Localidade / Região */}
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-slate-800 text-slate-200 border border-slate-700/80 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium whitespace-nowrap"
+                        title={`Localidade: ${t.localidade || "Gargaú"}`}
+                      >
+                        📍 {t.localidade || "Gargaú"}
+                      </span>
+
                       {/* 1. Badge de Plano / Assinatura (Demo / Cancelada / Mensalidade) */}
                       {subInfo.status === "demo" ? (
                         <span
@@ -2677,6 +2698,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         primaryColor: "#E63946",
                         bannerImage: "",
                         businessType: "Lanchonetes",
+                        localidade: "Gargaú",
                         isFeatured: false,
                         priorityOrder: 0,
                       });
@@ -2708,6 +2730,23 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       placeholder="Ex: Pastelaria do Zé"
                       className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Localidade / Região *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.localidade}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, localidade: e.target.value }))}
+                      placeholder="Nome do bairro, distrito ou cidade (ex: Gargaú)"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Preencha o nome do bairro, distrito ou cidade (ex: Gargaú, Barra do Itabapoana, São Francisco (Centro)).
+                    </p>
                   </div>
 
                   <div>
@@ -3757,6 +3796,24 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       onChange={(e) => setConfigForm((prev) => ({ ...prev, name: e.target.value }))}
                       className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-amber-500"
                     />
+                  </div>
+
+                  {/* Localidade / Região */}
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Localidade / Região *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={configForm.localidade}
+                      onChange={(e) => setConfigForm((prev) => ({ ...prev, localidade: e.target.value }))}
+                      placeholder="Nome do bairro, distrito ou cidade (ex: Gargaú)"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-amber-500"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Bairro, distrito ou cidade onde este estabelecimento atua (ex: Gargaú, Barra do Itabapoana, São Francisco (Centro)).
+                    </p>
                   </div>
 
                   {/* Categoria do Estabelecimento */}

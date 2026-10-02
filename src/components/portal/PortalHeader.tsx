@@ -1,6 +1,7 @@
 import { Search, Sparkles, Store, UtensilsCrossed, ShieldCheck } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
+import { LocalitySelector } from "@/components/portal/LocalitySelector";
 import { useStore } from "@/context/StoreContext";
 
 interface PortalHeaderProps {
@@ -45,25 +46,26 @@ export function PortalHeader({
         {/* Gradiente escuro para legibilidade perfeita */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/30" />
 
-        {/* Barra superior flutuante em UMA ÚNICA LINHA horizontal */}
-        <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-5xl px-2.5 sm:px-4 pt-2.5 sm:pt-3">
-          <div className="flex flex-row flex-nowrap items-center justify-between gap-1.5 sm:gap-2 w-full">
+        {/* Barra superior flutuante com Seletor de Localidade perfeitamente centralizado */}
+        <div className="absolute inset-x-0 top-0 z-30 mx-auto max-w-5xl px-2.5 sm:px-4 pt-2.5 sm:pt-3">
+          <div className="relative flex flex-row flex-nowrap items-center justify-between gap-1.5 sm:gap-2 w-full h-8">
             {/* CANTO ESQUERDO: Badge oficial Top Food */}
-            <div className="flex items-center gap-1 rounded-full border border-white/20 bg-black/45 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs min-w-0 h-7 shrink">
+            <div className="flex items-center gap-1 rounded-full border border-white/20 bg-black/45 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold text-white/95 backdrop-blur-md shadow-xs min-w-0 h-7 shrink-0 z-10">
               <UtensilsCrossed className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0" />
-              <span className="truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">Top Food</span>
+              <span className="truncate max-w-[85px] xs:max-w-[130px] sm:max-w-none">Top Food</span>
             </div>
 
-            {/* MEIO: Instalar App */}
-            <div className="flex items-center justify-center shrink-0 mx-1">
+            {/* MEIO EXATO: Seletor Dinâmico de Localidade Centralizado Horizontalmente */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-20 flex items-center justify-center">
+              <LocalitySelector />
+            </div>
+
+            {/* CANTO DIREITO: Instalar App (PWA) + Atualizar (🔄 circular) + Área do Lojista */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto z-10">
               <PWAInstallButton
                 variant="header"
                 className="h-7 px-2 py-1 text-[11px] sm:text-xs"
               />
-            </div>
-
-            {/* CANTO DIREITO: Atualizar (🔄 circular) + Área do Lojista */}
-            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
               <GlobalReloadButton
                 variant="glass"
                 showLabel={false}

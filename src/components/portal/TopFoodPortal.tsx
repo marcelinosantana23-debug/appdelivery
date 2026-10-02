@@ -28,25 +28,30 @@ export function TopFoodPortal({
     establishmentCategories,
     isLoadingTenants,
     isLoadingPortal,
-    isRevalidatingTenants,
+    selectedLocality,
   } = useStore();
   const [activeCategory, setActiveCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Apenas lojas ativas no marketplace, com destaque/patrocinadas primeiro por prioridade decrescente
+  // Apenas lojas ativas no marketplace E cadastradas na localidade selecionada
   const activeTenants = useMemo(() => {
-    return (tenants || [])
-      .filter((t) => t.status !== "inactive")
-      .sort((a, b) => {
-        const aFeat = a.isFeatured ? 1 : 0;
-        const bFeat = b.isFeatured ? 1 : 0;
-        if (aFeat !== bFeat) return bFeat - aFeat;
-        const aPri = a.priorityOrder || 0;
-        const bPri = b.priorityOrder || 0;
-        if (aPri !== bPri) return bPri - aPri;
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      });
-  }, [tenants]);
+    const raw = (tenants || []).filter((t) => t.status !== "inactive");
+
+    const targetLoc = (selectedLocality || "").trim().toLowerCase();
+    const filteredByLocality = targetLoc
+      ? raw.filter((t) => (t.localidade || "Gargaú").trim().toLowerCase() === targetLoc)
+      : raw;
+
+    return filteredByLocality.sort((a, b) => {
+      const aFeat = a.isFeatured ? 1 : 0;
+      const bFeat = b.isFeatured ? 1 : 0;
+      if (aFeat !== bFeat) return bFeat - aFeat;
+      const aPri = a.priorityOrder || 0;
+      const bPri = b.priorityOrder || 0;
+      if (aPri !== bPri) return bPri - aPri;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  }, [tenants, selectedLocality]);
 
   // Exibe skeleton screens leves apenas no primeiro acesso do usuário (quando o cache local estiver vazio)
   const isFirstLoad = (isLoadingTenants || isLoadingPortal) && activeTenants.length === 0;
@@ -174,12 +179,6 @@ export function TopFoodPortal({
                 <>
                   {totalFilteredCount}{" "}
                   {totalFilteredCount === 1 ? "opção disponível" : "opções disponíveis"} no Top Food
-                  {isRevalidatingTenants && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />
-                      <span>Atualizando em segundo plano...</span>
-                    </span>
-                  )}
                   {activeCategory !== "todos" && (
                     <button
                       type="button"
@@ -217,10 +216,14 @@ export function TopFoodPortal({
               <SearchX className="h-6 w-6" />
             </div>
             <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
-              Nenhum estabelecimento encontrado
+              {activeTenants.length === 0
+                ? `Nenhum estabelecimento encontrado em ${selectedLocality || "Gargaú"}`
+                : "Nenhum estabelecimento encontrado"}
             </h3>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-              Não encontramos lojas correspondentes nesta seleção. Tente buscar por outros termos ou retorne à visão geral.
+              {activeTenants.length === 0
+                ? `Ainda não há estabelecimentos com entrega ativa para "${selectedLocality || "Gargaú"}". Você pode alternar a localidade na barra superior do topo.`
+                : "Não encontramos lojas correspondentes nesta busca. Tente buscar por outros termos ou limpe o filtro de categorias."}
             </p>
             <button
               type="button"

@@ -43,6 +43,7 @@ export interface Tenant {
   isFeatured?: boolean;
   priorityOrder?: number;
   businessType?: string;
+  localidade?: string;
   rating?: number;
   ratingCount?: number;
   status: TenantStatus;
@@ -90,6 +91,29 @@ export interface ProductOption {
   id: string;
   name: string;
   price: number;
+  groupId?: string;
+  groupName?: string;
+}
+
+export interface AddonItem {
+  id: string;
+  name: string;
+  price: number;
+  available?: boolean;
+}
+
+export interface AddonGroup {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  minSelection: number; // 0 para opcional, >= 1 para obrigatório
+  maxSelection: number; // 0 para ilimitado, ou valor numérico
+  required?: boolean;
+  items: AddonItem[];
+  position?: number;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface Product {
@@ -102,6 +126,8 @@ export interface Product {
   category?: string;
   available?: boolean;
   options?: ProductOption[];
+  addonGroupIds?: string[];
+  addonGroups?: AddonGroup[];
   position?: number;
   ordem?: number;
   order?: number;

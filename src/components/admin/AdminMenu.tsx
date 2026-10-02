@@ -18,6 +18,7 @@ import {
   ArrowUpDown,
   Tag,
   Check,
+  Layers,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { categories as defaultMockCategories } from "@/data/mockData";
@@ -556,6 +557,12 @@ export function AdminMenu() {
                   <span className="text-[10px] sm:text-xs font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">
                     {cat?.name || product.category}
                   </span>
+                  {((product.addonGroupIds && product.addonGroupIds.length > 0) || (product.addonGroups && product.addonGroups.length > 0)) && (
+                    <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md">
+                      <Layers className="h-3 w-3" />
+                      <span>{product.addonGroupIds?.length || product.addonGroups?.length} grupo{(product.addonGroupIds?.length || product.addonGroups?.length) !== 1 ? "s" : ""}</span>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -666,7 +673,24 @@ function ProductForm({
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { config, showToast } = useStore();
+  const { config, showToast, addonGroups } = useStore();
+
+  // Grupos de adicionais globais vinculados a este produto
+  const [selectedAddonGroupIds, setSelectedAddonGroupIds] = useState<string[]>(() => {
+    if (product?.addonGroupIds && Array.isArray(product.addonGroupIds)) {
+      return [...product.addonGroupIds];
+    }
+    if (product?.addonGroups && Array.isArray(product.addonGroups)) {
+      return product.addonGroups.map((g) => g.id);
+    }
+    return [];
+  });
+
+  const toggleAddonGroup = (groupId: string) => {
+    setSelectedAddonGroupIds((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
 
   const handleGenerateAiPhoto = async () => {
     if (!name.trim()) {
@@ -826,6 +850,7 @@ function ProductForm({
         category: targetCategory,
         available,
         options,
+        addonGroupIds: selectedAddonGroupIds,
       },
       isCreatingNewCategory ? newCategoryName.trim() : undefined
     );
@@ -1159,6 +1184,92 @@ function ProductForm({
                 <Plus className="h-4 w-4" />
               </button>
             </div>
+          </div>
+
+          {/* Seção de Adicionais / Complementos Disponíveis */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-amber-600" />
+                <label className="text-xs sm:text-sm font-bold text-slate-800">
+                  Adicionais / Complementos Disponíveis
+                </label>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                {selectedAddonGroupIds.length} selecionado{selectedAddonGroupIds.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Marque os grupos de adicionais que o cliente poderá escolher ao pedir este produto (ex: Bacon, Cheddar, Ingredientes de Açaí, Bordas, etc).
+            </p>
+
+            {addonGroups.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-3.5 text-center space-y-1">
+                <p className="text-xs font-medium text-slate-600">
+                  Nenhum grupo de adicionais cadastrado nesta loja ainda.
+                </p>
+                <p className="text-[11px] text-amber-700 font-semibold">
+                  Cadastre grupos na aba <strong>"Adicionais"</strong> do painel para vinculá-los aqui facilmente.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {addonGroups.map((group) => {
+                  const isChecked = selectedAddonGroupIds.includes(group.id);
+                  const isRequired = Boolean(group.required || group.minSelection > 0);
+                  return (
+                    <label
+                      key={group.id}
+                      className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
+                        isChecked
+                          ? "border-amber-400 bg-amber-500/10 text-slate-900 shadow-2xs"
+                          : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleAddonGroup(group.id)}
+                        className="mt-0.5 h-4 w-4 rounded accent-[var(--color-primary)] text-amber-600 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-slate-900">{group.name}</span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              isRequired
+                                ? "bg-amber-100 text-amber-900 border-amber-200"
+                                : "bg-slate-100 text-slate-600 border-slate-200"
+                            }`}
+                          >
+                            {isRequired ? "Obrigatório" : "Opcional"}
+                            {group.maxSelection === 1
+                              ? " • Escolha única"
+                              : group.maxSelection > 1
+                              ? ` • Máx: ${group.maxSelection}`
+                              : ""}
+                          </span>
+                        </div>
+                        {group.description && (
+                          <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-1">
+                            {group.description}
+                          </p>
+                        )}
+                        {group.items && group.items.length > 0 && (
+                          <p className="mt-1 text-[11px] text-slate-500 font-medium">
+                            {group.items.length} iten{group.items.length > 1 ? "s" : ""}:{" "}
+                            <span className="text-slate-400">
+                              {group.items.map((it) => `${it.name} (+${formatPrice(it.price, config)})`).join(", ")}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <button
