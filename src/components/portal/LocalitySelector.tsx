@@ -49,28 +49,28 @@ export function LocalitySelector({ className = "" }: LocalitySelectorProps) {
   const currentDisplay = selectedLocality || displayLocalities[0] || "Gargaú";
 
   return (
-    <div ref={dropdownRef} className={`relative inline-flex items-center ${className}`}>
-      {/* Botão Pílula / Cápsula Centralizada */}
+    <div ref={dropdownRef} className={`relative inline-flex items-center min-w-0 ${className}`}>
+      {/* Botão Pílula / Cápsula colada ao lado do Logo */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-1.5 rounded-full border border-white/25 bg-black/45 hover:bg-black/65 active:scale-95 text-white/95 backdrop-blur-md shadow-xs transition px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold cursor-pointer h-7 select-none"
+        className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-white/25 bg-black/50 hover:bg-black/70 active:scale-95 text-white/95 backdrop-blur-md shadow-xs transition px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] xs:text-[11px] sm:text-xs font-semibold cursor-pointer h-7 select-none max-w-[115px] xs:max-w-[155px] sm:max-w-[210px] shrink min-w-0"
         title="Alterar localidade do feed de lojas"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="text-xs">📍</span>
-        <span className="truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[190px]">
+        <span className="text-[11px] sm:text-xs shrink-0">📍</span>
+        <span className="truncate">
           {currentDisplay}
         </span>
-        <span className="text-[10px] text-white/70 ml-0.5">▾</span>
+        <span className="text-[9px] sm:text-[10px] text-white/70 ml-0.5 shrink-0">▾</span>
       </button>
 
       {/* Dropdown de Localidades */}
       {isOpen && (
         <div
           role="listbox"
-          className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-52 sm:w-60 rounded-2xl border border-slate-700/80 bg-slate-900/95 p-1.5 text-slate-200 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
+          className="absolute top-full mt-1.5 left-0 w-52 sm:w-60 max-w-[85vw] rounded-2xl border border-slate-700/80 bg-slate-900/95 p-1.5 text-slate-200 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
         >
           <div className="px-2.5 py-1.5 border-b border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1">
