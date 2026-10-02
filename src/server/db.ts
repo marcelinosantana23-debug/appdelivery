@@ -1905,6 +1905,8 @@ export class Database {
           primary_light TEXT DEFAULT '#F77F00',
           accent_color TEXT DEFAULT '#FCBF49',
           localidade TEXT NOT NULL DEFAULT 'Gargaú',
+          motoboy_phone TEXT DEFAULT '',
+          motoboy_name TEXT DEFAULT '',
           status TEXT DEFAULT 'active',
           subscription_status TEXT DEFAULT 'demo',
           billing_day INTEGER,
@@ -2091,7 +2093,9 @@ export class Database {
         "ALTER TABLE orders ADD COLUMN payment_details TEXT",
         "ALTER TABLE orders ADD COLUMN location_url TEXT",
         "ALTER TABLE products ADD COLUMN addon_group_ids TEXT DEFAULT '[]'",
-        "ALTER TABLE tenants ADD COLUMN localidade TEXT DEFAULT 'Gargaú'"
+        "ALTER TABLE tenants ADD COLUMN localidade TEXT DEFAULT 'Gargaú'",
+        "ALTER TABLE tenants ADD COLUMN motoboy_phone TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN motoboy_name TEXT DEFAULT ''"
       ];
 
       for (const alter of alterQueries) {
@@ -2229,10 +2233,10 @@ export class Database {
           id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
           delivery_fee, min_order, estimated_time, address, hours, tagline,
           announcement, logo, banner, banner_image, primary_color, secondary_color,
-          primary_dark, primary_light, accent_color, localidade, status, is_open,
+          primary_dark, primary_light, accent_color, localidade, motoboy_phone, motoboy_name, status, is_open,
           is_featured, priority_order,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           t.id,
@@ -2259,6 +2263,8 @@ export class Database {
           t.primaryLight,
           t.accentColor,
           t.localidade || "Gargaú",
+          t.motoboyPhone || (t as any).motoboy_phone || "",
+          t.motoboyName || (t as any).motoboy_name || "",
           t.status,
           t.isOpen ? 1 : 0,
           t.isFeatured ? 1 : 0,
@@ -2769,6 +2775,10 @@ export class Database {
       accentColor: "#FCBF49",
       businessType: data.businessType?.trim() || "Lanchonetes",
       localidade: data.localidade?.trim() || "Gargaú",
+      motoboyPhone: data.motoboyPhone || (data as any).motoboy_phone || "",
+      motoboy_phone: data.motoboyPhone || (data as any).motoboy_phone || "",
+      motoboyName: data.motoboyName || (data as any).motoboy_name || "",
+      motoboy_name: data.motoboyName || (data as any).motoboy_name || "",
       status: "active",
       isOpen: true,
       createdAt: Date.now(),
@@ -2783,9 +2793,9 @@ export class Database {
             id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
             delivery_fee, min_order, estimated_time, address, hours, tagline,
             announcement, logo, banner, banner_image, primary_color, secondary_color,
-            primary_dark, primary_light, accent_color, business_type, localidade, status, is_open,
+            primary_dark, primary_light, accent_color, business_type, localidade, motoboy_phone, motoboy_name, status, is_open,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             newTenant.id,
@@ -2813,6 +2823,8 @@ export class Database {
             newTenant.accentColor,
             newTenant.businessType || "Lanchonetes",
             newTenant.localidade || "Gargaú",
+            newTenant.motoboyPhone || "",
+            newTenant.motoboyName || "",
             newTenant.status,
             newTenant.isOpen ? 1 : 0,
             newTenant.createdAt,
@@ -2937,10 +2949,28 @@ export class Database {
         ? partial.localidade.trim()
         : tenant.localidade || "Gargaú";
 
+    const motoboyPhoneVal =
+      partial.motoboyPhone !== undefined
+        ? String(partial.motoboyPhone).trim()
+        : ((partial as any).motoboy_phone !== undefined
+            ? String((partial as any).motoboy_phone).trim()
+            : (tenant.motoboyPhone || (tenant as any).motoboy_phone || ""));
+
+    const motoboyNameVal =
+      partial.motoboyName !== undefined
+        ? String(partial.motoboyName).trim()
+        : ((partial as any).motoboy_name !== undefined
+            ? String((partial as any).motoboy_name).trim()
+            : (tenant.motoboyName || (tenant as any).motoboy_name || ""));
+
     const updated: Tenant = {
       ...tenant,
       ...partial,
       localidade: localidadeVal,
+      motoboyPhone: motoboyPhoneVal,
+      motoboy_phone: motoboyPhoneVal,
+      motoboyName: motoboyNameVal,
+      motoboy_name: motoboyNameVal,
       isFeatured: isFeaturedVal,
       priorityOrder: priorityOrderVal,
       subscriptionStatus: subscriptionStatusVal,
@@ -2959,7 +2989,7 @@ export class Database {
             name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
             delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
             logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-            accent_color = ?, business_type = ?, localidade = ?, status = ?, is_open = ?,
+            accent_color = ?, business_type = ?, localidade = ?, motoboy_phone = ?, motoboy_name = ?, status = ?, is_open = ?,
             is_featured = ?, priority_order = ?,
             subscription_status = ?, billing_day = ?, last_payment_at = ?, monthly_fee = ?,
             updated_at = ?
@@ -2982,6 +3012,8 @@ export class Database {
             updated.accentColor,
             updated.businessType || "Lanchonetes",
             updated.localidade || "Gargaú",
+            updated.motoboyPhone || "",
+            updated.motoboyName || "",
             updated.status,
             updated.isOpen ? 1 : 0,
             updated.isFeatured ? 1 : 0,
@@ -3002,7 +3034,7 @@ export class Database {
               name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
               delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
               logo = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-              accent_color = ?, business_type = ?, localidade = ?, status = ?, is_open = ?, updated_at = ?
+              accent_color = ?, business_type = ?, localidade = ?, motoboy_phone = ?, motoboy_name = ?, status = ?, is_open = ?, updated_at = ?
             WHERE id = ?`
           )
             .bind(
@@ -3021,6 +3053,8 @@ export class Database {
               updated.accentColor,
               updated.businessType || "Lanchonetes",
               updated.localidade || "Gargaú",
+              updated.motoboyPhone || "",
+              updated.motoboyName || "",
               updated.status,
               updated.isOpen ? 1 : 0,
               updated.updatedAt,
@@ -5221,6 +5255,10 @@ export class Database {
       priorityOrder: Number(row.priority_order !== undefined ? row.priority_order : (row.priorityOrder || 0)),
       businessType: row.business_type || row.category || "Lanchonetes",
       localidade: row.localidade || row.bairro || "Gargaú",
+      motoboyPhone: row.motoboy_phone || row.motoboyPhone || "",
+      motoboy_phone: row.motoboy_phone || row.motoboyPhone || "",
+      motoboyName: row.motoboy_name || row.motoboyName || "",
+      motoboy_name: row.motoboy_name || row.motoboyName || "",
       rating: Number(row.rating) || 4.9,
       ratingCount: Number(row.rating_count) || 120,
       status: (row.status === "inactive" ? "inactive" : "active") as TenantStatus,

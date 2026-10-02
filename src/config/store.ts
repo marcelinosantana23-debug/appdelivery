@@ -29,6 +29,7 @@ export interface StoreConfig {
   localidade?: string;
   geminiApiKey?: string;
   motoboyPhone?: string;
+  motoboyName?: string;
 }
 
 export const defaultStoreConfig: StoreConfig = {
@@ -41,6 +42,7 @@ export const defaultStoreConfig: StoreConfig = {
   bannerImage: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
   whatsapp: "5511999999999",
   motoboyPhone: "",
+  motoboyName: "",
   pixKey: "contato@burgertown.com.br",
   pixKeyType: "email",
   deliveryFee: 6.0,

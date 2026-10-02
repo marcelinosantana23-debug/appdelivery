@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Save,
   Check,
@@ -17,6 +17,8 @@ import {
   ExternalLink,
   Share2,
   Bike,
+  User,
+  Phone,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
@@ -46,13 +48,14 @@ const PIX_TYPES: { value: PixKeyType; label: string }[] = [
 ];
 
 export function AdminSettings() {
-  const { config, updateConfig, isStoreOpen, toggleStore, orders } = useStore();
+  const { config, updateConfig, isStoreOpen, toggleStore, orders, showToast } = useStore();
 
   const [form, setForm] = useState({
     name: config.name,
     bannerImage: config.bannerImage || "",
     whatsapp: config.whatsapp,
     motoboyPhone: config.motoboyPhone || "",
+    motoboyName: config.motoboyName || "",
     pixKey: config.pixKey,
     pixKeyType: config.pixKeyType,
     deliveryFee: config.deliveryFee.toString(),
@@ -64,12 +67,51 @@ export function AdminSettings() {
     accentColor: config.accentColor,
   });
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingMotoboy, setIsSavingMotoboy] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isQrPlateModalOpen, setIsQrPlateModalOpen] = useState(false);
   const [isProcessingBanner, setIsProcessingBanner] = useState(false);
   const [storiesModalOpen, setStoriesModalOpen] = useState(false);
   const [storiesToPreview, setStoriesToPreview] = useState<StoreStory[]>([]);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  // Sincroniza formulário sempre que as configurações do restaurante forem carregadas do banco de dados D1
+  useEffect(() => {
+    setForm({
+      name: config.name,
+      bannerImage: config.bannerImage || "",
+      whatsapp: config.whatsapp,
+      motoboyPhone: config.motoboyPhone || "",
+      motoboyName: config.motoboyName || "",
+      pixKey: config.pixKey,
+      pixKeyType: config.pixKeyType,
+      deliveryFee: config.deliveryFee.toString(),
+      address: config.address,
+      hours: config.hours,
+      primaryColor: config.primaryColor,
+      primaryDark: config.primaryDark,
+      primaryLight: config.primaryLight,
+      accentColor: config.accentColor,
+    });
+  }, [
+    config.id,
+    config.slug,
+    config.name,
+    config.whatsapp,
+    config.motoboyPhone,
+    config.motoboyName,
+    config.pixKey,
+    config.pixKeyType,
+    config.deliveryFee,
+    config.address,
+    config.hours,
+    config.primaryColor,
+    config.primaryDark,
+    config.primaryLight,
+    config.accentColor,
+    config.bannerImage,
+  ]);
 
   const stats = {
     total: orders.length,
@@ -138,24 +180,48 @@ export function AdminSettings() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
-    updateConfig({
-      name: form.name.trim(),
-      bannerImage: form.bannerImage,
-      whatsapp: form.whatsapp.trim(),
-      motoboyPhone: form.motoboyPhone.trim(),
-      pixKey: form.pixKey.trim(),
-      pixKeyType: form.pixKeyType,
-      deliveryFee: parseFloat(form.deliveryFee) || 0,
-      address: form.address.trim(),
-      hours: form.hours.trim(),
-      primaryColor: form.primaryColor,
-      primaryDark: form.primaryDark,
-      primaryLight: form.primaryLight,
-      accentColor: form.accentColor,
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateConfig({
+        name: form.name.trim(),
+        bannerImage: form.bannerImage,
+        whatsapp: form.whatsapp.trim(),
+        motoboyPhone: form.motoboyPhone.trim(),
+        motoboyName: form.motoboyName.trim(),
+        pixKey: form.pixKey.trim(),
+        pixKeyType: form.pixKeyType,
+        deliveryFee: parseFloat(form.deliveryFee) || 0,
+        address: form.address.trim(),
+        hours: form.hours.trim(),
+        primaryColor: form.primaryColor,
+        primaryDark: form.primaryDark,
+        primaryLight: form.primaryLight,
+        accentColor: form.accentColor,
+      });
+      setSaved(true);
+      showToast("Configurações e dados do Motoboy Fixo salvos com sucesso!", "success");
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: any) {
+      showToast(err?.message || "Erro ao salvar configurações", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveMotoboy = async () => {
+    setIsSavingMotoboy(true);
+    try {
+      await updateConfig({
+        motoboyPhone: form.motoboyPhone.trim(),
+        motoboyName: form.motoboyName.trim(),
+      });
+      showToast("Dados do Motoboy Fixo gravados no banco de dados!", "success");
+    } catch (err: any) {
+      showToast(err?.message || "Erro ao salvar dados do motoboy", "error");
+    } finally {
+      setIsSavingMotoboy(false);
+    }
   };
 
   const applyPreset = (preset: typeof PRESET_COLORS[0]) => {
@@ -427,17 +493,80 @@ export function AdminSettings() {
             <p className="mt-1 text-xs text-gray-400">Para onde os pedidos serão enviados.</p>
           </FormField>
 
-          <FormField label="WhatsApp do Motoboy Fixo (Opcional)" icon={<Bike className="h-4 w-4 text-amber-600" />}>
-            <input
-              value={form.motoboyPhone}
-              onChange={(e) => set("motoboyPhone", e.target.value)}
-              className="form-input"
-              placeholder="Ex: 5522999998888 ou 22999998888"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Número padrão do entregador da loja para envio rápido de rota GPS e itens do pedido pelo card.
-            </p>
-          </FormField>
+          {/* Seção Destacada: Motoboy Fixo / Entregador Oficial da Loja */}
+          <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/70 p-4 space-y-3.5 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                  <Bike className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wide">
+                    Motoboy Fixo (Entregador Padrão da Loja)
+                  </h3>
+                  <p className="text-[11px] text-amber-800">
+                    Ao receber pedidos de entrega, despache rota GPS e dados com 1 clique direto para ele.
+                  </p>
+                </div>
+              </div>
+              {form.motoboyPhone.trim() ? (
+                <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 text-[11px] font-bold">
+                  ✓ Configurado
+                </span>
+              ) : (
+                <span className="rounded-full bg-amber-200/80 text-amber-900 px-2.5 py-0.5 text-[11px] font-bold">
+                  Não cadastrado
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-amber-700" />
+                  <span>Nome do Motoboy Fixo</span>
+                </label>
+                <input
+                  id="settings-motoboy-name"
+                  value={form.motoboyName}
+                  onChange={(e) => set("motoboyName", e.target.value)}
+                  className="form-input bg-white border-amber-200 focus:border-amber-500"
+                  placeholder="Ex: Carlos (Entregador)"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5 text-amber-700" />
+                  <span>WhatsApp do Motoboy (com DDD)</span>
+                </label>
+                <input
+                  id="settings-motoboy-phone"
+                  value={form.motoboyPhone}
+                  onChange={(e) => set("motoboyPhone", e.target.value)}
+                  className="form-input bg-white border-amber-200 focus:border-amber-500"
+                  placeholder="Ex: 5522999998888 ou 22999998888"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-amber-200/80">
+              <p className="text-[11px] text-amber-900 leading-relaxed flex-1">
+                💡 <strong>Persistência Garantida:</strong> Os dados ficam salvos permanentemente no banco de dados da loja. Se o entregador faltar, você poderá trocar de motoboy ou usar um sobressalente diretamente no card do pedido.
+              </p>
+              <button
+                type="button"
+                id="btn-save-motoboy-settings"
+                onClick={handleSaveMotoboy}
+                disabled={isSavingMotoboy}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-4 py-2.5 transition shadow-xs cursor-pointer active:scale-95 disabled:opacity-50 shrink-0"
+                title="Salvar imediatamente os dados do motoboy fixo no banco de dados"
+              >
+                <Save className="h-3.5 w-3.5" />
+                <span>{isSavingMotoboy ? "Salvando no D1..." : "Salvar Motoboy Fixo"}</span>
+              </button>
+            </div>
+          </div>
 
           <FormField label="Chave PIX" icon={<QrCode className="h-4 w-4" />}>
             <div className="flex gap-2">
@@ -531,11 +660,17 @@ export function AdminSettings() {
       {/* Save button */}
       <button
         onClick={handleSave}
-        className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 font-bold text-white shadow-lg transition active:scale-[0.98] ${
+        disabled={isSaving}
+        className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 font-bold text-white shadow-lg transition active:scale-[0.98] disabled:opacity-75 cursor-pointer ${
           saved ? "bg-green-500" : "bg-primary hover:bg-primary-dark"
         }`}
       >
-        {saved ? (
+        {isSaving ? (
+          <>
+            <Save className="h-5 w-5 animate-spin" />
+            Salvando no banco de dados...
+          </>
+        ) : saved ? (
           <>
             <Check className="h-5 w-5" />
             Configurações salvas!

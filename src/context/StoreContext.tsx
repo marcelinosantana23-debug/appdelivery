@@ -278,6 +278,8 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
     status: t.status,
     isOpen: t.isOpen,
     localidade: t.localidade || "Gargaú",
+    motoboyPhone: t.motoboyPhone || (t as any).motoboy_phone || "",
+    motoboyName: t.motoboyName || (t as any).motoboy_name || "",
   };
 }
 
@@ -1327,17 +1329,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         applyThemeColors(next);
         return next;
       });
-      if (currentTenant) {
-        const updated = await updateTenantApi(currentTenant.id, partial);
+      const targetTenantId = currentTenant?.id || config.id || config.slug;
+      if (targetTenantId) {
+        const payload: Partial<Tenant> = {
+          ...partial,
+          ...(partial.motoboyPhone !== undefined
+            ? { motoboyPhone: partial.motoboyPhone, motoboy_phone: partial.motoboyPhone }
+            : {}),
+          ...(partial.motoboyName !== undefined
+            ? { motoboyName: partial.motoboyName, motoboy_name: partial.motoboyName }
+            : {}),
+        };
+        const updated = await updateTenantApi(targetTenantId, payload);
         if (updated.success && updated.tenant) {
           setCurrentTenant(updated.tenant);
-          setTenants((prev) =>
-            prev.map((t) => (t.id === updated.tenant!.id ? updated.tenant! : t))
-          );
+          setTenants((prev) => {
+            const next = prev.map((t) => (t.id === updated.tenant!.id ? updated.tenant! : t));
+            saveCachedTenants(next);
+            return next;
+          });
+          try {
+            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated.tenant));
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated.tenant));
+          } catch {
+            // ignore
+          }
         }
       }
     },
-    [currentTenant]
+    [currentTenant, config.id, config.slug]
   );
 
   const toggleStore = useCallback(async () => {

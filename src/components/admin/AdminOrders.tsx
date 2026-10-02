@@ -24,7 +24,6 @@ import {
   Sun,
   Send,
   Smartphone,
-  AlertCircle,
   BookmarkCheck,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
@@ -313,7 +312,27 @@ function OrderCard({
   const isCancelled = order.status === "cancelled";
   const isDone = order.status === "done";
   const canAdvance = nextStatusMap[order.status] !== undefined;
-  const { config } = useStore();
+  const { config, showToast } = useStore();
+
+  const hasFixedMotoboy = Boolean(config.motoboyPhone && config.motoboyPhone.trim());
+  const motoboyDisplayName = config.motoboyName?.trim() || "Motoboy Fixo";
+
+  const handleSendDirectToFixed = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!config.motoboyPhone) {
+      onOpenMotoboy(order);
+      return;
+    }
+    const url = getMotoboyWhatsAppUrl(order, config, config.motoboyPhone);
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Enviando pedido ${order.id} direto para ${motoboyDisplayName} no WhatsApp...`, "success");
+  };
 
   const timeAgo = Math.floor((Date.now() - order.createdAt) / 60000);
 
@@ -398,18 +417,30 @@ function OrderCard({
                 <span>WhatsApp</span>
               </a>
               {order.orderType === "delivery" && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenMotoboy(order);
-                  }}
-                  className="flex items-center gap-1 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 font-bold transition text-xs cursor-pointer active:scale-95"
-                  title="Enviar rota do GPS e dados do pedido para o WhatsApp do Motoboy"
-                >
-                  <Bike className="h-3.5 w-3.5 text-amber-700" />
-                  <span>Motoboy</span>
-                </button>
+                hasFixedMotoboy ? (
+                  <button
+                    type="button"
+                    onClick={handleSendDirectToFixed}
+                    className="flex items-center gap-1 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-2 py-0.5 font-bold transition text-xs cursor-pointer active:scale-95"
+                    title={`Enviar pedido e rota direto para ${motoboyDisplayName} no WhatsApp`}
+                  >
+                    <Bike className="h-3.5 w-3.5 text-emerald-700" />
+                    <span>{motoboyDisplayName}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenMotoboy(order);
+                    }}
+                    className="flex items-center gap-1 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 font-bold transition text-xs cursor-pointer active:scale-95"
+                    title="Cadastrar motoboy fixo ou enviar para sobressalente"
+                  >
+                    <Bike className="h-3.5 w-3.5 text-amber-700" />
+                    <span>Motoboy</span>
+                  </button>
+                )
               )}
             </div>
           </div>
@@ -634,19 +665,48 @@ function OrderCard({
       {!isCancelled && !isDone && (
         <div className="flex flex-col sm:flex-row gap-2 border-t border-gray-100 px-4 py-3 w-full">
           {order.orderType === "delivery" && (
-            <button
-              type="button"
-              id={`btn-motoboy-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenMotoboy(order);
-              }}
-              className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-amber-950 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
-              title="Abrir opções de envio para o motoboy (Fixo ou Substituto)"
-            >
-              <Bike className="h-4 w-4 text-amber-700" />
-              <span>🚀 Enviar para o Motoboy</span>
-            </button>
+            hasFixedMotoboy ? (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  id={`btn-motoboy-fixed-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                  onClick={handleSendDirectToFixed}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-emerald-600 bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2.5 text-xs sm:text-sm font-black text-white transition shadow-xs cursor-pointer active:scale-95"
+                  title={`Enviar rota GPS e dados do pedido direto para ${motoboyDisplayName} no WhatsApp`}
+                >
+                  <Bike className="h-4 w-4" />
+                  <span>🚀 Enviar para o Motoboy</span>
+                </button>
+
+                <button
+                  type="button"
+                  id={`btn-motoboy-sub-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenMotoboy(order);
+                  }}
+                  className="flex items-center justify-center gap-1 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-2.5 py-2.5 text-xs font-bold text-amber-950 transition shadow-xs cursor-pointer active:scale-95"
+                  title="Trocar entregador ou enviar para motoboy sobressalente / quebra-galho"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-amber-700" />
+                  <span className="hidden sm:inline">Substituto</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                id={`btn-motoboy-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenMotoboy(order);
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 px-3.5 py-2.5 text-xs sm:text-sm font-black text-amber-950 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+                title="Cadastrar motoboy fixo ou enviar para entregador sobressalente/avulso"
+              >
+                <Bike className="h-4 w-4 text-amber-700" />
+                <span>🚀 Enviar para o Motoboy</span>
+              </button>
+            )
           )}
           {canAdvance && (
             <button
@@ -792,7 +852,7 @@ function PixReceiptModal({
 
 /**
  * MODAL PARA ENVIO DE ROTA GPS E DADOS DO PEDIDO PARA O MOTOBOY
- * Suporta envio direto para o Motoboy Fixo e troca rápida para Entregador Substituto (Quebra-Galho)
+ * Suporta envio direto para o Motoboy Fixo e cadastro/troca para Entregador Substituto (Quebra-Galho)
  */
 function MotoboyDispatchModal({
   order,
@@ -802,12 +862,17 @@ function MotoboyDispatchModal({
   onClose: () => void;
 }) {
   const { config, updateConfig, showToast } = useStore();
+  const fixedPhone = (config.motoboyPhone || "").trim();
+  const fixedName = (config.motoboyName || "").trim();
+  const hasFixedPhone = Boolean(fixedPhone);
+
+  const [substituteName, setSubstituteName] = useState("");
   const [substitutePhone, setSubstitutePhone] = useState("");
-  const [saveAsFixed, setSaveAsFixed] = useState(false);
+  // Se ainda não houver motoboy fixo, o checkbox já vem marcado por padrão para facilitar o cadastro
+  const [saveAsFixed, setSaveAsFixed] = useState(!hasFixedPhone);
   const [isSaving, setIsSaving] = useState(false);
 
-  const fixedPhone = (config.motoboyPhone || "").trim();
-  const hasFixedPhone = Boolean(fixedPhone);
+  const motoboyDisplayName = fixedName || "Motoboy Fixo";
 
   const formatDisplayPhone = (phoneStr: string) => {
     if (!phoneStr) return "";
@@ -840,11 +905,11 @@ function MotoboyDispatchModal({
     if (!hasFixedPhone) return;
     const url = getMotoboyWhatsAppUrl(order, config, fixedPhone);
     openWhatsAppSafe(url);
-    showToast("Abrindo WhatsApp com rota e dados para o Motoboy Fixo...", "success");
+    showToast(`Abrindo WhatsApp com rota e dados para ${motoboyDisplayName}...`, "success");
     onClose();
   };
 
-  // 2. Disparo para o Entregador Substituto (Quebra-Galho)
+  // 2. Disparo para o Entregador Substituto (Quebra-Galho) ou Cadastro Novo
   const handleSendSubstitute = async () => {
     if (!isSubstituteValid) {
       showToast("Digite o número do WhatsApp com DDD do entregador.", "error");
@@ -852,23 +917,54 @@ function MotoboyDispatchModal({
     }
 
     const formattedClean = cleanSubstitute.startsWith("55") ? cleanSubstitute : `55${cleanSubstitute}`;
+    const nameToSave = substituteName.trim() || (saveAsFixed ? "Motoboy Fixo" : "Entregador");
+
+    const url = getMotoboyWhatsAppUrl(order, config, formattedClean);
+    // Dispara WhatsApp imediatamente para evitar bloqueador de popups do navegador
+    openWhatsAppSafe(url);
+    showToast(`Abrindo WhatsApp para ${nameToSave}...`, "success");
 
     if (saveAsFixed) {
       setIsSaving(true);
       try {
-        await updateConfig({ motoboyPhone: formattedClean });
-        showToast("Novo número salvo como Motoboy Fixo da loja!", "success");
+        await updateConfig({
+          motoboyPhone: formattedClean,
+          motoboyName: nameToSave,
+        });
+        showToast(`Entregador ${nameToSave} salvo como Motoboy Fixo no banco de dados!`, "success");
       } catch (err) {
         console.warn("Falha ao salvar motoboy fixo:", err);
       } finally {
         setIsSaving(false);
+        onClose();
       }
+    } else {
+      onClose();
     }
+  };
 
-    const url = getMotoboyWhatsAppUrl(order, config, formattedClean);
-    openWhatsAppSafe(url);
-    showToast("Abrindo WhatsApp para o entregador substituto...", "success");
-    onClose();
+  // 2.1 Cadastrar apenas como fixo sem abrir WhatsApp
+  const handleSaveOnlyAsFixed = async () => {
+    if (!isSubstituteValid) {
+      showToast("Digite o número do WhatsApp com DDD do entregador.", "error");
+      return;
+    }
+    const formattedClean = cleanSubstitute.startsWith("55") ? cleanSubstitute : `55${cleanSubstitute}`;
+    const nameToSave = substituteName.trim() || "Motoboy Fixo";
+    setIsSaving(true);
+    try {
+      await updateConfig({
+        motoboyPhone: formattedClean,
+        motoboyName: nameToSave,
+      });
+      showToast(`Entregador ${nameToSave} salvo como Motoboy Fixo no banco de dados!`, "success");
+      onClose();
+    } catch (err) {
+      console.warn("Falha ao salvar motoboy fixo:", err);
+      showToast("Erro ao salvar motoboy fixo", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // 3. Fallback: Escolher contato no WhatsApp
@@ -899,7 +995,7 @@ function MotoboyDispatchModal({
             </div>
             <div>
               <h3 className="text-base font-black leading-tight">
-                Enviar Rota para o Motoboy
+                {hasFixedPhone ? "Enviar Rota para o Motoboy" : "Cadastrar / Enviar para Motoboy"}
               </h3>
               <p className="text-xs text-amber-100 font-medium">
                 Pedido <strong>{order.id}</strong> • Cliente: <strong>{order.customerName}</strong>
@@ -969,32 +1065,31 @@ function MotoboyDispatchModal({
             </div>
           </div>
 
-          {/* OPÇÃO 1: Motoboy Fixo (Cadastrado) */}
-          <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-4 space-y-2.5 transition">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase text-emerald-950 tracking-wider flex items-center gap-1.5">
-                <Bike className="h-4 w-4 text-emerald-700" />
-                <span>1. Motoboy Fixo (Cadastrado)</span>
-              </span>
-              {hasFixedPhone ? (
-                <span className="rounded-full bg-emerald-200/80 text-emerald-900 px-2 py-0.5 text-[10px] font-extrabold uppercase">
-                  Padrão da Loja
-                </span>
-              ) : (
-                <span className="rounded-full bg-slate-200 text-slate-600 px-2 py-0.5 text-[10px] font-bold">
-                  Não Configurado
-                </span>
-              )}
-            </div>
-
-            {hasFixedPhone ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs text-slate-700 bg-white/80 border border-emerald-200 rounded-xl px-3 py-2">
-                  <Phone className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="font-bold text-sm text-slate-900">
-                    {formatDisplayPhone(fixedPhone)}
+          {/* Se a loja JÁ TEM motoboy fixo cadastrado: exibe a Opção 1 em destaque */}
+          {hasFixedPhone ? (
+            <>
+              {/* OPÇÃO 1: Motoboy Fixo (Cadastrado) */}
+              <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50/70 p-4 space-y-2.5 transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase text-emerald-950 tracking-wider flex items-center gap-1.5">
+                    <Bike className="h-4 w-4 text-emerald-700" />
+                    <span>1. Motoboy Fixo da Loja</span>
                   </span>
-                  <span className="text-[11px] text-slate-500 ml-auto">Fixo</span>
+                  <span className="rounded-full bg-emerald-200/90 text-emerald-950 px-2.5 py-0.5 text-[10px] font-extrabold uppercase">
+                    Padrão Ativo
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-slate-700 bg-white/90 border border-emerald-200 rounded-xl px-3 py-2.5">
+                  <Phone className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <div>
+                    <span className="font-black text-sm text-slate-900 block leading-tight">
+                      {motoboyDisplayName}
+                    </span>
+                    <span className="text-xs text-slate-600 font-medium">
+                      {formatDisplayPhone(fixedPhone)}
+                    </span>
+                  </div>
                 </div>
 
                 <button
@@ -1004,94 +1099,196 @@ function MotoboyDispatchModal({
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white py-3 px-4 text-sm font-black shadow-md shadow-emerald-600/20 transition cursor-pointer"
                 >
                   <Bike className="h-4 w-4" />
-                  <span>🚀 Enviar Direto para o Motoboy Fixo</span>
+                  <span>🚀 Enviar Direto para {motoboyDisplayName}</span>
                 </button>
               </div>
-            ) : (
-              <div className="rounded-xl bg-amber-100/70 border border-amber-300 p-2.5 text-xs text-amber-900 space-y-1">
-                <p className="font-bold flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span>Nenhum motoboy fixo cadastrado nas configurações.</span>
-                </p>
-                <p className="text-[11px] text-amber-800">
-                  Preencha o campo de substituto abaixo e marque o checkbox para salvá-lo como fixo para os próximos pedidos.
-                </p>
-              </div>
-            )}
-          </div>
 
-          {/* Divisor Visual */}
-          <div className="relative flex py-1 items-center">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink mx-3 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-              OU
-            </span>
-            <div className="flex-grow border-t border-slate-200"></div>
-          </div>
-
-          {/* OPÇÃO 2: Entregador Substituto (Quebra-Galho) */}
-          <div className="rounded-2xl border-2 border-blue-200 bg-blue-50/60 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
-                <Smartphone className="h-4 w-4 text-blue-600" />
-                <span>2. Entregador Substituto (Quebra-Galho)</span>
-              </span>
-              <span className="rounded-full bg-blue-200/80 text-blue-900 px-2 py-0.5 text-[10px] font-extrabold uppercase">
-                Troca Rápida
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                📱 Número do Entregador Substituto (Quebra-Galho)
-              </label>
-              <input
-                id="input-substitute-motoboy"
-                type="tel"
-                value={substitutePhone}
-                onChange={(e) => setSubstitutePhone(e.target.value)}
-                placeholder="Ex: (22) 99999-8888 ou 22999998888"
-                className="w-full rounded-xl border-2 border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-              />
-              <p className="mt-1 text-[11px] text-slate-500">
-                Digite o DDD e número do WhatsApp do entregador que fará esta corrida.
-              </p>
-            </div>
-
-            {/* Checkbox para Salvar como Fixo */}
-            <label className="flex items-start gap-2.5 rounded-xl bg-white/90 border border-blue-200 p-2.5 cursor-pointer select-none hover:bg-white transition">
-              <input
-                id="checkbox-save-as-fixed-motoboy"
-                type="checkbox"
-                checked={saveAsFixed}
-                onChange={(e) => setSaveAsFixed(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-              <div className="text-xs text-slate-800 leading-tight">
-                <span className="font-bold flex items-center gap-1">
-                  <BookmarkCheck className="h-3.5 w-3.5 text-blue-600" />
-                  Salvar este novo número como Motoboy Fixo?
+              {/* Divisor Visual */}
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-3 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
+                  OU ENVIAR PARA OUTRO
                 </span>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Atualiza automaticamente o cadastro padrão da loja nas configurações.
-                </p>
+                <div className="flex-grow border-t border-slate-200"></div>
               </div>
-            </label>
 
-            {/* Botão de Envio para Substituto */}
-            <button
-              type="button"
-              id="btn-send-substitute-motoboy"
-              onClick={handleSendSubstitute}
-              disabled={!isSubstituteValid || isSaving}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed active:scale-[0.99] text-white py-3 px-4 text-sm font-black shadow-md shadow-blue-600/20 transition cursor-pointer"
-            >
-              <Send className="h-4 w-4" />
-              <span>
-                {isSaving ? "Salvando configurações..." : "🛵 Enviar para o Entregador Substituto"}
-              </span>
-            </button>
-          </div>
+              {/* OPÇÃO 2: Entregador Substituto (Quebra-Galho) */}
+              <div className="rounded-2xl border-2 border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
+                    <Smartphone className="h-4 w-4 text-blue-600" />
+                    <span>2. Entregador Substituto (Quebra-Galho)</span>
+                  </span>
+                  <span className="rounded-full bg-blue-200/80 text-blue-900 px-2 py-0.5 text-[10px] font-extrabold uppercase">
+                    Troca Rápida
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nome do Substituto (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={substituteName}
+                      onChange={(e) => setSubstituteName(e.target.value)}
+                      placeholder="Ex: Rafael"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-blue-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      📱 WhatsApp (com DDD)
+                    </label>
+                    <input
+                      id="input-substitute-motoboy"
+                      type="tel"
+                      value={substitutePhone}
+                      onChange={(e) => setSubstitutePhone(e.target.value)}
+                      placeholder="Ex: 22999998888"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-600"
+                    />
+                  </div>
+                </div>
+
+                {/* Checkbox para Salvar como Fixo */}
+                <label className="flex items-start gap-2.5 rounded-xl bg-white/90 border border-blue-200 p-2.5 cursor-pointer select-none hover:bg-white transition">
+                  <input
+                    id="checkbox-save-as-fixed-motoboy"
+                    type="checkbox"
+                    checked={saveAsFixed}
+                    onChange={(e) => setSaveAsFixed(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div className="text-xs text-slate-800 leading-tight">
+                    <span className="font-bold flex items-center gap-1">
+                      <BookmarkCheck className="h-3.5 w-3.5 text-blue-600" />
+                      Salvar este novo número como Motoboy Fixo?
+                    </span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Substitui o cadastro permanente da loja nas configurações.
+                    </p>
+                  </div>
+                </label>
+
+                {/* Botão de Envio para Substituto */}
+                <button
+                  type="button"
+                  id="btn-send-substitute-motoboy"
+                  onClick={handleSendSubstitute}
+                  disabled={!isSubstituteValid || isSaving}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed active:scale-[0.99] text-white py-2.5 px-4 text-xs sm:text-sm font-black shadow-md shadow-blue-600/20 transition cursor-pointer"
+                >
+                  <Send className="h-4 w-4" />
+                  <span>
+                    {isSaving ? "Salvando configurações..." : "🛵 Enviar para o Entregador Substituto"}
+                  </span>
+                </button>
+              </div>
+            </>
+          ) : (
+            /* Se NÃO HOUVER motoboy fixo cadastrado: foca na opção de sobressalente/avulso e cadastro como fixo */
+            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/70 p-4 space-y-3.5">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                  <Bike className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wide">
+                    Enviar para Motoboy Sobressalente / Avulso
+                  </h4>
+                  <p className="text-[11px] text-amber-800">
+                    Sua loja ainda não tem um entregador fixo. Preencha os dados abaixo para despachar o pedido.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Nome do Entregador (Opcional)
+                  </label>
+                  <input
+                    id="input-avulso-name"
+                    type="text"
+                    value={substituteName}
+                    onChange={(e) => setSubstituteName(e.target.value)}
+                    placeholder="Ex: Carlos (Entregador)"
+                    className="w-full rounded-xl border-2 border-slate-300 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    📱 Número do WhatsApp do Entregador (com DDD)
+                  </label>
+                  <input
+                    id="input-substitute-motoboy"
+                    type="tel"
+                    value={substitutePhone}
+                    onChange={(e) => setSubstitutePhone(e.target.value)}
+                    placeholder="Ex: (22) 99999-8888 ou 22999998888"
+                    className="w-full rounded-xl border-2 border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-amber-500"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Digite com DDD. O link oficial do WhatsApp será aberto com todos os itens e localização GPS.
+                  </p>
+                </div>
+
+                {/* Checkbox para Salvar como Fixo (Default: true) */}
+                <label className="flex items-start gap-2.5 rounded-xl bg-white border-2 border-amber-300 p-3 cursor-pointer select-none hover:bg-amber-50/40 transition">
+                  <input
+                    id="checkbox-save-as-fixed-motoboy"
+                    type="checkbox"
+                    checked={saveAsFixed}
+                    onChange={(e) => setSaveAsFixed(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <div className="text-xs text-slate-900 leading-tight">
+                    <span className="font-black text-amber-950 flex items-center gap-1">
+                      <BookmarkCheck className="h-4 w-4 text-emerald-600" />
+                      Cadastrar este entregador como Motoboy Fixo da loja?
+                    </span>
+                    <p className="text-[11px] text-slate-600 mt-1">
+                      Recomendado! Os próximos pedidos reconhecerão este motoboy automaticamente para envio com 1 clique direto.
+                    </p>
+                  </div>
+                </label>
+
+                {/* Botão de Envio */}
+                <button
+                  type="button"
+                  id="btn-send-substitute-motoboy"
+                  onClick={handleSendSubstitute}
+                  disabled={!isSubstituteValid || isSaving}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed active:scale-[0.99] text-white py-3.5 px-4 text-sm font-black shadow-md transition cursor-pointer"
+                >
+                  <Send className="h-4 w-4" />
+                  <span>
+                    {isSaving
+                      ? "Salvando no banco de dados..."
+                      : saveAsFixed
+                      ? "🚀 Enviar Pedido e Cadastrar como Fixo"
+                      : "🚀 Enviar Pedido para o Entregador"}
+                  </span>
+                </button>
+
+                {/* Opção para apenas cadastrar/salvar no banco de dados sem abrir WhatsApp agora */}
+                <div className="text-center pt-0.5">
+                  <button
+                    type="button"
+                    onClick={handleSaveOnlyAsFixed}
+                    disabled={!isSubstituteValid || isSaving}
+                    className="text-xs text-amber-900 hover:text-amber-950 font-bold underline transition cursor-pointer disabled:opacity-50"
+                  >
+                    💾 Apenas cadastrar como Motoboy Fixo (salvar no banco de dados)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Opção Alternativa: Escolher contato da lista do WhatsApp */}
           <div className="text-center pt-1">

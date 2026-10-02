@@ -79,6 +79,8 @@ export interface Tenant {
   whatsapp: string;
   motoboyPhone?: string;
   motoboy_phone?: string;
+  motoboyName?: string;
+  motoboy_name?: string;
   pixKey: string;
   pixKeyType: "cpf" | "cnpj" | "phone" | "email" | "random";
   deliveryFee: number;

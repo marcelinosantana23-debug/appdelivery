@@ -2205,7 +2205,7 @@ api.get("/tenants/:slugOrId", async (c) => {
   return c.json({ success: true, tenant }, 200);
 });
 
-api.put("/tenants/:slugOrId", async (c) => {
+const handleTenantUpdate = async (c: any) => {
   try {
     const db = getDb(c);
     const slugOrId = c.req.param("slugOrId");
@@ -2231,6 +2231,10 @@ api.put("/tenants/:slugOrId", async (c) => {
     const payload = {
       ...body,
       ...(body.localidade !== undefined ? { localidade: String(body.localidade).trim() } : {}),
+      ...(body.motoboyPhone !== undefined ? { motoboyPhone: String(body.motoboyPhone).trim(), motoboy_phone: String(body.motoboyPhone).trim() } : {}),
+      ...(body.motoboy_phone !== undefined ? { motoboyPhone: String(body.motoboy_phone).trim(), motoboy_phone: String(body.motoboy_phone).trim() } : {}),
+      ...(body.motoboyName !== undefined ? { motoboyName: String(body.motoboyName).trim(), motoboy_name: String(body.motoboyName).trim() } : {}),
+      ...(body.motoboy_name !== undefined ? { motoboyName: String(body.motoboy_name).trim(), motoboy_name: String(body.motoboy_name).trim() } : {}),
     };
 
     const updated = await db.updateTenant(tenant.id, payload);
@@ -2238,7 +2242,10 @@ api.put("/tenants/:slugOrId", async (c) => {
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao atualizar" }, 500);
   }
-});
+};
+
+api.put("/tenants/:slugOrId", handleTenantUpdate);
+api.patch("/tenants/:slugOrId", handleTenantUpdate);
 
 api.patch("/tenants/:slugOrId/status", async (c) => {
   try {
