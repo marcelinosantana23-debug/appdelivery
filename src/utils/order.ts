@@ -89,6 +89,9 @@ export function buildMotoboyWhatsAppMessage(order: Order, config: StoreConfig): 
   const locUrl = order.location_url || order.locationUrl;
   if (locUrl) {
     lines.push(`📍 *Rota do GPS:* ${locUrl}`);
+  } else if (order.address) {
+    const mapsQuery = encodeURIComponent(`${order.address.street}, ${order.address.number}, ${order.address.district}`);
+    lines.push(`📍 *Rota no Google Maps:* https://www.google.com/maps/search/?api=1&query=${mapsQuery}`);
   }
   lines.push("");
   lines.push("*PAGAMENTO / COBRANÇA:*");
@@ -128,10 +131,13 @@ export function buildMotoboyWhatsAppMessage(order: Order, config: StoreConfig): 
 
 export function getMotoboyWhatsAppUrl(order: Order, config: StoreConfig, motoboyPhone?: string): string {
   const text = buildMotoboyWhatsAppMessage(order, config);
-  if (motoboyPhone && motoboyPhone.trim()) {
-    const cleanPhone = motoboyPhone.replace(/\D/g, "");
-    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-    return `https://wa.me/${formattedPhone}?text=${text}`;
+  const targetPhone = (motoboyPhone || config.motoboyPhone || "").trim();
+  if (targetPhone) {
+    const cleanPhone = targetPhone.replace(/\D/g, "");
+    if (cleanPhone) {
+      const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+      return `https://wa.me/${formattedPhone}?text=${text}`;
+    }
   }
   return `https://api.whatsapp.com/send?text=${text}`;
 }

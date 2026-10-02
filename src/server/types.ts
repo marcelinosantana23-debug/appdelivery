@@ -23,6 +23,8 @@ export interface Tenant {
   email: string;
   phone?: string;
   whatsapp: string;
+  motoboyPhone?: string;
+  motoboy_phone?: string;
   pixKey: string;
   pixKeyType: PixKeyType;
   deliveryFee: number;

@@ -16,6 +16,7 @@ import {
   Copy,
   ExternalLink,
   Share2,
+  Bike,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
@@ -51,6 +52,7 @@ export function AdminSettings() {
     name: config.name,
     bannerImage: config.bannerImage || "",
     whatsapp: config.whatsapp,
+    motoboyPhone: config.motoboyPhone || "",
     pixKey: config.pixKey,
     pixKeyType: config.pixKeyType,
     deliveryFee: config.deliveryFee.toString(),
@@ -141,6 +143,7 @@ export function AdminSettings() {
       name: form.name.trim(),
       bannerImage: form.bannerImage,
       whatsapp: form.whatsapp.trim(),
+      motoboyPhone: form.motoboyPhone.trim(),
       pixKey: form.pixKey.trim(),
       pixKeyType: form.pixKeyType,
       deliveryFee: parseFloat(form.deliveryFee) || 0,
@@ -422,6 +425,18 @@ export function AdminSettings() {
               placeholder="5511999999999"
             />
             <p className="mt-1 text-xs text-gray-400">Para onde os pedidos serão enviados.</p>
+          </FormField>
+
+          <FormField label="WhatsApp do Motoboy Fixo (Opcional)" icon={<Bike className="h-4 w-4 text-amber-600" />}>
+            <input
+              value={form.motoboyPhone}
+              onChange={(e) => set("motoboyPhone", e.target.value)}
+              className="form-input"
+              placeholder="Ex: 5522999998888 ou 22999998888"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Número padrão do entregador da loja para envio rápido de rota GPS e itens do pedido pelo card.
+            </p>
           </FormField>
 
           <FormField label="Chave PIX" icon={<QrCode className="h-4 w-4" />}>
