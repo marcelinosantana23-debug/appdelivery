@@ -5,120 +5,181 @@ export type { EstablishmentCategory };
 export const DEFAULT_ESTABLISHMENT_CATEGORIES: EstablishmentCategory[] = [
   { id: "todos", name: "Todos", icon: "🍽️", order: 0 },
   { id: "acaiterias", name: "Açaíterias", icon: "🍧", order: 1 },
-  { id: "lanchonetes", name: "Hambúrgueres", icon: "🍔", order: 2 },
+  { id: "hamburgueres", name: "Hambúrgueres", icon: "🍔", order: 2 },
   { id: "pizzarias", name: "Pizzarias", icon: "🍕", order: 3 },
-  { id: "sorveteiras", name: "Sorveterias", icon: "🍨", order: 4 },
-  { id: "japonesa", name: "Japonesa", icon: "🍣", order: 5 },
-  { id: "salgados", name: "Salgados", icon: "🥟", order: 6 },
-  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 7 },
-  { id: "docerias", name: "Doces", icon: "🍰", order: 8 },
-  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 9 },
-  { id: "distribuidoras", name: "Bebidas", icon: "🍺", order: 10 },
+  { id: "padarias-cafes", name: "Padarias & Cafés", icon: "🥖", order: 4 },
+  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 5 },
+  { id: "japonesa", name: "Japonesa", icon: "🍣", order: 6 },
+  { id: "sorveterias", name: "Sorveterias", icon: "🍨", order: 7 },
+  { id: "pastelarias", name: "Pastelarias", icon: "🥟", order: 8 },
+  { id: "massas-italiana", name: "Massas & Cozinha Italiana", icon: "🍝", order: 9 },
+  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 10 },
+  { id: "doces", name: "Doces", icon: "🍰", order: 11 },
+  { id: "salgados", name: "Salgados", icon: "🥐", order: 12 },
+  { id: "bebidas", name: "Bebidas", icon: "🍺", order: 13 },
+  { id: "poke-saudavel", name: "Poke & Alimentação Saudável", icon: "🥗", order: 14 },
+  { id: "frango-frito", name: "Frango Frito & Porções", icon: "🍗", order: 15 },
+  { id: "hot-dog", name: "Hot Dog & Lanches Rápidos", icon: "🌭", order: 16 },
+  { id: "comida-mineira", name: "Comida Mineira & Feijoada", icon: "🍲", order: 17 },
+  { id: "cozinha-mexicana", name: "Cozinha Mexicana & Tacos", icon: "🌮", order: 18 },
+  { id: "crepes-tapiocas", name: "Crepes, Panquecas & Tapiocas", icon: "🥞", order: 19 },
 ];
 
 export const ESTABLISHMENT_CATEGORIES = DEFAULT_ESTABLISHMENT_CATEGORIES;
 
-export function normalizeCategory(businessType?: string, name?: string, tagline?: string): string {
-  const combined = `${businessType || ""} ${name || ""} ${tagline || ""}`.toLowerCase();
-  if (combined.includes("acai") || combined.includes("açaí")) return "acaiterias";
-  if (combined.includes("burger") || combined.includes("lanche")) return "lanchonetes";
-  if (combined.includes("pizza")) return "pizzarias";
-  if (combined.includes("sorvet") || combined.includes("gelat") || combined.includes("picole")) return "sorveteiras";
-  if (combined.includes("sushi") || combined.includes("japon") || combined.includes("temaki") || combined.includes("yakisoba")) return "japonesa";
-  if (combined.includes("salgado") || combined.includes("coxinha") || combined.includes("pastel") || combined.includes("kibe")) return "salgados";
-  if (combined.includes("marmit") || combined.includes("caseir") || combined.includes("executiv")) return "marmitaria";
-  if (combined.includes("doce") || combined.includes("bolo") || combined.includes("confeit") || combined.includes("torta") || combined.includes("chocolate")) return "docerias";
-  if (combined.includes("churrasc") || combined.includes("brasa") || combined.includes("carvao") || combined.includes("picanha") || combined.includes("costela") || combined.includes("grill")) return "churrascaria";
-  if (combined.includes("bebid") || combined.includes("cervej") || combined.includes("adega") || combined.includes("distribuidor") || combined.includes("vinho")) return "distribuidoras";
-  if (businessType && businessType.trim()) {
-    return businessType.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
-  }
-  return "lanchonetes";
+/**
+ * Converte um nome de categoria em slug semântico para identificação
+ */
+export function slugifyCategory(name: string): string {
+  return (name || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "categoria";
 }
 
 /**
- * Associa com precisão um estabelecimento à sua respectiva Categoria (fixa ou criada dinamicamente)
+ * Retorna o ícone/emoji correspondente com base no nome da categoria
+ */
+export function getCategoryIcon(categoryName: string, existingIcon?: string): string {
+  if (existingIcon && existingIcon.trim()) return existingIcon.trim();
+  const name = (categoryName || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (name.includes("acai")) return "🍧";
+  if (name.includes("dog") || name.includes("hot dog") || name.includes("prensado")) return "🌭";
+  if (name.includes("hamburg") || name.includes("burger") || name.includes("lanche")) return "🍔";
+  if (name.includes("pizza")) return "🍕";
+  if (name.includes("padaria") || name.includes("pao") || name.includes("cafe")) return "🥖";
+  if (name.includes("poke") || name.includes("salada") || name.includes("saudavel")) return "🥗";
+  if (name.includes("frango") || name.includes("balde") || name.includes("crispy")) return "🍗";
+  if (name.includes("dog") || name.includes("prensado")) return "🌭";
+  if (name.includes("sorvet") || name.includes("gelat") || name.includes("picole")) return "🍨";
+  if (name.includes("massa") || name.includes("italian") || name.includes("macarrao") || name.includes("pasta")) return "🍝";
+  if (name.includes("mineir") || name.includes("feijoad") || name.includes("fogao")) return "🍲";
+  if (name.includes("pastel")) return "🥟";
+  if (name.includes("mexican") || name.includes("taco") || name.includes("burrito") || name.includes("nacho")) return "🌮";
+  if (name.includes("japon") || name.includes("sushi") || name.includes("temaki") || name.includes("oriental")) return "🍣";
+  if (name.includes("crepe") || name.includes("tapioca") || name.includes("panqueca")) return "🥞";
+  if (name.includes("salgado") || name.includes("coxinha") || name.includes("kibe") || name.includes("esfirra")) return "🥐";
+  if (name.includes("marmit") || name.includes("caseir") || name.includes("almoco") || name.includes("refeicao")) return "🍱";
+  if (name.includes("doce") || name.includes("bolo") || name.includes("confeit") || name.includes("torta") || name.includes("sobremesa") || name.includes("chocolate")) return "🍰";
+  if (name.includes("churrasc") || name.includes("carne") || name.includes("brasa") || name.includes("espet") || name.includes("picanha") || name.includes("grill")) return "🥩";
+  if (name.includes("bebid") || name.includes("cervej") || name.includes("adega") || name.includes("distribuidor") || name.includes("vinho") || name.includes("chopp")) return "🍺";
+  if (name.includes("peixe") || name.includes("frutos do mar") || name.includes("camarao")) return "🦐";
+  if (name.includes("arabe") || name.includes("kebab") || name.includes("shawarma")) return "🥙";
+  return "🍽️";
+}
+
+/**
+ * Extrai dinamicamente do banco de dados e da lista de lojas ativas
+ * TODAS as categorias únicas atribuídas às lojas, sem categorias fixas
+ */
+export function extractDynamicCategories(
+  tenants: Tenant[],
+  dbCategories: EstablishmentCategory[] = []
+): EstablishmentCategory[] {
+  const map = new Map<string, EstablishmentCategory>();
+
+  // 1. Incorpora categorias já cadastradas no Cloudflare D1 (mantendo ícones e ordenação)
+  (dbCategories || []).forEach((c) => {
+    if (c.id === "todos") return;
+    const nameTrimmed = c.name.trim();
+    if (!nameTrimmed) return;
+    const key = nameTrimmed.toLowerCase();
+    map.set(key, {
+      id: c.id || slugifyCategory(nameTrimmed),
+      name: nameTrimmed,
+      icon: c.icon || getCategoryIcon(nameTrimmed),
+      order: c.order ?? 99,
+    });
+  });
+
+  // 2. Extrai dinamicamente todas as categorias únicas atribuídas às lojas ativas
+  (tenants || []).forEach((tenant) => {
+    if (tenant.status === "inactive") return;
+    const rawName = (tenant.businessType || (tenant as any).category || "").trim();
+    if (!rawName) return;
+
+    const key = rawName.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, {
+        id: slugifyCategory(rawName),
+        name: rawName,
+        icon: getCategoryIcon(rawName),
+        order: 99,
+      });
+    }
+  });
+
+  // 3. Filtra para manter estritamente as categorias que possuem pelo menos 1 loja associada
+  const activeCategoriesList: EstablishmentCategory[] = [];
+  map.forEach((cat) => {
+    const hasStores = (tenants || []).some((t) => {
+      if (t.status === "inactive") return false;
+      const tCat = (t.businessType || (t as any).category || "").trim().toLowerCase();
+      return (
+        tCat === cat.name.toLowerCase() ||
+        tCat === cat.id.toLowerCase() ||
+        slugifyCategory(tCat) === slugifyCategory(cat.name)
+      );
+    });
+
+    if (hasStores) {
+      activeCategoriesList.push(cat);
+    }
+  });
+
+  // 4. Ordena por ordem configurada e por nome
+  activeCategoriesList.sort((a, b) => {
+    if ((a.order ?? 99) !== (b.order ?? 99)) {
+      return (a.order ?? 99) - (b.order ?? 99);
+    }
+    return a.name.localeCompare(b.name, "pt-BR");
+  });
+
+  return activeCategoriesList;
+}
+
+export function normalizeCategory(businessType?: string, name?: string, tagline?: string): string {
+  const combined = `${businessType || ""} ${name || ""} ${tagline || ""}`.toLowerCase();
+  return slugifyCategory(combined.trim() || "lanchonetes");
+}
+
+/**
+ * Associa com precisão um estabelecimento à sua respectiva Categoria real
  */
 export function matchStoreCategory(
   tenant: Tenant,
-  categories: EstablishmentCategory[]
+  categories: EstablishmentCategory[] = []
 ): EstablishmentCategory {
-  const bType = (tenant.businessType || "").trim().toLowerCase();
+  const rawType = (tenant.businessType || (tenant as any).category || "").trim();
+  const bTypeLower = rawType.toLowerCase();
 
-  // 1. Tentar bater exatamente pelo ID ou pelo Nome da categoria
-  if (bType) {
+  // 1. Tentar bater exatamente pelo ID, pelo Nome ou por Slug nas categorias fornecidas
+  if (rawType && categories.length > 0) {
     const directMatch = categories.find(
       (c) =>
-        c.id.toLowerCase() === bType ||
-        c.name.toLowerCase() === bType ||
-        c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === bType.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        c.id.toLowerCase() === bTypeLower ||
+        c.name.toLowerCase() === bTypeLower ||
+        slugifyCategory(c.name) === slugifyCategory(rawType) ||
+        slugifyCategory(c.id) === slugifyCategory(rawType)
     );
     if (directMatch) return directMatch;
   }
 
-  // 2. Tentar bater por correspondência de texto de categorias cadastradas
-  for (const cat of categories) {
-    if (cat.id === "todos") continue;
-    const catNameLower = cat.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const searchPool = `${tenant.businessType || ""} ${tenant.name || ""} ${tenant.tagline || ""}`
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-    if (searchPool.includes(catNameLower)) {
-      return cat;
-    }
+  // 2. Se a categoria da loja existir, retorna ela com seu ícone dinâmico sem rebaixar para salgados/lanchonetes
+  if (rawType) {
+    return {
+      id: slugifyCategory(rawType),
+      name: rawType,
+      icon: getCategoryIcon(rawType),
+      order: 99,
+    };
   }
 
-  // 3. Fallbacks comuns para os 10 tipos padrão
-  const pool = `${tenant.businessType || ""} ${tenant.name || ""} ${tenant.tagline || ""}`.toLowerCase();
-  if (pool.includes("acai") || pool.includes("açaí")) {
-    const a = categories.find((c) => c.name.toLowerCase().includes("açaí") || c.name.toLowerCase().includes("acai") || c.id.includes("acai"));
-    if (a) return a;
-  }
-  if (pool.includes("sushi") || pool.includes("japon") || pool.includes("temaki") || pool.includes("sashimi") || pool.includes("yakisoba")) {
-    const j = categories.find((c) => c.name.toLowerCase().includes("japon") || c.id.includes("japon"));
-    if (j) return j;
-  }
-  if (pool.includes("salgado") || pool.includes("coxinha") || pool.includes("pastel") || pool.includes("kibe") || pool.includes("empada")) {
-    const sal = categories.find((c) => c.name.toLowerCase().includes("salgado") || c.id.includes("salgado"));
-    if (sal) return sal;
-  }
-  if (pool.includes("marmit") || pool.includes("caseir") || pool.includes("almoço")) {
-    const m = categories.find((c) => c.name.toLowerCase().includes("marmit") || c.id.includes("marmit"));
-    if (m) return m;
-  }
-  if (pool.includes("doce") || pool.includes("bolo") || pool.includes("confeit") || pool.includes("torta") || pool.includes("brigadeiro")) {
-    const d = categories.find((c) => c.name.toLowerCase().includes("doce") || c.id.includes("doce"));
-    if (d) return d;
-  }
-  if (pool.includes("churrasc") || pool.includes("brasa") || pool.includes("carvao") || pool.includes("picanha") || pool.includes("costela") || pool.includes("grill")) {
-    const ch = categories.find((c) => c.name.toLowerCase().includes("churrasc") || c.id.includes("churrasc") || c.id.includes("restauran"));
-    if (ch) return ch;
-  }
-  if (pool.includes("bebid") || pool.includes("cervej") || pool.includes("adega") || pool.includes("distribuidor") || pool.includes("vinho") || pool.includes("refrigerante")) {
-    const beb = categories.find((c) => c.name.toLowerCase().includes("bebid") || c.id.includes("distribuidor") || c.id.includes("bebid"));
-    if (beb) return beb;
-  }
-  if (pool.includes("sorvet") || pool.includes("gelat") || pool.includes("picole")) {
-    const s = categories.find((c) => c.name.toLowerCase().includes("sorvet") || c.id.includes("sorvet"));
-    if (s) return s;
-  }
-  if (pool.includes("pizza")) {
-    const p = categories.find((c) => c.name.toLowerCase().includes("pizza") || c.id.includes("pizza"));
-    if (p) return p;
-  }
-  if (pool.includes("burger") || pool.includes("hamburguer") || pool.includes("lanche") || pool.includes("batata")) {
-    const l = categories.find((c) => c.name.toLowerCase().includes("lancho") || c.name.toLowerCase().includes("hamburg") || c.id.includes("lancho"));
-    if (l) return l;
-  }
-
-  // 4. Default: Lanchonete ou primeira disponível
-  const lanchonete = categories.find((c) => c.name.toLowerCase().includes("lancho") || c.name.toLowerCase().includes("hamburg") || c.id.includes("lancho"));
-  if (lanchonete) return lanchonete;
-
-  const firstValid = categories.find((c) => c.id !== "todos");
-  return firstValid || { id: "lanchonetes", name: "Hambúrgueres", icon: "🍔", order: 2 };
+  // 3. Fallback genérico se a loja não tiver categoria preenchida
+  return { id: "lanchonetes", name: "Hambúrgueres", icon: "🍔", order: 2 };
 }
 
 /**

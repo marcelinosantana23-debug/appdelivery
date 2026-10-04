@@ -49,12 +49,17 @@ export function LocalitySelector({
     setIsOpen(false);
   };
 
-  // Garante que a lista de localidades esteja atualizada
-  const displayLocalities = localities && localities.length > 0
+  // Garante que a lista de localidades esteja atualizada e inclua opção global
+  const rawList = localities && localities.length > 0
     ? localities
     : ["Gargaú", "Barra do Itabapoana", "São Francisco (Centro)"];
 
-  const currentDisplay = staticLabel?.trim() || selectedLocality || displayLocalities[0] || "Gargaú";
+  const displayLocalities = [
+    "Todas as Localidades",
+    ...rawList.filter((l) => l !== "Todas as Localidades"),
+  ];
+
+  const currentDisplay = staticLabel?.trim() || selectedLocality || "Todas as Localidades";
 
   // 1. COMPORTAMENTO ESTÁTICO (Vitrine da Loja):
   // Exibe estaticamente a localidade da loja sem seta (▾) e sem evento de clique

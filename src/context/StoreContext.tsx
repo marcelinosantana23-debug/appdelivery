@@ -799,7 +799,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
-    return "Gargaú";
+    return "Todas as Localidades";
   });
 
   const setSelectedLocality = useCallback((loc: string) => {

@@ -2,7 +2,12 @@ import { useState, useMemo } from "react";
 import { useStore } from "@/context/StoreContext";
 import { PortalHeader } from "./PortalHeader";
 import { EstablishmentCategories } from "./EstablishmentCategories";
-import { DEFAULT_ESTABLISHMENT_CATEGORIES, matchStoreCategory, matchStoreSearch } from "./portalUtils";
+import {
+  matchStoreCategory,
+  matchStoreSearch,
+  extractDynamicCategories,
+  slugifyCategory,
+} from "./portalUtils";
 import { FeaturedStoresCarousel } from "./FeaturedStoresCarousel";
 import { TopSellingProductsCarousel } from "./TopSellingProductsCarousel";
 import { CategoryStoreSection } from "./CategoryStoreSection";
@@ -39,9 +44,19 @@ export function TopFoodPortal({
     const raw = (tenants || []).filter((t) => t.status !== "inactive");
 
     const targetLoc = (selectedLocality || "").trim().toLowerCase();
-    const filteredByLocality = targetLoc
-      ? raw.filter((t) => (t.localidade || "Gargaú").trim().toLowerCase() === targetLoc)
-      : raw;
+    const isAll =
+      !targetLoc ||
+      targetLoc === "todas" ||
+      targetLoc === "todas as localidades" ||
+      targetLoc === "todas as regiões" ||
+      targetLoc === "todos";
+
+    const filteredByLocality = isAll
+      ? raw
+      : raw.filter((t) => {
+          const tLoc = (t.localidade || "").trim().toLowerCase();
+          return !tLoc || tLoc === "undefined" || tLoc === targetLoc;
+        });
 
     return filteredByLocality.sort((a, b) => {
       const aFeat = a.isFeatured ? 1 : 0;
@@ -57,25 +72,28 @@ export function TopFoodPortal({
   // Exibe skeleton screens leves apenas no primeiro acesso do usuário (quando o cache local estiver vazio)
   const isFirstLoad = (isLoadingTenants || isLoadingPortal) && activeTenants.length === 0;
 
-  // Lista consolidada de categorias cadastradas no Cloudflare D1
-  const allCategories = useMemo<EstablishmentCategory[]>(() => {
-    const fromDb = establishmentCategories || [];
-    const base = fromDb.length > 0 ? [...fromDb] : DEFAULT_ESTABLISHMENT_CATEGORIES.filter((c) => c.id !== "todos");
-    return [...base].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-  }, [establishmentCategories]);
+  // 1. Extração dinâmica de TODAS as categorias únicas atribuídas às lojas ativas no banco de dados (D1 / KV)
+  const dynamicCategories = useMemo<EstablishmentCategory[]>(() => {
+    return extractDynamicCategories(activeTenants, establishmentCategories || []);
+  }, [activeTenants, establishmentCategories]);
 
   // Agrupamento de estabelecimentos por categoria ativa
   const groupedTenants = useMemo(() => {
     const groups: { category: EstablishmentCategory; stores: Tenant[] }[] = [];
 
-    allCategories.forEach((cat) => {
+    dynamicCategories.forEach((cat) => {
       const storesInCat = activeTenants.filter((tenant) => {
-        const matched = matchStoreCategory(tenant, allCategories);
-        if (matched.id !== cat.id) return false;
+        const matched = matchStoreCategory(tenant, dynamicCategories);
+        const matchesCategory =
+          matched.id.toLowerCase() === cat.id.toLowerCase() ||
+          matched.name.toLowerCase() === cat.name.toLowerCase() ||
+          slugifyCategory(matched.name) === slugifyCategory(cat.name);
+
+        if (!matchesCategory) return false;
 
         // Se houver busca por texto (nome, categoria ou culinária)
         if (searchQuery.trim()) {
-          if (!matchStoreSearch(tenant, searchQuery, allCategories)) return false;
+          if (!matchStoreSearch(tenant, searchQuery, dynamicCategories)) return false;
         }
 
         return true;
@@ -87,22 +105,26 @@ export function TopFoodPortal({
     });
 
     return groups;
-  }, [allCategories, activeTenants, searchQuery]);
+  }, [dynamicCategories, activeTenants, searchQuery]);
 
   // Lojas filtradas pela busca global (nome, categoria ou culinária) e pela categoria ativa
   const matchingStores = useMemo(() => {
     if (!searchQuery.trim()) return [];
     return activeTenants.filter((tenant) => {
-      if (!matchStoreSearch(tenant, searchQuery, allCategories)) return false;
+      if (!matchStoreSearch(tenant, searchQuery, dynamicCategories)) return false;
       if (activeCategory !== "todos") {
-        const cat = matchStoreCategory(tenant, allCategories);
-        if (cat.id !== activeCategory && cat.name.toLowerCase() !== activeCategory.toLowerCase()) {
+        const cat = matchStoreCategory(tenant, dynamicCategories);
+        const matchesCat =
+          cat.id.toLowerCase() === activeCategory.toLowerCase() ||
+          cat.name.toLowerCase() === activeCategory.toLowerCase() ||
+          slugifyCategory(cat.name) === slugifyCategory(activeCategory);
+        if (!matchesCat) {
           return false;
         }
       }
       return true;
     });
-  }, [activeTenants, searchQuery, allCategories, activeCategory]);
+  }, [activeTenants, searchQuery, dynamicCategories, activeCategory]);
 
   // Filtra as categorias exibidas caso o usuário tenha clicado em uma categoria específica no topo
   const displayedGroups = useMemo(() => {
@@ -111,8 +133,9 @@ export function TopFoodPortal({
     }
     return groupedTenants.filter(
       (g) =>
-        g.category.id === activeCategory ||
-        g.category.name.toLowerCase() === activeCategory.toLowerCase()
+        g.category.id.toLowerCase() === activeCategory.toLowerCase() ||
+        g.category.name.toLowerCase() === activeCategory.toLowerCase() ||
+        slugifyCategory(g.category.name) === slugifyCategory(activeCategory)
     );
   }, [groupedTenants, activeCategory]);
 
@@ -139,6 +162,7 @@ export function TopFoodPortal({
         activeCategory={activeCategory}
         onSelectCategory={setActiveCategory}
         tenants={activeTenants}
+        customCategories={dynamicCategories}
       />
 
       {/* Conteúdo Principal do Marketplace */}
@@ -191,7 +215,7 @@ export function TopFoodPortal({
                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                       {matchingStores.length}{" "}
                       {matchingStores.length === 1 ? "loja encontrada" : "lojas encontradas"} por nome, categoria ou tipo de culinária
-                      {activeCategory !== "todos" && ` na categoria "${allCategories.find((c) => c.id === activeCategory)?.name || activeCategory}"`}
+                      {activeCategory !== "todos" && ` na categoria "${dynamicCategories.find((c) => c.id.toLowerCase() === activeCategory.toLowerCase() || slugifyCategory(c.name) === slugifyCategory(activeCategory))?.name || activeCategory}"`}
                     </p>
                   </div>
                 </div>
@@ -284,7 +308,12 @@ export function TopFoodPortal({
                     {activeCategory === "todos"
                       ? "Estabelecimentos por Categoria"
                       : `Categoria: ${
-                          allCategories.find((c) => c.id === activeCategory)?.name || activeCategory
+                          dynamicCategories.find(
+                            (c) =>
+                              c.id.toLowerCase() === activeCategory.toLowerCase() ||
+                              c.name.toLowerCase() === activeCategory.toLowerCase() ||
+                              slugifyCategory(c.name) === slugifyCategory(activeCategory)
+                          )?.name || activeCategory
                         }`}
                   </span>
                 </h2>

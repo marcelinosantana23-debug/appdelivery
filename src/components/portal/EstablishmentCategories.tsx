@@ -1,7 +1,7 @@
 import { useRef, useEffect, useMemo } from "react";
 import type { Tenant, EstablishmentCategory } from "@/types";
 import { useStore } from "@/context/StoreContext";
-import { DEFAULT_ESTABLISHMENT_CATEGORIES, matchStoreCategory } from "./portalUtils";
+import { extractDynamicCategories, matchStoreCategory, slugifyCategory } from "./portalUtils";
 import { CategoryPillsSkeleton } from "./PortalSkeleton";
 
 interface EstablishmentCategoriesProps {
@@ -20,38 +20,38 @@ export function EstablishmentCategories({
   const scrollRef = useRef<HTMLDivElement>(null);
   const { establishmentCategories: storeCategoriesFromDb, isLoadingTenants } = useStore();
 
-  // Consolida as categorias vindas do banco de dados D1 com fallback padrão
-  const allCategories = useMemo<EstablishmentCategory[]>(() => {
-    const fromDb = customCategories || storeCategoriesFromDb || [];
-    const baseList: EstablishmentCategory[] = fromDb.length > 0 ? [...fromDb] : DEFAULT_ESTABLISHMENT_CATEGORIES.filter(c => c.id !== "todos");
+  // Extrai dinamicamente as categorias únicas reais atribuídas às lojas ativas no banco de dados (D1 / KV)
+  const dynamicCategories = useMemo<EstablishmentCategory[]>(() => {
+    if (customCategories && customCategories.length > 0) {
+      return customCategories;
+    }
+    return extractDynamicCategories(tenants, storeCategoriesFromDb || []);
+  }, [customCategories, tenants, storeCategoriesFromDb]);
 
-    // Garante que "todos" esteja sempre no início
-    const sorted = [...baseList].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+  const allCategories = useMemo<EstablishmentCategory[]>(() => {
     return [
       { id: "todos", name: "Todos", icon: "🍽️", order: -1 },
-      ...sorted.filter(c => c.id !== "todos"),
+      ...dynamicCategories.filter((c) => c.id !== "todos"),
     ];
-  }, [customCategories, storeCategoriesFromDb]);
+  }, [dynamicCategories]);
 
-  // Calcula a quantidade de lojas em cada categoria usando matchStoreCategory
+  // Calcula a quantidade real de lojas em cada categoria usando a correspondência dinâmica
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { todos: tenants.length };
 
-    allCategories.forEach((cat) => {
-      if (cat.id !== "todos") {
-        counts[cat.id] = 0;
-      }
+    dynamicCategories.forEach((cat) => {
+      counts[cat.id] = 0;
     });
 
     tenants.forEach((tenant) => {
-      const matched = matchStoreCategory(tenant, allCategories);
+      const matched = matchStoreCategory(tenant, dynamicCategories);
       if (matched && matched.id !== "todos") {
         counts[matched.id] = (counts[matched.id] || 0) + 1;
       }
     });
 
     return counts;
-  }, [allCategories, tenants]);
+  }, [dynamicCategories, tenants]);
 
   // Filtra para exibir apenas categorias que possuem pelo menos 1 loja ativa (mais a opção "Todos")
   const visibleCategories = useMemo(() => {
@@ -92,7 +92,10 @@ export function EstablishmentCategories({
         ) : (
           visibleCategories.map((cat) => {
             const count = categoryCounts[cat.id] ?? 0;
-            const isActive = activeCategory === cat.id;
+            const isActive =
+              activeCategory === cat.id ||
+              activeCategory.toLowerCase() === cat.name.toLowerCase() ||
+              slugifyCategory(activeCategory) === slugifyCategory(cat.name);
 
             return (
               <button
