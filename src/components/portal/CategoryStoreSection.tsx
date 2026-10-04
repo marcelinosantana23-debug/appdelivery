@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
+import { ChevronUp, ChevronDown, ArrowRight } from "lucide-react";
 import type { Tenant, EstablishmentCategory } from "@/types";
 import { StoreCard } from "./StoreCard";
 
@@ -18,7 +18,7 @@ export function CategoryStoreSection({
   onFilterByCategory,
   isFocused = false,
 }: CategoryStoreSectionProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const verticalScrollRef = useRef<HTMLDivElement>(null);
 
   if (!tenants || tenants.length === 0) return null;
 
@@ -32,88 +32,98 @@ export function CategoryStoreSection({
     return (b.createdAt || 0) - (a.createdAt || 0);
   });
 
-  const scroll = (direction: "left" | "right") => {
-    if (containerRef.current) {
-      const scrollAmount = direction === "left" ? -230 : 230;
-      containerRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+  const scrollVertically = (direction: "up" | "down") => {
+    if (verticalScrollRef.current) {
+      const scrollAmount = direction === "up" ? -240 : 240;
+      verticalScrollRef.current.scrollBy({ top: scrollAmount, behavior: "smooth" });
     }
   };
 
   return (
     <section
       id={`category-section-${category.id}`}
-      className={`mt-7 rounded-2xl transition-all ${
+      className={`flex flex-col shrink-0 snap-start rounded-2xl border bg-white dark:bg-slate-900/95 p-3.5 sm:p-4 shadow-xs transition-all ${
         isFocused
-          ? "ring-2 ring-primary/20 bg-primary/5 dark:bg-primary/10 p-3 sm:p-4"
-          : ""
+          ? "w-full sm:w-[340px] md:w-[360px] ring-2 ring-primary/30 border-primary/40 bg-primary/5 dark:bg-primary/10"
+          : "w-[285px] xs:w-[300px] sm:w-[320px] border-gray-200/80 dark:border-slate-800 hover:border-gray-300 dark:hover:border-slate-700"
       }`}
     >
-      {/* Cabeçalho da Categoria */}
-      <div className="flex items-center justify-between px-1 sm:px-0 mb-3">
+      {/* Cabeçalho Fixo do Bloco de Categoria */}
+      <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-gray-100 dark:border-slate-800/80 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-xl border border-amber-500/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-xl border border-amber-500/20">
             <span>{category.icon || "🍽️"}</span>
           </div>
           <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-extrabold text-gray-900 dark:text-white tracking-tight flex items-center gap-2 truncate">
-              <span>{category.name}</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300">
-                {tenants.length} {tenants.length === 1 ? "loja" : "lojas"}
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white tracking-tight truncate">
+                {category.name}
+              </h3>
+              <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300">
+                {sortedTenants.length} {sortedTenants.length === 1 ? "loja" : "lojas"}
               </span>
-            </h2>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 hidden sm:block truncate">
-              Opções artesanais e especializadas em {category.name.toLowerCase()}
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+              {sortedTenants.length > 1
+                ? "Role para cima/baixo para ver todas"
+                : `Especialista em ${category.name.toLowerCase()}`}
             </p>
           </div>
         </div>
 
-        {/* Controles de Navegação e Atalho */}
-        <div className="flex items-center gap-2 shrink-0">
-          {onFilterByCategory && (
+        {/* Controles Verticais e Filtro da Categoria */}
+        <div className="flex items-center gap-1 shrink-0">
+          {sortedTenants.length > 1 && (
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => scrollVertically("up")}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                aria-label={`Rolar ${category.name} para cima`}
+                title="Rolar lojas para cima"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollVertically("down")}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                aria-label={`Rolar ${category.name} para baixo`}
+                title="Rolar lojas para baixo"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {onFilterByCategory && !isFocused && (
             <button
               type="button"
               onClick={() => onFilterByCategory(category.id)}
-              className="text-xs font-semibold text-primary hover:text-primary-dark flex items-center gap-1 transition px-2 py-1 rounded-lg hover:bg-primary/10 cursor-pointer"
+              className="text-[11px] font-bold text-primary hover:text-primary-dark flex items-center gap-0.5 transition px-2 py-1 rounded-lg hover:bg-primary/10 cursor-pointer"
+              title={`Focar na categoria ${category.name}`}
             >
-              <span>Ver mais</span>
-              <ArrowRight className="h-3.5 w-3.5" />
+              <span>Focar</span>
+              <ArrowRight className="h-3 w-3" />
             </button>
           )}
-
-          {/* Setas de rolagem para desktop */}
-          <div className="hidden sm:flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => scroll("left")}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 shadow-2xs transition cursor-pointer"
-              aria-label={`Rolar ${category.name} para a esquerda`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => scroll("right")}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 shadow-2xs transition cursor-pointer"
-              aria-label={`Rolar ${category.name} para a direita`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Carrossel Horizontal de Lojas */}
+      {/* EIXO VERTICAL INTERNO: Container de Rolagem Vertical Dedicada por Categoria */}
       <div
-        ref={containerRef}
-        className="flex gap-3.5 overflow-x-auto overflow-y-hidden pb-2.5 px-1 sm:px-0 scrollbar-none snap-x overscroll-x-contain"
+        ref={verticalScrollRef}
+        className="flex flex-col gap-3 max-h-[480px] overflow-y-auto overflow-x-hidden pr-0.5 pb-1 scrollbar-none snap-y overscroll-y-contain"
       >
         {sortedTenants.map((store) => (
-          <StoreCard
-            key={store.id || store.slug}
-            tenant={store}
-            variant="carousel"
-            onSelectStore={onSelectStore}
-          />
+          <div key={store.id || store.slug} className="snap-start shrink-0 w-full">
+            <StoreCard
+              tenant={store}
+              variant="carousel"
+              fullWidth={true}
+              onSelectStore={onSelectStore}
+            />
+          </div>
         ))}
       </div>
     </section>

@@ -88,52 +88,35 @@ export function PortalCarouselSkeleton({
 }
 
 /**
- * Skeleton para listagem de seções de categorias de lojas
+ * Skeleton para listagem de seções de categorias de lojas (Carrossel Multi-Eixo)
  */
 export function PortalStoreListSkeleton() {
   return (
-    <div className="space-y-8 mt-6">
-      {/* Skeleton Categoria 1 */}
-      <div className="rounded-2xl border border-gray-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-900/40 p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 animate-pulse flex items-center justify-center text-lg">
-              🍔
+    <div className="flex items-start gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none">
+      {Array.from({ length: 3 }).map((_, colIdx) => (
+        <div
+          key={colIdx}
+          className="flex flex-col shrink-0 w-[285px] sm:w-[320px] rounded-2xl border border-gray-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-900/40 p-3.5 sm:p-4"
+        >
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100 dark:border-slate-800/80">
+            <div className="flex items-center gap-2.5">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 animate-pulse flex items-center justify-center text-lg">
+                {colIdx === 0 ? "🍔" : colIdx === 1 ? "🍕" : "🍧"}
+              </div>
+              <div className="space-y-1.5">
+                <div className="h-4 w-28 bg-gray-300 dark:bg-slate-700 rounded animate-pulse" />
+                <div className="h-3 w-20 bg-gray-200 dark:bg-slate-800 rounded animate-pulse" />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <div className="h-4 w-32 bg-gray-300 dark:bg-slate-700 rounded animate-pulse" />
-              <div className="h-3 w-20 bg-gray-200 dark:bg-slate-800 rounded animate-pulse" />
-            </div>
+            <div className="h-4 w-12 bg-gray-200 dark:bg-slate-800 rounded-full animate-pulse" />
           </div>
-          <div className="h-3 w-16 bg-gray-200 dark:bg-slate-800 rounded animate-pulse" />
-        </div>
-        <div className="no-scrollbar flex gap-3.5 overflow-x-auto pb-2 scrollbar-none">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <StoreCardSkeleton key={i} variant="carousel" />
-          ))}
-        </div>
-      </div>
-
-      {/* Skeleton Categoria 2 */}
-      <div className="rounded-2xl border border-gray-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-900/40 p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 animate-pulse flex items-center justify-center text-lg">
-              🍕
-            </div>
-            <div className="space-y-1.5">
-              <div className="h-4 w-28 bg-gray-300 dark:bg-slate-700 rounded animate-pulse" />
-              <div className="h-3 w-20 bg-gray-200 dark:bg-slate-800 rounded animate-pulse" />
-            </div>
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 2 }).map((__, i) => (
+              <StoreCardSkeleton key={i} variant="grid" />
+            ))}
           </div>
-          <div className="h-3 w-16 bg-gray-200 dark:bg-slate-800 rounded animate-pulse" />
         </div>
-        <div className="no-scrollbar flex gap-3.5 overflow-x-auto pb-2 scrollbar-none">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <StoreCardSkeleton key={i} variant="carousel" />
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }

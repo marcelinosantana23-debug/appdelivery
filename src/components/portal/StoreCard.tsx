@@ -10,9 +10,16 @@ interface StoreCardProps {
   onSelectStore: (slug: string) => void;
   variant?: "carousel" | "grid";
   rank?: number;
+  fullWidth?: boolean;
 }
 
-export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: StoreCardProps) {
+export function StoreCard({
+  tenant,
+  onSelectStore,
+  variant = "grid",
+  rank,
+  fullWidth = false,
+}: StoreCardProps) {
   const { establishmentCategories, getStoreActiveStories, openStoreStoriesModal } = useStore();
   const allCategories = establishmentCategories && establishmentCategories.length > 0
     ? establishmentCategories
@@ -45,7 +52,9 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
       <div
         id={`store-card-carousel-${tenant.slug}`}
         onClick={handleCardClick}
-        className={`group relative flex w-[210px] sm:w-[220px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${
+        className={`group relative flex ${
+          fullWidth ? "w-full" : "w-[210px] sm:w-[220px]"
+        } shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${
           tenant.isFeatured
             ? "border-amber-400/60 dark:border-amber-500/40 shadow-amber-500/5 ring-1 ring-amber-500/20"
             : "border-gray-200/80 dark:border-slate-800"

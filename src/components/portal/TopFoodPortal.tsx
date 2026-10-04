@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useStore } from "@/context/StoreContext";
 import { PortalHeader } from "./PortalHeader";
 import { EstablishmentCategories } from "./EstablishmentCategories";
@@ -16,7 +16,7 @@ import { StoreCard } from "./StoreCard";
 import { PortalStoriesBar } from "./PortalStoriesBar";
 import { PortalCarouselSkeleton, PortalStoreListSkeleton } from "./PortalSkeleton";
 import type { EstablishmentCategory, Tenant } from "@/types";
-import { Store, SearchX, Search, X } from "lucide-react";
+import { Store, SearchX, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 
 interface TopFoodPortalProps {
@@ -197,6 +197,16 @@ export function TopFoodPortal({
   // Contador geral dinâmico de lojas parceiras cadastradas no sistema
   const partnerStoresCount = lojas.length;
 
+  // Referência para rolagem horizontal do carrossel de blocos de categorias
+  const categoriesCarouselRef = useRef<HTMLDivElement>(null);
+
+  const scrollCategoriesCarousel = (direction: "left" | "right") => {
+    if (categoriesCarouselRef.current) {
+      const scrollAmount = direction === "left" ? -336 : 336;
+      categoriesCarouselRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 flex flex-col transition-colors">
       {/* Header Oficial do Portal Top Food */}
@@ -351,14 +361,14 @@ export function TopFoodPortal({
             )}
           </div>
         ) : (
-          /* MODO 2: NAVEGAÇÃO POR CATEGORIAS E VITRINE COMPLETA */
+          /* MODO 2: NAVEGAÇÃO POR CATEGORIAS E CARROSSEL MULTI-EIXO (HORIZONTAL + VERTICAL INTERNO) */
           <>
-            {/* Título Principal da Seção */}
-            <div className="mt-8 mb-4 flex items-center justify-between">
-              <div>
+            {/* Título Principal da Seção + Controles do Carrossel Horizontal de Categorias */}
+            <div className="mt-8 mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-                  <Store className="h-5 w-5 text-primary" />
-                  <span>
+                  <Store className="h-5 w-5 text-primary shrink-0" />
+                  <span className="truncate">
                     {selectedCategory === "todos"
                       ? "Estabelecimentos por Categoria"
                       : `Categoria: ${activeCategoryObj?.name || selectedCategory}`}
@@ -377,6 +387,11 @@ export function TopFoodPortal({
                           ? "loja parceira disponível"
                           : "lojas parceiras disponíveis"
                       } no Top Food`}
+                      {selectedCategory === "todos" && displayedGroups.length > 1 && (
+                        <span className="hidden sm:inline text-gray-400 dark:text-gray-500">
+                          {" "}• Deslize para o lado entre as {displayedGroups.length} categorias
+                        </span>
+                      )}
                       {selectedCategory !== "todos" && (
                         <button
                           type="button"
@@ -390,50 +405,40 @@ export function TopFoodPortal({
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Quando uma categoria específica está selecionada: exibe apenas as lojas dessa categoria; quando "todos", exibe todas as seções por categoria */}
-            {isFirstLoad ? (
-              <PortalStoreListSkeleton />
-            ) : selectedCategory !== "todos" ? (
-              categoryFilteredStores.length > 0 ? (
-                <div className="space-y-6">
-                  {displayedGroups.map((group) => (
-                    <CategoryStoreSection
-                      key={group.category.id}
-                      category={group.category}
-                      tenants={group.stores}
-                      onSelectStore={onSelectStore}
-                      onFilterByCategory={(catId) => setSelectedCategory(catId)}
-                      isFocused={true}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-8 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-xs">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 mb-3">
-                    <SearchX className="h-6 w-6" />
-                  </div>
-                  <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
-                    Nenhum estabelecimento encontrado nesta categoria
-                  </h3>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                    Não encontramos lojas para a categoria selecionada. Clique abaixo para ver todas as lojas e categorias.
-                  </p>
+              {/* Setas de navegação horizontal entre os blocos de categoria */}
+              {!isFirstLoad && displayedGroups.length > 1 && (
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSelectedCategory("todos");
-                    }}
-                    className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-dark transition cursor-pointer"
+                    onClick={() => scrollCategoriesCarousel("left")}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 shadow-2xs transition cursor-pointer"
+                    aria-label="Rolar categorias para a esquerda"
+                    title="Categorias anteriores"
                   >
-                    Ver todas as categorias
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollCategoriesCarousel("right")}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 shadow-2xs transition cursor-pointer"
+                    aria-label="Rolar categorias para a direita"
+                    title="Próximas categorias"
+                  >
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
-              )
+              )}
+            </div>
+
+            {/* CARROSSEL MULTI-EIXO: Eixo Horizontal (Blocos de Categorias) + Eixo Vertical Interno (Lojas da Categoria) */}
+            {isFirstLoad ? (
+              <PortalStoreListSkeleton />
             ) : displayedGroups.length > 0 ? (
-              <div className="space-y-6">
+              <div
+                ref={categoriesCarouselRef}
+                className="flex items-start gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none snap-x snap-mandatory overscroll-x-contain"
+              >
                 {displayedGroups.map((group) => (
                   <CategoryStoreSection
                     key={group.category.id}
@@ -441,7 +446,7 @@ export function TopFoodPortal({
                     tenants={group.stores}
                     onSelectStore={onSelectStore}
                     onFilterByCategory={(catId) => setSelectedCategory(catId)}
-                    isFocused={false}
+                    isFocused={selectedCategory !== "todos"}
                   />
                 ))}
               </div>
@@ -454,7 +459,7 @@ export function TopFoodPortal({
                   Nenhum estabelecimento encontrado
                 </h3>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                  Não encontramos lojas correspondentes nesta busca. Tente buscar por outros termos ou limpe o filtro de categorias.
+                  Não encontramos lojas correspondentes nesta categoria ou busca. Clique abaixo para ver todas as lojas e categorias.
                 </p>
                 <button
                   type="button"
