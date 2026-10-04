@@ -1,4 +1,4 @@
-import { Clock, MapPin, AlertTriangle, Bike, Sparkles, UtensilsCrossed } from "lucide-react";
+import { Clock, MapPin, AlertTriangle, Bike, Sparkles, UtensilsCrossed, MessageCircle } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
 import { getSafeDisplayName } from "@/utils/storeFormat";
@@ -22,6 +22,20 @@ export function Header(props: HeaderProps = {}) {
   const hasStories = stories.length > 0;
   const latestStory = hasStories ? stories[stories.length - 1] : null;
   const storyPreviewUrl = latestStory?.mediaUrl || (latestStory as any)?.imageUrl;
+
+  // WhatsApp de Atendimento Direto da Loja
+  const rawStorePhone = (config.whatsapp || currentTenant?.whatsapp || "").replace(/\D/g, "");
+  const cleanStorePhone = rawStorePhone
+    ? rawStorePhone.startsWith("55")
+      ? rawStorePhone
+      : `55${rawStorePhone}`
+    : "";
+
+  const storeDisplayName = getSafeDisplayName(config.name, "Burger Town");
+  const storeMessage = encodeURIComponent(
+    `Olá! Tenho uma dúvida sobre o cardápio/pedido na ${storeDisplayName}.`
+  );
+  const whatsappUrl = cleanStorePhone.length >= 8 ? `https://wa.me/${cleanStorePhone}?text=${storeMessage}` : null;
 
   return (
     <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
@@ -121,80 +135,98 @@ export function Header(props: HeaderProps = {}) {
 
       {/* 2. INFORMAÇÕES DA LANCHONETE (Perfil estilo Delivery com avatar sobreposto) */}
       <div className="relative mx-auto max-w-2xl px-4 sm:px-6 pb-4">
-        <div className="relative flex items-end gap-3.5 sm:gap-4">
-          {/* Logo / Foto de Perfil da Loja (com preview do story mais recente se houver stories ativos) */}
-          <div className="relative z-10 -mt-10 sm:-mt-12 shrink-0">
-            <div
-              onClick={() => {
-                if (hasStories) {
-                  openStoreStoriesModal(config, stories);
-                }
-              }}
-              className={`group relative flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center overflow-hidden rounded-2xl text-4xl sm:text-5xl shadow-xl transition-transform ${
-                hasStories
-                  ? "p-[3px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400 cursor-pointer hover:scale-105 active:scale-95"
-                  : "border-4 border-white dark:border-slate-900 bg-white dark:bg-slate-800"
-              }`}
-              title={hasStories ? "Toque para ver Stories da loja" : config.name}
-            >
-              <div className="relative h-full w-full overflow-hidden rounded-[13px] bg-slate-950 flex items-center justify-center">
-                {hasStories && storyPreviewUrl ? (
-                  <>
-                    {/* Imagem do story ativo mais recente como foto de destaque */}
-                    <img
-                      src={storyPreviewUrl}
-                      alt={`Story de ${config.name}`}
-                      className="h-full w-full object-cover object-center group-hover:scale-110 transition-transform duration-300"
-                      loading="eager"
-                    />
-                    {/* Gradiente escuro suave inferior */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
-
-                    {/* Mini avatar com a logo da loja no canto inferior esquerdo */}
-                    <div className="absolute bottom-1 left-1 flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center overflow-hidden rounded-full border border-white dark:border-slate-900 bg-white dark:bg-slate-800 shadow-md">
-                      <StoreLogo
-                        logo={config.logo}
-                        name={config.name}
-                        className="h-full w-full object-cover"
-                        fallbackEmoji="🏪"
+        <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-4">
+          <div className="flex items-end gap-3.5 sm:gap-4 min-w-0 flex-1">
+            {/* Logo / Foto de Perfil da Loja (com preview do story mais recente se houver stories ativos) */}
+            <div className="relative z-10 -mt-10 sm:-mt-12 shrink-0">
+              <div
+                onClick={() => {
+                  if (hasStories) {
+                    openStoreStoriesModal(config, stories);
+                  }
+                }}
+                className={`group relative flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center overflow-hidden rounded-2xl text-4xl sm:text-5xl shadow-xl transition-transform ${
+                  hasStories
+                    ? "p-[3px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400 cursor-pointer hover:scale-105 active:scale-95"
+                    : "border-4 border-white dark:border-slate-900 bg-white dark:bg-slate-800"
+                }`}
+                title={hasStories ? "Toque para ver Stories da loja" : config.name}
+              >
+                <div className="relative h-full w-full overflow-hidden rounded-[13px] bg-slate-950 flex items-center justify-center">
+                  {hasStories && storyPreviewUrl ? (
+                    <>
+                      {/* Imagem do story ativo mais recente como foto de destaque */}
+                      <img
+                        src={storyPreviewUrl}
+                        alt={`Story de ${config.name}`}
+                        className="h-full w-full object-cover object-center group-hover:scale-110 transition-transform duration-300"
+                        loading="eager"
                       />
-                    </div>
-                  </>
-                ) : (
-                  /* Logo / Ícone padrão da loja quando NÃO há stories ativos */
-                  <StoreLogo
-                    logo={config.logo}
-                    name={config.name}
-                    className="h-full w-full object-cover object-center"
-                    fallbackEmoji="🏪"
-                  />
-                )}
+                      {/* Gradiente escuro suave inferior */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+
+                      {/* Mini avatar com a logo da loja no canto inferior esquerdo */}
+                      <div className="absolute bottom-1 left-1 flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center overflow-hidden rounded-full border border-white dark:border-slate-900 bg-white dark:bg-slate-800 shadow-md">
+                        <StoreLogo
+                          logo={config.logo}
+                          name={config.name}
+                          className="h-full w-full object-cover"
+                          fallbackEmoji="🏪"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    /* Logo / Ícone padrão da loja quando NÃO há stories ativos */
+                    <StoreLogo
+                      logo={config.logo}
+                      name={config.name}
+                      className="h-full w-full object-cover object-center"
+                      fallbackEmoji="🏪"
+                    />
+                  )}
+                </div>
               </div>
+
+              {/* Badge indicando Stories Ativos */}
+              {hasStories && (
+                <button
+                  type="button"
+                  onClick={() => openStoreStoriesModal(config, stories)}
+                  className="absolute -bottom-2 inset-x-0 mx-auto w-max z-20 flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-500 px-2 py-0.5 text-[10px] font-black text-white shadow-md cursor-pointer hover:scale-105 active:scale-95 transition"
+                >
+                  <span>Story</span>
+                </button>
+              )}
             </div>
 
-            {/* Badge indicando Stories Ativos */}
-            {hasStories && (
-              <button
-                type="button"
-                onClick={() => openStoreStoriesModal(config, stories)}
-                className="absolute -bottom-2 inset-x-0 mx-auto w-max z-20 flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-500 px-2 py-0.5 text-[10px] font-black text-white shadow-md cursor-pointer hover:scale-105 active:scale-95 transition"
-              >
-                <span>Story</span>
-              </button>
-            )}
+            {/* Nome e Tagline da Loja (100% na área clara ao lado da logo, sem encostar na borda do banner) */}
+            <div className="flex-1 min-w-0 pt-3 sm:pt-4 pb-1 sm:pb-2">
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-950 dark:text-white leading-tight break-words sm:truncate drop-shadow-xs">
+                {storeDisplayName}
+              </h1>
+              {config.tagline && !config.tagline.startsWith("data:") && (
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium truncate mt-0.5">
+                  {config.tagline}
+                </p>
+              )}
+            </div>
           </div>
 
-          {/* Nome e Tagline da Loja (100% na área clara ao lado da logo, sem encostar na borda do banner) */}
-          <div className="flex-1 min-w-0 pt-3 sm:pt-4 pb-1 sm:pb-2">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-950 dark:text-white leading-tight break-words sm:truncate drop-shadow-xs">
-              {getSafeDisplayName(config.name, "Burger Town")}
-            </h1>
-            {config.tagline && !config.tagline.startsWith("data:") && (
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium truncate mt-0.5">
-                {config.tagline}
-              </p>
-            )}
-          </div>
+          {/* Botão de Atendimento Direto da Loja ("Fale com a loja aqui") */}
+          {whatsappUrl && (
+            <div className="shrink-0 self-start sm:self-end mt-1 sm:mt-0 mb-1 sm:mb-2">
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-3.5 sm:px-4 py-2 sm:py-2.5 shadow-md shadow-emerald-600/20 hover:shadow-emerald-600/35 transition-all transform hover:-translate-y-0.5 active:scale-95 cursor-pointer border border-emerald-400/30"
+                title={`Falar com ${storeDisplayName} no WhatsApp`}
+              >
+                <MessageCircle className="h-4 w-4 text-emerald-100 shrink-0" />
+                <span className="whitespace-nowrap">Fale com a loja aqui</span>
+              </a>
+            </div>
+          )}
         </div>
 
         {/* Aviso da Loja / Promoção do Dia */}

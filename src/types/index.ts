@@ -132,6 +132,7 @@ export interface PlatformSettings {
   adminPixKey?: string;
   adminPixType?: string;
   adminWhatsapp?: string;
+  partnerWhatsapp?: string;
   defaultMonthlyFee?: number;
   updatedAt?: number;
 }

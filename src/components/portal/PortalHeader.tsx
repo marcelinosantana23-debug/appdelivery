@@ -1,4 +1,4 @@
-import { Search, Sparkles, Store, UtensilsCrossed, ShieldCheck } from "lucide-react";
+import { Search, Sparkles, Store, UtensilsCrossed, ShieldCheck, MessageCircle } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { LocalitySelector } from "@/components/portal/LocalitySelector";
@@ -31,6 +31,18 @@ export function PortalHeader({
     platformSettings?.heroSubtitle?.trim() ||
     "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.";
   const primaryColor = platformSettings?.primaryColor?.trim() || "#E63946";
+
+  // WhatsApp para Cadastro de Lojas/Parceiros
+  const partnerPhoneRaw = (
+    platformSettings?.partnerWhatsapp ||
+    platformSettings?.adminWhatsapp ||
+    "5511999999999"
+  ).replace(/\D/g, "");
+  const cleanPartnerPhone = partnerPhoneRaw.startsWith("55") ? partnerPhoneRaw : `55${partnerPhoneRaw}`;
+  const partnerMessage = encodeURIComponent(
+    "Olá! Vi o Top Food e tenho interesse em cadastrar minha loja na plataforma."
+  );
+  const whatsappPartnerUrl = `https://wa.me/${cleanPartnerPhone}?text=${partnerMessage}`;
 
   return (
     <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
@@ -90,70 +102,86 @@ export function PortalHeader({
 
       {/* 2. INFORMAÇÕES DO PORTAL (Logo com sobreposição 3D sobre o banner e título 100% na área clara) */}
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 pb-6">
-        <div className="relative z-20 flex items-end gap-3.5 sm:gap-5">
-          {/* Logo Oficial ou Ícone do Top Food (TF) - apenas a logo tem sobreposição negativa sobre o banner */}
-          <div
-            id="topfood-portal-logo"
-            className="relative z-20 -mt-12 sm:-mt-16 md:-mt-20 flex h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 shrink-0 items-center justify-center overflow-hidden rounded-3xl border-4 border-white dark:border-slate-900 shadow-2xl select-none bg-slate-950 transition-transform duration-300 hover:scale-105 hover:-translate-y-1"
-            style={{
-              boxShadow: `0 16px 36px -8px ${primaryColor}55, 0 4px 14px rgba(0,0,0,0.3)`,
-            }}
-          >
-            {logoImg ? (
-              <img
-                src={logoImg}
-                alt="Logo Oficial Top Food"
-                className="h-full w-full object-cover object-center"
-                onError={(e) => {
-                  // Fallback se imagem quebrar
-                  e.currentTarget.style.display = "none";
-                  const fallback = document.getElementById("tf-logo-fallback");
-                  if (fallback) fallback.style.display = "flex";
-                }}
-              />
-            ) : null}
+        <div className="relative z-20 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div className="flex items-end gap-3.5 sm:gap-5 min-w-0 flex-1">
+            {/* Logo Oficial ou Ícone do Top Food (TF) - apenas a logo tem sobreposição negativa sobre o banner */}
             <div
-              id="tf-logo-fallback"
-              className={`h-full w-full flex flex-col items-center justify-center text-white ${
-                logoImg ? "hidden" : "flex"
-              }`}
+              id="topfood-portal-logo"
+              className="relative z-20 -mt-12 sm:-mt-16 md:-mt-20 flex h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 shrink-0 items-center justify-center overflow-hidden rounded-3xl border-4 border-white dark:border-slate-900 shadow-2xl select-none bg-slate-950 transition-transform duration-300 hover:scale-105 hover:-translate-y-1"
               style={{
-                backgroundColor: primaryColor,
+                boxShadow: `0 16px 36px -8px ${primaryColor}55, 0 4px 14px rgba(0,0,0,0.3)`,
               }}
             >
-              <div className="text-center font-black leading-none drop-shadow-md select-none">
-                <span className="text-2xl sm:text-3xl md:text-4xl tracking-tighter">TF</span>
-                <span className="block text-[8px] sm:text-[9px] font-extrabold tracking-widest text-amber-200 uppercase mt-0.5">Delivery</span>
+              {logoImg ? (
+                <img
+                  src={logoImg}
+                  alt="Logo Oficial Top Food"
+                  className="h-full w-full object-cover object-center"
+                  onError={(e) => {
+                    // Fallback se imagem quebrar
+                    e.currentTarget.style.display = "none";
+                    const fallback = document.getElementById("tf-logo-fallback");
+                    if (fallback) fallback.style.display = "flex";
+                  }}
+                />
+              ) : null}
+              <div
+                id="tf-logo-fallback"
+                className={`h-full w-full flex flex-col items-center justify-center text-white ${
+                  logoImg ? "hidden" : "flex"
+                }`}
+                style={{
+                  backgroundColor: primaryColor,
+                }}
+              >
+                <div className="text-center font-black leading-none drop-shadow-md select-none">
+                  <span className="text-2xl sm:text-3xl md:text-4xl tracking-tighter">TF</span>
+                  <span className="block text-[8px] sm:text-[9px] font-extrabold tracking-widest text-amber-200 uppercase mt-0.5">Delivery</span>
+                </div>
               </div>
+            </div>
+
+            {/* Nome da Plataforma, Tag Multi-Lojas e Descrição (100% na área clara, com espaçamento seguro) */}
+            <div className="flex-1 min-w-0 pt-3 sm:pt-4 md:pt-5 pb-1 sm:pb-2">
+              {/* a) Nome da Plataforma em grande destaque na área clara */}
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-gray-950 dark:text-white leading-tight">
+                {displayTitle}
+              </h1>
+
+              {/* b) Tag/Badge Multi-Lojas posicionada logo abaixo do nome Top Food */}
+              <div className="mt-1 sm:mt-1.5 flex items-center gap-2">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-0.5 text-[11px] sm:text-xs font-extrabold shadow-xs transition"
+                  style={{
+                    backgroundColor: `${primaryColor}15`,
+                    borderColor: `${primaryColor}40`,
+                    color: primaryColor,
+                  }}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Multi-Lojas
+                </span>
+              </div>
+
+              {/* c) Descrição com espaçamento limpo e elegante */}
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium leading-relaxed mt-1.5 max-w-2xl">
+                {heroSubtitle}
+              </p>
             </div>
           </div>
 
-          {/* Nome da Plataforma, Tag Multi-Lojas e Descrição (100% na área clara, com espaçamento seguro) */}
-          <div className="flex-1 min-w-0 pt-3 sm:pt-4 md:pt-5 pb-1 sm:pb-2">
-            {/* a) Nome da Plataforma em grande destaque na área clara */}
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-gray-950 dark:text-white leading-tight">
-              {displayTitle}
-            </h1>
-
-            {/* b) Tag/Badge Multi-Lojas posicionada logo abaixo do nome Top Food */}
-            <div className="mt-1 sm:mt-1.5 flex items-center gap-2">
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-0.5 text-[11px] sm:text-xs font-extrabold shadow-xs transition"
-                style={{
-                  backgroundColor: `${primaryColor}15`,
-                  borderColor: `${primaryColor}40`,
-                  color: primaryColor,
-                }}
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Multi-Lojas
-              </span>
-            </div>
-
-            {/* c) Descrição com espaçamento limpo e elegante */}
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium leading-relaxed mt-1.5 max-w-2xl">
-              {heroSubtitle}
-            </p>
+          {/* Botão de Atração de Novos Parceiros ("Cadastre sua loja aqui") */}
+          <div className="shrink-0 self-start md:self-end mt-1 md:mt-0 mb-1 sm:mb-2">
+            <a
+              href={whatsappPartnerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 transition-all transform hover:-translate-y-0.5 active:scale-95 cursor-pointer border border-emerald-400/30"
+              title="Cadastre sua loja no Top Food pelo WhatsApp"
+            >
+              <MessageCircle className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-emerald-100 shrink-0" />
+              <span className="whitespace-nowrap">Cadastre sua loja aqui</span>
+            </a>
           </div>
         </div>
 

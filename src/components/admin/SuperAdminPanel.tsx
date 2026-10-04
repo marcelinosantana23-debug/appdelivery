@@ -42,6 +42,7 @@ import {
   Check,
   X,
   ChevronDown,
+  MessageCircle,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { updateTenantApi } from "@/services/api";
@@ -1051,6 +1052,19 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
               )}
             </button>
             <button
+              onClick={() => setViewMode("appearance")}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-xs transition sm:text-sm sm:px-3.5 sm:py-2 ${
+                viewMode === "appearance"
+                  ? "border-emerald-500 bg-emerald-600 text-white shadow-emerald-600/30"
+                  : "border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 hover:text-white"
+              }`}
+              title="Configurações Gerais: WhatsApp de Parceiros e Aparência da Vitrine"
+            >
+              <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-emerald-400" />
+              <span className="hidden sm:inline">WhatsApp Parceiros / Vitrine</span>
+              <span className="sm:hidden">WhatsApp Parceiros</span>
+            </button>
+            <button
               onClick={() => setIsAiImportModalOpen(true)}
               className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 via-purple-600 to-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-purple-600/30 transition hover:brightness-110 active:scale-[0.98] sm:text-sm sm:px-4 sm:py-2"
               title="Cadastro Inteligente por IA (foto ou PDF do cardápio)"
@@ -1330,10 +1344,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition ${
                   viewMode === "appearance" ? "bg-amber-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
                 }`}
-                title="Personalizar logo, banner, título e cor primária da vitrine principal"
+                title="Configurações Gerais da Plataforma: WhatsApp para Cadastro de Lojas e Aparência da Vitrine"
               >
                 <Palette className="h-3.5 w-3.5" />
-                <span>Aparência da Vitrine</span>
+                <span>Configurações & Vitrine</span>
               </button>
             </div>
           </div>

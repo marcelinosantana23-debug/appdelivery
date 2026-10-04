@@ -3375,7 +3375,19 @@ async function handlePutAdminSettings(c: any) {
     }
 
     const db = getDb(c);
-    const { logoUrl, bannerUrl, heroTitle, heroSubtitle, primaryColor, geminiApiKey } = body;
+    const {
+      logoUrl,
+      bannerUrl,
+      heroTitle,
+      heroSubtitle,
+      primaryColor,
+      geminiApiKey,
+      partnerWhatsapp,
+      adminWhatsapp,
+      adminPixKey,
+      adminPixType,
+      defaultMonthlyFee,
+    } = body;
     const updated = await db.updatePlatformSettings({
       logoUrl: logoUrl !== undefined ? String(logoUrl).trim() : undefined,
       bannerUrl: bannerUrl !== undefined ? String(bannerUrl).trim() : undefined,
@@ -3383,6 +3395,11 @@ async function handlePutAdminSettings(c: any) {
       heroSubtitle: heroSubtitle !== undefined ? String(heroSubtitle).trim() : undefined,
       primaryColor: primaryColor !== undefined ? String(primaryColor).trim() : undefined,
       geminiApiKey: geminiApiKey !== undefined ? String(geminiApiKey).trim() : undefined,
+      partnerWhatsapp: partnerWhatsapp !== undefined ? String(partnerWhatsapp).trim() : undefined,
+      adminWhatsapp: adminWhatsapp !== undefined ? String(adminWhatsapp).trim() : undefined,
+      adminPixKey: adminPixKey !== undefined ? String(adminPixKey).trim() : undefined,
+      adminPixType: adminPixType !== undefined ? String(adminPixType).trim() : undefined,
+      defaultMonthlyFee: defaultMonthlyFee !== undefined ? Number(defaultMonthlyFee) : undefined,
     });
 
     const { geminiApiKey: _, ...safeUpdated } = (updated || {}) as any;

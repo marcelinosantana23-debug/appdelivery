@@ -1629,6 +1629,7 @@ export const defaultPlatformSettings: PlatformSettings = {
   adminPixKey: "topfood.financeiro@pix.com",
   adminPixType: "email",
   adminWhatsapp: "5511999999999",
+  partnerWhatsapp: "5511999999999",
   defaultMonthlyFee: 49.9,
   updatedAt: Date.now(),
 };

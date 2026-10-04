@@ -12,6 +12,8 @@ import {
   Trash2,
   Store,
   Layers,
+  MessageCircle,
+  Phone,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import type { PlatformSettings } from "@/types";
@@ -65,6 +67,7 @@ export function AdminVitrineAppearance({ onViewVitrine }: AdminVitrineAppearance
     heroTitle: "Top Food - O Portal do Delivery",
     heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
     primaryColor: "#E63946",
+    partnerWhatsapp: "5511999999999",
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -87,6 +90,7 @@ export function AdminVitrineAppearance({ onViewVitrine }: AdminVitrineAppearance
           platformSettings.heroSubtitle ||
           "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
         primaryColor: platformSettings.primaryColor || "#E63946",
+        partnerWhatsapp: platformSettings.partnerWhatsapp || "5511999999999",
       });
     }
   }, [platformSettings]);
@@ -165,6 +169,7 @@ export function AdminVitrineAppearance({ onViewVitrine }: AdminVitrineAppearance
         heroTitle: "Top Food - O Portal do Delivery",
         heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
         primaryColor: "#E63946",
+        partnerWhatsapp: "5511999999999",
       });
     }
   };
@@ -561,6 +566,59 @@ export function AdminVitrineAppearance({ onViewVitrine }: AdminVitrineAppearance
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* 5. WHATSAPP PARA CADASTRO DE LOJAS / PARCEIROS */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">5. WhatsApp para Cadastro de Lojas/Parceiros</h3>
+              </div>
+              <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                Atração de Novos Lojistas
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1.5">
+                  WhatsApp para Cadastro de Lojas/Parceiros
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-400" />
+                  <input
+                    type="text"
+                    value={form.partnerWhatsapp || ""}
+                    onChange={(e) => setForm((prev) => ({ ...prev, partnerWhatsapp: e.target.value }))}
+                    placeholder="Ex: 5511999999999 ou (11) 99999-9999"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed">
+                  Informe o número de WhatsApp que receberá mensagens quando novos donos de restaurantes e lojistas clicarem no botão <strong className="text-white">"Cadastre sua loja aqui"</strong> no cabeçalho da vitrine principal.
+                </p>
+              </div>
+
+              {form.partnerWhatsapp && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                  <div className="text-[11px] text-slate-300">
+                    <span className="text-slate-400">Mensagem pré-formatada: </span>
+                    <span className="italic text-emerald-300">"Olá! Vi o Top Food e tenho interesse em cadastrar minha loja na plataforma."</span>
+                  </div>
+                  <a
+                    href={`https://wa.me/${form.partnerWhatsapp.replace(/\D/g, "").startsWith("55") ? form.partnerWhatsapp.replace(/\D/g, "") : `55${form.partnerWhatsapp.replace(/\D/g, "")}`}?text=${encodeURIComponent("Olá! Vi o Top Food e tenho interesse em cadastrar minha loja na plataforma.")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 text-[11px] font-semibold transition"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    <span>Testar no WhatsApp</span>
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 

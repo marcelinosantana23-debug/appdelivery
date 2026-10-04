@@ -859,6 +859,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     heroTitle: "Top Food - O Portal do Delivery",
     heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
     primaryColor: "#E63946",
+    partnerWhatsapp: "5511999999999",
     geminiApiKey: typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "",
   });
 
