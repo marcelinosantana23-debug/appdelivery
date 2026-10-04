@@ -19,6 +19,7 @@ import {
   Bike,
   User,
   Phone,
+  AlertTriangle,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
@@ -48,7 +49,7 @@ const PIX_TYPES: { value: PixKeyType; label: string }[] = [
 ];
 
 export function AdminSettings() {
-  const { config, updateConfig, isStoreOpen, toggleStore, orders, showToast } = useStore();
+  const { config, updateConfig, isStoreOpen, toggleStore, orders, showToast, deleteTenant, logout } = useStore();
 
   const [form, setForm] = useState({
     name: config.name,
@@ -59,6 +60,7 @@ export function AdminSettings() {
     pixKey: config.pixKey,
     pixKeyType: config.pixKeyType,
     deliveryFee: config.deliveryFee.toString(),
+    deliveryTime: config.deliveryTime || "30-45 min",
     address: config.address,
     hours: config.hours,
     primaryColor: config.primaryColor,
@@ -74,6 +76,9 @@ export function AdminSettings() {
   const [isProcessingBanner, setIsProcessingBanner] = useState(false);
   const [storiesModalOpen, setStoriesModalOpen] = useState(false);
   const [storiesToPreview, setStoriesToPreview] = useState<StoreStory[]>([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingStore, setIsDeletingStore] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
   // Sincroniza formulário sempre que as configurações do restaurante forem carregadas do banco de dados D1
@@ -87,6 +92,7 @@ export function AdminSettings() {
       pixKey: config.pixKey,
       pixKeyType: config.pixKeyType,
       deliveryFee: config.deliveryFee.toString(),
+      deliveryTime: config.deliveryTime || "30-45 min",
       address: config.address,
       hours: config.hours,
       primaryColor: config.primaryColor,
@@ -104,6 +110,7 @@ export function AdminSettings() {
     config.pixKey,
     config.pixKeyType,
     config.deliveryFee,
+    config.deliveryTime,
     config.address,
     config.hours,
     config.primaryColor,
@@ -192,6 +199,7 @@ export function AdminSettings() {
         pixKey: form.pixKey.trim(),
         pixKeyType: form.pixKeyType,
         deliveryFee: parseFloat(form.deliveryFee) || 0,
+        deliveryTime: form.deliveryTime.trim(),
         address: form.address.trim(),
         hours: form.hours.trim(),
         primaryColor: form.primaryColor,
@@ -206,6 +214,29 @@ export function AdminSettings() {
       showToast(err?.message || "Erro ao salvar configurações", "error");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeletePermanentStore = async () => {
+    const targetIdOrSlug = config.id || config.slug;
+    if (!targetIdOrSlug) return;
+    setIsDeletingStore(true);
+    try {
+      const ok = await deleteTenant(targetIdOrSlug);
+      if (ok) {
+        showToast("Loja excluída definitivamente com sucesso!", "success");
+        logout();
+        setShowDeleteModal(false);
+        setTimeout(() => {
+          window.location.href = "/";
+        }, 300);
+      } else {
+        showToast("Não foi possível excluir a loja.", "error");
+      }
+    } catch (err: any) {
+      showToast(err?.message || "Erro ao excluir loja.", "error");
+    } finally {
+      setIsDeletingStore(false);
     }
   };
 
@@ -599,6 +630,15 @@ export function AdminSettings() {
             />
           </FormField>
 
+          <FormField label="Tempo Estimado de Entrega" icon={<Clock className="h-4 w-4" />}>
+            <input
+              value={form.deliveryTime}
+              onChange={(e) => set("deliveryTime", e.target.value)}
+              className="form-input"
+              placeholder="Ex: 30-45 min"
+            />
+          </FormField>
+
           <FormField label="Endereço do Estabelecimento" icon={<MapPin className="h-4 w-4" />}>
             <input
               value={form.address}
@@ -687,6 +727,28 @@ export function AdminSettings() {
         As alterações são salvas automaticamente no navegador e aplicadas na hora.
       </p>
 
+      {/* Zona de Perigo / Exclusão Permanente da Loja Demonstrativa */}
+      <div className="rounded-2xl border-2 border-red-200 bg-red-50/60 p-5 dark:border-red-900/40 dark:bg-red-950/20">
+        <div className="flex items-center gap-2 mb-2 text-red-600 dark:text-red-400">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <h2 className="text-sm font-bold">Zona de Perigo — Exclusão Definitiva da Loja</h2>
+        </div>
+        <p className="text-xs text-red-700/80 dark:text-red-300/80 mb-4 leading-relaxed">
+          Deseja remover esta loja demonstrativa da plataforma? A exclusão é definitiva: o estabelecimento, categorias, cardápio, produtos, grupos de adicionais e Stories associados serão permanentemente eliminados do banco de dados (Cloudflare D1 / KV / Seed) e nunca mais reaparecerão ao recarregar ou reiniciar.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setDeleteConfirmText("");
+            setShowDeleteModal(true);
+          }}
+          className="flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 text-white px-4 py-3 text-xs font-bold transition shadow-sm cursor-pointer"
+        >
+          <Trash2 className="h-4 w-4" />
+          Excluir Esta Loja Definitivamente
+        </button>
+      </div>
+
       {/* Modal QR Code & Placa de Divulgação */}
       {isQrPlateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
@@ -707,6 +769,74 @@ export function AdminSettings() {
           stories={storiesToPreview}
           tenant={config}
         />
+      )}
+
+      {/* Modal de Confirmação de Exclusão Definitiva */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-gray-100 dark:border-slate-800">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <div className="rounded-full bg-red-100 p-3 dark:bg-red-950/50">
+                <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                  Excluir Loja Definitivamente?
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-300 mb-3 leading-relaxed">
+              Você está prestes a excluir <strong className="text-red-600 dark:text-red-400">{config.name}</strong> e todos os seus produtos, categorias e stories. Digite <strong className="font-mono text-red-600">EXCLUIR</strong> ou o nome da loja para confirmar:
+            </p>
+
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="Digite EXCLUIR para confirmar"
+              className="w-full rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-medium text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-hidden focus:ring-2 focus:ring-red-500 mb-4"
+              autoFocus
+            />
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeletingStore}
+                className="rounded-xl border border-gray-300 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePermanentStore}
+                disabled={
+                  isDeletingStore ||
+                  (deleteConfirmText.trim().toUpperCase() !== "EXCLUIR" &&
+                    deleteConfirmText.trim().toLowerCase() !== config.name.trim().toLowerCase() &&
+                    deleteConfirmText.trim().toLowerCase() !== (config.slug || "").trim().toLowerCase())
+                }
+                className="flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-xs font-bold text-white transition shadow-sm cursor-pointer"
+              >
+                {isDeletingStore ? (
+                  <>
+                    <Save className="h-3.5 w-3.5 animate-spin" />
+                    Excluindo do banco...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Confirmar Exclusão
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

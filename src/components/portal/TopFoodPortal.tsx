@@ -136,19 +136,19 @@ export function TopFoodPortal({
           <>
             {isFirstLoad ? (
               <div className="space-y-6">
-                <PortalCarouselSkeleton title="Lojas em Destaque" badge="⭐ Top Destaques" />
                 <PortalCarouselSkeleton title="Mais Pedidos" badge="🔥 Ranking Geral" icon="🔥" />
+                <PortalCarouselSkeleton title="Lojas em Destaque" badge="⭐ Top Destaques" />
               </div>
             ) : (
               <>
-                {/* Carrossel 1: Lojas em Destaque (ordenado automaticamente pelo histórico de pedidos concluídos no D1) */}
-                <FeaturedStoresCarousel
-                  tenants={activeTenants}
+                {/* Carrossel 1: Mais Pedidos (Ranking Geral de lanches mais vendidos) */}
+                <TopSellingProductsCarousel
                   onSelectStore={onSelectStore}
                 />
 
-                {/* Carrossel 2: Mais Pedidos (diretamente ABAIXO do carrossel de Lojas em Destaque) */}
-                <TopSellingProductsCarousel
+                {/* Carrossel 2: Lojas em Destaque (diretamente ABAIXO de Mais Pedidos) */}
+                <FeaturedStoresCarousel
+                  tenants={activeTenants}
                   onSelectStore={onSelectStore}
                 />
               </>

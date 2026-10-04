@@ -84,6 +84,7 @@ export interface Tenant {
   pixKey: string;
   pixKeyType: "cpf" | "cnpj" | "phone" | "email" | "random";
   deliveryFee: number;
+  deliveryTime?: string;
   address: string;
   hours: string;
   tagline: string;

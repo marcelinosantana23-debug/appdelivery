@@ -172,7 +172,7 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
               </span>
               <span className="flex items-center gap-1 shrink-0">
                 <Clock className="h-3 w-3 text-primary shrink-0" />
-                <span>{tenant.hours?.split("-")[0]?.trim() || "Hoje"}</span>
+                <span>{tenant.deliveryTime || (tenant.hours ? tenant.hours.split("-")[0]?.trim() : "30-45 min")}</span>
               </span>
             </div>
 
@@ -303,7 +303,7 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
         </div>
 
         <div className="mt-3 flex items-center justify-between border-t border-gray-100 dark:border-slate-800/80 pt-3">
-          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1">
               <Bike className="h-3.5 w-3.5 text-primary" />
               Entrega: <strong className="text-gray-700 dark:text-gray-200">{deliveryText}</strong>
@@ -311,8 +311,16 @@ export function StoreCard({ tenant, onSelectStore, variant = "grid", rank }: Sto
             <span className="hidden sm:inline">•</span>
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5 text-primary" />
-              {tenant.hours || "18:00 - 23:30"}
+              <span>{tenant.deliveryTime || "30-45 min"}</span>
             </span>
+            {tenant.hours && (
+              <>
+                <span className="hidden md:inline">•</span>
+                <span className="hidden md:inline-block text-[11px] text-gray-400">
+                  {tenant.hours}
+                </span>
+              </>
+            )}
           </div>
 
           {/* Botão Ver Cardápio */}

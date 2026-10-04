@@ -39,6 +39,24 @@ export function saveCachedTenants(tenants: Tenant[]): void {
 }
 
 /**
+ * Remove uma loja específica de todos os caches do navegador
+ */
+export function removeCachedTenant(idOrSlug: string): void {
+  if (typeof window === "undefined" || !idOrSlug) return;
+  try {
+    const list = loadCachedTenants();
+    const filtered = list.filter((t) => t.id !== idOrSlug && t.slug !== idOrSlug);
+    saveCachedTenants(filtered);
+
+    const featured = loadCachedFeaturedStores();
+    const filteredFeatured = featured.filter((s) => s.id !== idOrSlug && s.slug !== idOrSlug);
+    saveCachedFeaturedStores(filteredFeatured);
+  } catch (err) {
+    console.warn("[StoreCache] Erro ao remover loja do cache local:", err);
+  }
+}
+
+/**
  * Carrega lojas em destaque salvas no cache
  */
 export function loadCachedFeaturedStores(): FeaturedStoreRanked[] {

@@ -12,6 +12,7 @@ export interface StoreConfig {
   pixKey: string;
   pixKeyType: PixKeyType;
   deliveryFee: number;
+  deliveryTime?: string;
   currency: string;
   address: string;
   hours: string;

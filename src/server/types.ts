@@ -30,6 +30,7 @@ export interface Tenant {
   pixKey: string;
   pixKeyType: PixKeyType;
   deliveryFee: number;
+  deliveryTime?: string;
   address: string;
   hours: string;
   tagline: string;

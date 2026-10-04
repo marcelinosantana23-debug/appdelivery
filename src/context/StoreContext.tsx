@@ -14,6 +14,7 @@ import {
   haveTenantsChanged,
   haveStoresRankedChanged,
   preloadStoreImages,
+  removeCachedTenant,
 } from "@/utils/storeCache";
 import {
   fetchTenantsApi,
@@ -264,6 +265,7 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
     pixKey: t.pixKey,
     pixKeyType: t.pixKeyType || "email",
     deliveryFee: t.deliveryFee,
+    deliveryTime: t.deliveryTime || "30-45 min",
     currency: "R$",
     address: t.address,
     hours: t.hours,
@@ -2517,8 +2519,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const deleteTenant = useCallback(
     async (slugOrId: string) => {
+      removeCachedTenant(slugOrId);
       const res = await deleteTenantApi(slugOrId);
       if (res.success) {
+        removeCachedTenant(slugOrId);
         await refreshTenants();
         return true;
       }

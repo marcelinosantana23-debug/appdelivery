@@ -20,6 +20,101 @@ import type {
 } from "./types";
 import { orderEvents } from "./events";
 import { hashPassword, verifyPassword } from "./security";
+import { extraTenants, extraUsers, extraProducts, extraStories, extraAddonGroups } from "./seedData";
+
+// =========================================================================
+// GESTÃO E EXCLUSÃO DEFINITIVA DE LOJAS (D1 / KV / DISCO / MEMÓRIA)
+// =========================================================================
+export function getPersistedDeletedTenants(): string[] {
+  const result: string[] = [];
+  try {
+    if (typeof globalThis !== "undefined" && Array.isArray((globalThis as any).__TOPFOOD_DELETED_TENANTS__)) {
+      for (const item of (globalThis as any).__TOPFOOD_DELETED_TENANTS__) {
+        if (typeof item === "string" && !result.includes(item.toLowerCase())) {
+          result.push(item.toLowerCase());
+        }
+      }
+    }
+  } catch (_e) {
+    void _e;
+  }
+
+  try {
+    const proc = (globalThis as any).process;
+    const req = (globalThis as any).require;
+    if (typeof proc !== "undefined" && typeof req === "function") {
+      const fs = req("fs");
+      const path = req("path");
+      const filePath = path.resolve(proc.cwd(), ".topfood_deleted_tenants.json");
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            if (typeof item === "string" && !result.includes(item.toLowerCase())) {
+              result.push(item.toLowerCase());
+            }
+          }
+        }
+      }
+    }
+  } catch (_e) {
+    void _e;
+  }
+
+  return result;
+}
+
+export function persistDeletedTenant(idOrSlug: string): void {
+  if (!idOrSlug) return;
+  const lower = idOrSlug.toLowerCase().trim();
+  if (!lower) return;
+
+  try {
+    if (typeof globalThis !== "undefined") {
+      if (!Array.isArray((globalThis as any).__TOPFOOD_DELETED_TENANTS__)) {
+        (globalThis as any).__TOPFOOD_DELETED_TENANTS__ = [];
+      }
+      if (!(globalThis as any).__TOPFOOD_DELETED_TENANTS__.includes(lower)) {
+        (globalThis as any).__TOPFOOD_DELETED_TENANTS__.push(lower);
+      }
+    }
+  } catch (_e) {
+    void _e;
+  }
+
+  try {
+    const proc = (globalThis as any).process;
+    const req = (globalThis as any).require;
+    if (typeof proc !== "undefined" && typeof req === "function") {
+      const fs = req("fs");
+      const path = req("path");
+      const filePath = path.resolve(proc.cwd(), ".topfood_deleted_tenants.json");
+      let list: string[] = [];
+      if (fs.existsSync(filePath)) {
+        try {
+          list = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+        } catch (_parseErr) {
+          void _parseErr;
+        }
+      }
+      if (!Array.isArray(list)) list = [];
+      if (!list.includes(lower)) {
+        list.push(lower);
+        fs.writeFileSync(filePath, JSON.stringify(list, null, 2), "utf-8");
+      }
+    }
+  } catch (_e) {
+    void _e;
+  }
+}
+
+export function isTenantPermanentlyDeleted(idOrSlug: string): boolean {
+  if (!idOrSlug) return false;
+  const lower = idOrSlug.toLowerCase().trim();
+  const deleted = getPersistedDeletedTenants();
+  return deleted.includes(lower);
+}
 
 // Seed data para demonstração e inicialização
 const initialTenants: Tenant[] = [
@@ -31,9 +126,12 @@ const initialTenants: Tenant[] = [
     email: "contato@acaipuro.com.br",
     phone: "11966666666",
     whatsapp: "5511966666666",
+    motoboyPhone: "5511966666666",
+    motoboyName: "Carlos Entregas",
     pixKey: "contato@acaipuro.com.br",
     pixKeyType: "email",
     deliveryFee: 4.0,
+    deliveryTime: "25-40 min",
     address: "Av. Brasil, 890 - Centro",
     hours: "12:00 - 23:00",
     tagline: "O autêntico açaí do Pará 100% puro com acompanhamentos à vontade",
@@ -67,9 +165,12 @@ const initialTenants: Tenant[] = [
     email: "admin@burgertown.com",
     phone: "11999999999",
     whatsapp: "5511999999999",
+    motoboyPhone: "5511999999999",
+    motoboyName: "Lucas Motoboy",
     pixKey: "contato@burgertown.com.br",
     pixKeyType: "email",
     deliveryFee: 5.0,
+    deliveryTime: "30-45 min",
     address: "Rua das Chamas, 420 - Centro",
     hours: "18:00 - 23:45",
     tagline: "Smash e burgers artesanais grelhados no fogo com queijo derretido e bacon",
@@ -102,9 +203,12 @@ const initialTenants: Tenant[] = [
     email: "admin@pizzabella.com",
     phone: "11988888888",
     whatsapp: "5511988888888",
+    motoboyPhone: "5511988888888",
+    motoboyName: "Rafael Pizza",
     pixKey: "pedidos@pizzabella.com.br",
     pixKeyType: "email",
     deliveryFee: 6.0,
+    deliveryTime: "35-50 min",
     address: "Av. Paulista, 1500 - Bela Vista",
     hours: "18:30 - 00:00",
     tagline: "Massa de fermentação natural de 48h, molho artesanal e bordas recheadas",
@@ -138,9 +242,12 @@ const initialTenants: Tenant[] = [
     email: "contato@sorvetesimperial.com.br",
     phone: "11977777777",
     whatsapp: "5511977777777",
+    motoboyPhone: "5511977777777",
+    motoboyName: "Diego Gelato",
     pixKey: "contato@sorvetesimperial.com.br",
     pixKeyType: "email",
     deliveryFee: 4.5,
+    deliveryTime: "20-35 min",
     address: "Rua das Palmeiras, 350 - Jardins",
     hours: "13:00 - 22:30",
     tagline: "Gelatos italianos autênticos, picolés artesanais e taças montadas",
@@ -174,9 +281,12 @@ const initialTenants: Tenant[] = [
     email: "contato@tokyosushi.com.br",
     phone: "11944444444",
     whatsapp: "5511944444444",
+    motoboyPhone: "5511944444444",
+    motoboyName: "Kenji Entregador",
     pixKey: "contato@tokyosushi.com.br",
     pixKeyType: "email",
     deliveryFee: 7.0,
+    deliveryTime: "35-50 min",
     address: "Rua Liberdade, 320 - Bairro Oriental",
     hours: "18:00 - 23:30",
     tagline: "Sashimis frescos, combinados especiais, hot rolls crocantes e temakis generosos",
@@ -210,9 +320,12 @@ const initialTenants: Tenant[] = [
     email: "contato@reidossalgados.com.br",
     phone: "11933333333",
     whatsapp: "5511933333333",
+    motoboyPhone: "5511933333333",
+    motoboyName: "Eduardo Salgados",
     pixKey: "contato@reidossalgados.com.br",
     pixKeyType: "email",
     deliveryFee: 5.0,
+    deliveryTime: "20-35 min",
     address: "Av. Central, 550 - Bairro Novo",
     hours: "09:00 - 21:00",
     tagline: "Coxinhas com massa de batata crocante, empadas finas, kibes e centos para festa",
@@ -246,9 +359,12 @@ const initialTenants: Tenant[] = [
     email: "contato@marmitariadonamaria.com.br",
     phone: "11922222222",
     whatsapp: "5511922222222",
+    motoboyPhone: "5511922222222",
+    motoboyName: "Jorge Marmitex",
     pixKey: "contato@marmitariadonamaria.com.br",
     pixKeyType: "email",
     deliveryFee: 3.5,
+    deliveryTime: "25-40 min",
     address: "Rua dos Coqueiros, 140 - Vila Nova",
     hours: "10:30 - 15:00",
     tagline: "Comida caseira de verdade feita no capricho com tempero de mãe e entrega rápida",
@@ -282,9 +398,12 @@ const initialTenants: Tenant[] = [
     email: "contato@doceencanto.com.br",
     phone: "11911111111",
     whatsapp: "5511911111111",
+    motoboyPhone: "5511911111111",
+    motoboyName: "Felipe Doce",
     pixKey: "contato@doceencanto.com.br",
     pixKeyType: "email",
     deliveryFee: 4.5,
+    deliveryTime: "25-40 min",
     address: "Alameda das Flores, 770 - Jardim Primavera",
     hours: "12:00 - 22:00",
     tagline: "Bolos vulcão, fatias gourmet, brigadeiros belgas e sobremesas refinadas no pote",
@@ -317,9 +436,12 @@ const initialTenants: Tenant[] = [
     email: "contato@saborebrasa.com.br",
     phone: "11955555555",
     whatsapp: "5511955555555",
+    motoboyPhone: "5511955555555",
+    motoboyName: "Marcos Brasa",
     pixKey: "contato@saborebrasa.com.br",
     pixKeyType: "email",
     deliveryFee: 6.5,
+    deliveryTime: "30-50 min",
     address: "Rua do Comércio, 1200 - Centro",
     hours: "11:00 - 23:00",
     tagline: "Cortes nobres na brasa de carvão: picanha, costela assada no bafo e guarnições",
@@ -352,9 +474,12 @@ const initialTenants: Tenant[] = [
     email: "contato@adegazerograu.com.br",
     phone: "11987654321",
     whatsapp: "5511987654321",
+    motoboyPhone: "5511987654321",
+    motoboyName: "Bruno Express",
     pixKey: "contato@adegazerograu.com.br",
     pixKeyType: "email",
     deliveryFee: 5.0,
+    deliveryTime: "15-30 min",
     address: "Av. das Nações, 1020 - Centro",
     hours: "14:00 - 02:00",
     tagline: "Cervejas estupidamente geladas, destilados, vinhos, energéticos, gelo e carvão",
@@ -387,9 +512,12 @@ const initialTenants: Tenant[] = [
     email: "marcelinosantana23@gmail.com",
     phone: "11999999999",
     whatsapp: "5511999999999",
+    motoboyPhone: "5511999999999",
+    motoboyName: "Marcelino Motoboy",
     pixKey: "marcelinosantana23@gmail.com",
     pixKeyType: "email",
     deliveryFee: 5.0,
+    deliveryTime: "25-40 min",
     address: "Rua das Preparações, 100 - Centro",
     hours: "18:00 - 23:30",
     tagline: "O melhor sabor e lanches artesanais preparados na hora",
@@ -416,6 +544,7 @@ const initialTenants: Tenant[] = [
     createdAt: Date.now() - 5 * 86400000,
     updatedAt: Date.now(),
   },
+  ...extraTenants,
 ];
 
 const initialUsers: User[] = [
@@ -539,6 +668,7 @@ const initialUsers: User[] = [
     status: "active",
     createdAt: Date.now() - 5 * 86400000,
   },
+  ...extraUsers,
 ];
 
 const initialProducts: Product[] = [
@@ -1044,6 +1174,7 @@ const initialProducts: Product[] = [
       { id: "guarana", name: "Guaraná Antarctica", price: 0 },
     ],
   },
+  ...extraProducts,
 ].map((p, idx) => ({
   ...p,
   position: p.position ?? p.ordem ?? idx,
@@ -1470,13 +1601,22 @@ export const defaultEstablishmentCategories: EstablishmentCategory[] = [
   { id: "acaiterias", name: "Açaíterias", icon: "🍧", order: 1, order_index: 1, active: true },
   { id: "lanchonetes", name: "Hambúrgueres", icon: "🍔", order: 2, order_index: 2, active: true },
   { id: "pizzarias", name: "Pizzarias", icon: "🍕", order: 3, order_index: 3, active: true },
-  { id: "sorveteiras", name: "Sorveterias", icon: "🍨", order: 4, order_index: 4, active: true },
+  { id: "massas", name: "Massas", icon: "🍝", order: 4, order_index: 4, active: true },
   { id: "japonesa", name: "Japonesa", icon: "🍣", order: 5, order_index: 5, active: true },
-  { id: "salgados", name: "Salgados", icon: "🥟", order: 6, order_index: 6, active: true },
-  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 7, order_index: 7, active: true },
-  { id: "docerias", name: "Doces", icon: "🍰", order: 8, order_index: 8, active: true },
-  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 9, order_index: 9, active: true },
-  { id: "distribuidoras", name: "Bebidas", icon: "🍺", order: 10, order_index: 10, active: true },
+  { id: "hotdog", name: "Hot Dog", icon: "🌭", order: 6, order_index: 6, active: true },
+  { id: "mexicana", name: "Mexicana", icon: "🌮", order: 7, order_index: 7, active: true },
+  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 8, order_index: 8, active: true },
+  { id: "mineira", name: "Mineira", icon: "🍲", order: 9, order_index: 9, active: true },
+  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 10, order_index: 10, active: true },
+  { id: "frango", name: "Frango Frito", icon: "🍗", order: 11, order_index: 11, active: true },
+  { id: "salgados", name: "Salgados", icon: "🥟", order: 12, order_index: 12, active: true },
+  { id: "pastelarias", name: "Pastelarias", icon: "🥟", order: 13, order_index: 13, active: true },
+  { id: "crepes", name: "Crepes", icon: "🥞", order: 14, order_index: 14, active: true },
+  { id: "padarias", name: "Padarias", icon: "🥖", order: 15, order_index: 15, active: true },
+  { id: "poke", name: "Poke & Fit", icon: "🥗", order: 16, order_index: 16, active: true },
+  { id: "sorveteiras", name: "Sorveterias", icon: "🍨", order: 17, order_index: 17, active: true },
+  { id: "docerias", name: "Doces", icon: "🍰", order: 18, order_index: 18, active: true },
+  { id: "distribuidoras", name: "Bebidas", icon: "🍺", order: 19, order_index: 19, active: true },
 ];
 
 export const defaultPlatformSettings: PlatformSettings = {
@@ -1562,6 +1702,15 @@ export const initialStories: StoreStory[] = [
     createdAt: Date.now() - 5 * 3600000,
     expiresAt: Date.now() + 48 * 3600000,
   },
+  {
+    id: "story-sorvete-2",
+    tenantId: "tenant-sorvetes-imperial",
+    mediaUrl: "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍨 Pote de 1 Litro com Pistache Siciliano e Ninho Trufado! Peça para a sobremesa.",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
   // 5. Japonesa
   {
     id: "story-sushi-1",
@@ -1591,6 +1740,15 @@ export const initialStories: StoreStory[] = [
     createdAt: Date.now() - 2 * 3600000,
     expiresAt: Date.now() + 48 * 3600000,
   },
+  {
+    id: "story-salgado-2",
+    tenantId: "tenant-rei-dos-salgados",
+    mediaUrl: "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🥟 Cento de salgadinhos fritos na hora para a sua festa ou reunião em família!",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
   // 7. Marmitaria
   {
     id: "story-marmita-1",
@@ -1599,6 +1757,15 @@ export const initialStories: StoreStory[] = [
     mediaType: "image",
     caption: "🍱 Marmitex executiva: arroz soltinho, feijão caseiro, bife acebolado e fritas!",
     createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  {
+    id: "story-marmita-2",
+    tenantId: "tenant-marmitaria-dona-maria",
+    mediaUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍲 Feijoada completa da Dona Maria com torresmo crocante e couve fresquinha!",
+    createdAt: Date.now() - 2 * 3600000,
     expiresAt: Date.now() + 48 * 3600000,
   },
   // 8. Doces
@@ -1611,6 +1778,15 @@ export const initialStories: StoreStory[] = [
     createdAt: Date.now() - 4 * 3600000,
     expiresAt: Date.now() + 48 * 3600000,
   },
+  {
+    id: "story-doce-2",
+    tenantId: "tenant-doce-encanto",
+    mediaUrl: "https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍫 Caixa com brigadeiros gourmet belgas enrolados na hora para presente!",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
   // 9. Churrascaria
   {
     id: "story-churrasco-1",
@@ -1619,6 +1795,15 @@ export const initialStories: StoreStory[] = [
     mediaType: "image",
     caption: "🥩 Picanha na brasa suculenta ao ponto com farofa especial crocante!",
     createdAt: Date.now() - 2 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  {
+    id: "story-churrasco-2",
+    tenantId: "tenant-sabor-e-brasa",
+    mediaUrl: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🔥 Espetinhos artesanais na brasa de carvão: picanha, medalhão com bacon e queijo coalho!",
+    createdAt: Date.now() - 1 * 3600000,
     expiresAt: Date.now() + 48 * 3600000,
   },
   // 10. Bebidas
@@ -1631,6 +1816,15 @@ export const initialStories: StoreStory[] = [
     createdAt: Date.now() - 1 * 3600000,
     expiresAt: Date.now() + 48 * 3600000,
   },
+  {
+    id: "story-bebida-2",
+    tenantId: "tenant-adega-zero-grau",
+    mediaUrl: "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍷 Vinhos selecionados, gins premium e saco de gelo filtrado na sua porta!",
+    createdAt: Date.now() - 3 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
   // MS Preparações
   {
     id: "story-ms-1",
@@ -1641,6 +1835,16 @@ export const initialStories: StoreStory[] = [
     createdAt: Date.now() - 2 * 3600000,
     expiresAt: Date.now() + 48 * 3600000,
   },
+  {
+    id: "story-ms-2",
+    tenantId: "tenant-ms-preparacoes",
+    mediaUrl: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    caption: "🍟 Porções generosas de batata frita e iscas de frango empanadas crocantes!",
+    createdAt: Date.now() - 1 * 3600000,
+    expiresAt: Date.now() + 48 * 3600000,
+  },
+  ...extraStories,
 ];
 
 export const initialAddonGroups: AddonGroup[] = [
@@ -1695,6 +1899,7 @@ export const initialAddonGroups: AddonGroup[] = [
     position: 3,
     createdAt: Date.now() - 10 * 86400000,
   },
+
   // 2. Burger Town (tenant-burger-town)
   {
     id: "addon-burger-extras",
@@ -1730,7 +1935,206 @@ export const initialAddonGroups: AddonGroup[] = [
     position: 2,
     createdAt: Date.now() - 20 * 86400000,
   },
-  // 3. MS Preparações (tenant-ms-preparacoes)
+
+  // 3. Bella Pizza (tenant-pizza-bella)
+  {
+    id: "addon-pizza-bordas",
+    tenantId: "tenant-pizza-bella",
+    name: "Bordas Recheadas Especiais",
+    description: "Escolha o recheio para a borda da sua pizza",
+    minSelection: 0,
+    maxSelection: 1,
+    required: false,
+    items: [
+      { id: "item-borda-catupiry", name: "Borda Vulcão de Catupiry Original", price: 8.0, available: true },
+      { id: "item-borda-cheddar", name: "Borda de Cheddar Cremoso", price: 8.0, available: true },
+      { id: "item-borda-chocolate", name: "Borda de Chocolate ao Leite Nobre", price: 9.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 15 * 86400000,
+  },
+  {
+    id: "addon-pizza-ingredientes",
+    tenantId: "tenant-pizza-bella",
+    name: "Ingredientes Extras na Pizza",
+    description: "Turbine sua pizza com mais recheio",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-extra-bacon", name: "Bacon Crocante Fatiado", price: 5.0, available: true },
+      { id: "item-extra-alho", name: "Alho Dourado Crocante", price: 3.0, available: true },
+      { id: "item-extra-azeitonas", name: "Azeitonas Pretas Chilenas", price: 4.0, available: true },
+      { id: "item-extra-parmesao", name: "Parmesão Ralado Farto", price: 5.0, available: true },
+    ],
+    position: 2,
+    createdAt: Date.now() - 15 * 86400000,
+  },
+
+  // 4. Gelateria Imperial (tenant-sorvetes-imperial)
+  {
+    id: "addon-gelato-caldas",
+    tenantId: "tenant-sorvetes-imperial",
+    name: "Caldas Especiais & Fudge",
+    description: "Caldas artesanais quentes ou frias para o gelato",
+    minSelection: 0,
+    maxSelection: 2,
+    required: false,
+    items: [
+      { id: "item-calda-fudge", name: "Calda Quente de Fudge de Chocolate Belga", price: 5.0, available: true },
+      { id: "item-calda-morango", name: "Calda Caseira de Morangos com Pedaços", price: 4.5, available: true },
+      { id: "item-calda-caramelo", name: "Calda de Caramelo Salgado Gourmet", price: 4.5, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 12 * 86400000,
+  },
+  {
+    id: "addon-gelato-toppings",
+    tenantId: "tenant-sorvetes-imperial",
+    name: "Toppings & Castanhas Crocantes",
+    description: "Complementos para adicionar textura ao gelato",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-castanha-caju", name: "Castanha de Caju Crocante Tostada", price: 3.5, available: true },
+      { id: "item-waffle-chips", name: "Casquinha Waffle Triturada", price: 2.5, available: true },
+      { id: "item-raspas-chocolate", name: "Raspas de Chocolate Meio Amargo", price: 3.5, available: true },
+    ],
+    position: 2,
+    createdAt: Date.now() - 12 * 86400000,
+  },
+
+  // 5. Tokyo Sushi (tenant-sushi-ya)
+  {
+    id: "addon-sushi-molhos",
+    tenantId: "tenant-sushi-ya",
+    name: "Molhos & Condimentos Especiais",
+    description: "Molhos artesanais extras para seu combinado",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-tare-extra", name: "Molho Tarê Artesanal 50ml", price: 4.0, available: true },
+      { id: "item-gengibre-extra", name: "Gengibre em Conserva Artesanal", price: 3.5, available: true },
+      { id: "item-wasabi-fresco", name: "Wasabi Fresco Extra", price: 3.0, available: true },
+      { id: "item-geleiadepimenta", name: "Geleia de Pimenta Agridoce", price: 4.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 18 * 86400000,
+  },
+  {
+    id: "addon-sushi-extras",
+    tenantId: "tenant-sushi-ya",
+    name: "Extras para Temakis & Rolinhos",
+    description: "Turbine suas peças japonesas",
+    minSelection: 0,
+    maxSelection: 2,
+    required: false,
+    items: [
+      { id: "item-extra-creamcheese", name: "Dobro de Cream Cheese Philadelphia", price: 4.5, available: true },
+      { id: "item-extra-couve", name: "Crispy de Couve Frita Crocante", price: 3.0, available: true },
+      { id: "item-extra-salmao", name: "Porção Extra de Cubos de Salmão", price: 8.0, available: true },
+    ],
+    position: 2,
+    createdAt: Date.now() - 18 * 86400000,
+  },
+
+  // 6. Rei dos Salgados (tenant-rei-dos-salgados)
+  {
+    id: "addon-salgados-molhos",
+    tenantId: "tenant-rei-dos-salgados",
+    name: "Molhos da Casa para Salgados",
+    description: "Potes de 50ml para mergulhar seus salgadinhos",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-pimenta-casa", name: "Molho de Pimenta Especial da Casa", price: 2.5, available: true },
+      { id: "item-maio-verde-salg", name: "Maionese Verde Temperada com Ervas", price: 3.0, available: true },
+      { id: "item-molho-rose", name: "Molho Rosé Especial", price: 2.5, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 14 * 86400000,
+  },
+
+  // 7. Marmitaria Dona Maria (tenant-marmitaria-dona-maria)
+  {
+    id: "addon-marmita-extras",
+    tenantId: "tenant-marmitaria-dona-maria",
+    name: "Complementos Caseiros para a Marmita",
+    description: "Adicione mais itens ao seu almoço",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-ovo-frito", name: "Ovo Caipira Frito na Hora", price: 2.5, available: true },
+      { id: "item-torresmo-porcao", name: "Porção de Torresmo Pururuca Crocante", price: 6.0, available: true },
+      { id: "item-farofa-alho", name: "Farofa de Alho e Manteiga", price: 3.5, available: true },
+      { id: "item-feijao-tropeiro", name: "Concha Extra de Feijão Tropeiro", price: 5.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 25 * 86400000,
+  },
+
+  // 8. Doce Encanto (tenant-doce-encanto)
+  {
+    id: "addon-doce-toppings",
+    tenantId: "tenant-doce-encanto",
+    name: "Toppings & Embalagens Especiais",
+    description: "Personalize sua sobremesa ou bolo",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-morangos-frescos", name: "Morangos Frescos Fatiados", price: 4.5, available: true },
+      { id: "item-granulado-belga", name: "Granulado Belga Callebaut", price: 4.0, available: true },
+      { id: "item-sacola-presente", name: "Sacola Decorativa para Presente com Laço", price: 6.0, available: true },
+      { id: "item-vela-aniversario", name: "Vela de Aniversário Especial", price: 3.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 16 * 86400000,
+  },
+
+  // 9. Sabor & Brasa (tenant-sabor-e-brasa)
+  {
+    id: "addon-brasa-guarnicoes",
+    tenantId: "tenant-sabor-e-brasa",
+    name: "Guarnições & Acompanhamentos de Churrasco",
+    description: "Complementos saborosos para acompanhar suas carnes",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-farofa-bacon-brasa", name: "Farofa Crocante de Bacon com Alho", price: 4.5, available: true },
+      { id: "item-vinagrete-brasa", name: "Vinagrete Especial com Ervas Finas", price: 3.5, available: true },
+      { id: "item-queijo-coalho-extra", name: "Espeto de Queijo Coalho Dourado", price: 9.0, available: true },
+      { id: "item-pao-alho-brasa", name: "Pão de Alho Especial Recheado", price: 7.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 20 * 86400000,
+  },
+
+  // 10. Adega Zero Grau (tenant-adega-zero-grau)
+  {
+    id: "addon-adega-conveniencia",
+    tenantId: "tenant-adega-zero-grau",
+    name: "Conveniência, Gelo & Petiscos",
+    description: "Itens essenciais para o seu evento",
+    minSelection: 0,
+    maxSelection: 3,
+    required: false,
+    items: [
+      { id: "item-gelo-5kg", name: "Saco de Gelo Filtrado em Cubos 5kg", price: 12.0, available: true },
+      { id: "item-copos-descartaveis", name: "Pacote com 10 Copos Térmicos 500ml", price: 6.0, available: true },
+      { id: "item-limoes-fatiados", name: "Potinho com Limões Fatiados Frescos", price: 3.5, available: true },
+      { id: "item-amendoim-petisco", name: "Amendoim Japonês Crocante 150g", price: 6.0, available: true },
+    ],
+    position: 1,
+    createdAt: Date.now() - 22 * 86400000,
+  },
+
+  // 11. MS Preparações (tenant-ms-preparacoes)
   {
     id: "addon-ms-ingredientes",
     tenantId: "tenant-ms-preparacoes",
@@ -1748,6 +2152,7 @@ export const initialAddonGroups: AddonGroup[] = [
     position: 1,
     createdAt: Date.now() - 5 * 86400000,
   },
+  ...extraAddonGroups,
 ];
 
 export interface OrderItemRecord {
@@ -1808,9 +2213,11 @@ export function setPersistedSuperAdmin(admin: { id: string; email: string; passw
 
 // In-memory data store for Node.js / preview runtime (with persistence)
 class MemoryStore {
-  tenants: Tenant[] = [...initialTenants];
+  tenants: Tenant[] = initialTenants.filter(
+    (t) => !isTenantPermanentlyDeleted(t.id) && !isTenantPermanentlyDeleted(t.slug)
+  );
   users: User[] = (() => {
-    const list = [...initialUsers];
+    const list = initialUsers.filter((u) => !u.tenantId || !isTenantPermanentlyDeleted(u.tenantId));
     const persisted = getPersistedSuperAdmin();
     if (persisted && persisted.email && persisted.password) {
       // Remove qualquer super admin padrão e mantém estritamente o persistido
@@ -1832,15 +2239,15 @@ class MemoryStore {
     }
     return list;
   })();
-  products: Product[] = [...initialProducts];
+  products: Product[] = initialProducts.filter((p) => !isTenantPermanentlyDeleted(p.tenantId));
   categories: Category[] = [...defaultCategories];
   establishmentCategories: EstablishmentCategory[] = [...defaultEstablishmentCategories];
-  orders: Order[] = [...initialOrders];
-  orderItems: OrderItemRecord[] = extractOrderItemsFromOrders(initialOrders);
-  customers: Customer[] = [...initialCustomers];
+  orders: Order[] = initialOrders.filter((o) => !isTenantPermanentlyDeleted(o.tenantId));
+  orderItems: OrderItemRecord[] = extractOrderItemsFromOrders(initialOrders).filter((oi) => !isTenantPermanentlyDeleted(oi.tenantId));
+  customers: Customer[] = initialCustomers.filter((c) => !isTenantPermanentlyDeleted(c.tenantId));
   platformSettings: PlatformSettings = { ...defaultPlatformSettings };
-  stories: StoreStory[] = [...initialStories];
-  addonGroups: AddonGroup[] = [...initialAddonGroups];
+  stories: StoreStory[] = initialStories.filter((s) => !isTenantPermanentlyDeleted(s.tenantId));
+  addonGroups: AddonGroup[] = initialAddonGroups.filter((g) => !isTenantPermanentlyDeleted(g.tenantId));
   merchantPushTokens: Map<string, Array<{ token: string; platform: string; userId?: string; isLoggedIn: boolean; updatedAt: number }>> = new Map();
 
   // Helper to slugify
@@ -2033,6 +2440,11 @@ export class Database {
           position INTEGER DEFAULT 0,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS deleted_tenants (
+          id TEXT PRIMARY KEY,
+          slug TEXT,
+          deleted_at INTEGER NOT NULL
         )`
       ];
 
@@ -2042,6 +2454,19 @@ export class Database {
         } catch (e) {
           console.warn("D1 create table warning:", e);
         }
+      }
+
+      // Sincroniza lista de lojas permanentemente excluídas do D1
+      try {
+        const delRes = await db.prepare("SELECT id, slug FROM deleted_tenants").all<any>();
+        if (delRes?.results && Array.isArray(delRes.results)) {
+          for (const r of delRes.results) {
+            if (r.id) persistDeletedTenant(r.id);
+            if (r.slug) persistDeletedTenant(r.slug);
+          }
+        }
+      } catch (_e) {
+        void _e;
       }
 
       // 2. Migração segura de colunas para tabelas já existentes no D1 (evita erro de coluna ausente)
@@ -2131,24 +2556,29 @@ export class Database {
         }
       }
 
-      // 4. Garante que todos os tenants, users, produtos, categorias, stories e grupos de adicionais iniciais existam no D1
+      // 4. Garante que todos os tenants, users, produtos, categorias, stories e grupos de adicionais iniciais existam no D1 (exceto se excluídos)
       try {
         for (const t of initialTenants) {
+          if (isTenantPermanentlyDeleted(t.id) || isTenantPermanentlyDeleted(t.slug)) continue;
           await this.insertTenantRow(t);
         }
         for (const u of initialUsers) {
+          if (u.tenantId && isTenantPermanentlyDeleted(u.tenantId)) continue;
           await this.insertUserRow(u);
         }
         for (const p of initialProducts) {
+          if (isTenantPermanentlyDeleted(p.tenantId)) continue;
           await this.insertProductRow(p);
         }
         for (const ec of defaultEstablishmentCategories) {
           await this.insertEstablishmentCategoryRow(ec);
         }
         for (const s of initialStories) {
+          if (isTenantPermanentlyDeleted(s.tenantId)) continue;
           await this.insertStoryRow(s);
         }
         for (const ag of initialAddonGroups) {
+          if (isTenantPermanentlyDeleted(ag.tenantId)) continue;
           await this.insertAddonGroupRow(ag);
         }
 
@@ -2549,7 +2979,7 @@ export class Database {
           ).all<any>();
         }
         if (res.results && res.results.length > 0) {
-          const d1Tenants = res.results.map((r: any) => this.mapTenantRow(r));
+          let d1Tenants = res.results.map((r: any) => this.mapTenantRow(r));
           d1Tenants.sort((a: Tenant, b: Tenant) => {
             const aFeat = Boolean(a.isFeatured);
             const bFeat = Boolean(b.isFeatured);
@@ -2571,8 +3001,15 @@ export class Database {
               globalStore.tenants.push(dt);
             }
           }
-          // Garante que todas as 10 lojas do catálogo promocional estejam presentes
+
+          // Filtra lojas permanentemente deletadas
+          d1Tenants = d1Tenants.filter(
+            (dt: Tenant) => !isTenantPermanentlyDeleted(dt.id) && !isTenantPermanentlyDeleted(dt.slug)
+          );
+
+          // Garante que todas as lojas demonstrativas ativas estejam presentes
           for (const initT of initialTenants) {
+            if (isTenantPermanentlyDeleted(initT.id) || isTenantPermanentlyDeleted(initT.slug)) continue;
             if (!d1Tenants.some((dt: Tenant) => dt.id === initT.id || dt.slug === initT.slug)) {
               d1Tenants.push(initT);
               this.insertTenantRow(initT).catch(() => {});
@@ -2584,7 +3021,9 @@ export class Database {
         console.warn("D1 query failed, using memory store:", e);
       }
     }
-    const memTenants = [...globalStore.tenants];
+    const memTenants = globalStore.tenants.filter(
+      (t) => !isTenantPermanentlyDeleted(t.id) && !isTenantPermanentlyDeleted(t.slug)
+    );
     memTenants.sort((a, b) => {
       const aFeat = Boolean(a.isFeatured);
       const bFeat = Boolean(b.isFeatured);
@@ -2603,6 +3042,11 @@ export class Database {
   async getTenantByIdOrSlug(idOrSlug: string): Promise<Tenant | null> {
     if (!idOrSlug) return null;
     const clean = idOrSlug.trim().toLowerCase();
+
+    // Se estiver na lista de exclusão definitiva, rejeita imediatamente
+    if (isTenantPermanentlyDeleted(clean)) {
+      return null;
+    }
 
     // 1. Tentar obter do Cloudflare KV para resposta ultra rápida
     const kv = this.getKv();
@@ -3250,33 +3694,61 @@ export class Database {
 
   async deleteTenant(id: string): Promise<boolean> {
     const tenant = await this.getTenantByIdOrSlug(id);
-    if (!tenant) return false;
+    const targetId = tenant ? tenant.id : id;
+    const targetSlug = tenant ? tenant.slug : id;
 
+    // 1. Marca imediatamente como permanentemente excluído (memória + arquivo persistente em disco)
+    persistDeletedTenant(targetId);
+    persistDeletedTenant(targetSlug);
+
+    // 2. Remoção definitiva de todas as entidades associadas no banco Cloudflare D1
     if (this.env?.DB) {
       try {
-        await this.env.DB.prepare("DELETE FROM tenants WHERE id = ?").bind(tenant.id).run();
-        await this.env.DB.prepare("DELETE FROM products WHERE tenant_id = ?").bind(tenant.id).run();
-        await this.env.DB.prepare("DELETE FROM orders WHERE tenant_id = ?").bind(tenant.id).run();
-        await this.env.DB.prepare("DELETE FROM users WHERE tenant_id = ?").bind(tenant.id).run();
+        await this.env.DB.prepare(
+          "CREATE TABLE IF NOT EXISTS deleted_tenants (id TEXT PRIMARY KEY, slug TEXT, deleted_at INTEGER NOT NULL)"
+        ).run();
+        await this.env.DB.prepare(
+          "INSERT OR REPLACE INTO deleted_tenants (id, slug, deleted_at) VALUES (?, ?, ?)"
+        ).bind(targetId, targetSlug, Date.now()).run();
+
+        await this.env.DB.prepare("DELETE FROM tenants WHERE id = ? OR slug = ?").bind(targetId, targetSlug).run();
+        await this.env.DB.prepare("DELETE FROM products WHERE tenant_id = ?").bind(targetId).run();
+        await this.env.DB.prepare("DELETE FROM categories WHERE tenant_id = ?").bind(targetId).run();
+        await this.env.DB.prepare("DELETE FROM store_stories WHERE tenant_id = ?").bind(targetId).run();
+        await this.env.DB.prepare("DELETE FROM addon_groups WHERE tenant_id = ?").bind(targetId).run();
+        await this.env.DB.prepare("DELETE FROM orders WHERE tenant_id = ?").bind(targetId).run();
+        await this.env.DB.prepare("DELETE FROM users WHERE tenant_id = ?").bind(targetId).run();
+        await this.env.DB.prepare("DELETE FROM coupons WHERE tenant_id = ?").bind(targetId).run();
       } catch (e) {
         console.warn("D1 deleteTenant error:", e);
       }
     }
 
+    // 3. Remoção do Cloudflare KV e marcação como excluída
     const kv = this.getKv();
     if (kv) {
       try {
-        await kv.delete(`tenant:${tenant.id}`);
-        await kv.delete(`tenant:${tenant.slug.toLowerCase()}`);
+        await kv.put(`deleted_tenant:${targetId.toLowerCase()}`, "1");
+        await kv.put(`deleted_tenant:${targetSlug.toLowerCase()}`, "1");
+        await kv.delete(`tenant:${targetId}`);
+        await kv.delete(`tenant:${targetSlug.toLowerCase()}`);
+        await kv.delete(`products:${targetId}`);
+        await kv.delete(`categories:${targetId}`);
+        await kv.delete(`addons:${targetId}`);
+        await kv.delete(`stories:${targetId}`);
       } catch (e) {
         console.warn("KV delete tenant error:", e);
       }
     }
 
-    globalStore.tenants = globalStore.tenants.filter((t) => t.id !== tenant.id);
-    globalStore.products = globalStore.products.filter((p) => p.tenantId !== tenant.id);
-    globalStore.orders = globalStore.orders.filter((o) => o.tenantId !== tenant.id);
-    globalStore.users = globalStore.users.filter((u) => u.tenantId !== tenant.id);
+    // 4. Limpeza completa na store em memória (globalStore)
+    globalStore.tenants = globalStore.tenants.filter((t) => t.id !== targetId && t.slug !== targetSlug);
+    globalStore.products = globalStore.products.filter((p) => p.tenantId !== targetId);
+    globalStore.categories = (globalStore.categories || []).filter((c) => c.tenantId !== targetId);
+    globalStore.stories = (globalStore.stories || []).filter((s) => s.tenantId !== targetId);
+    globalStore.addonGroups = (globalStore.addonGroups || []).filter((g) => g.tenantId !== targetId);
+    globalStore.orders = globalStore.orders.filter((o) => o.tenantId !== targetId);
+    globalStore.users = globalStore.users.filter((u) => u.tenantId !== targetId);
     return true;
   }
 
