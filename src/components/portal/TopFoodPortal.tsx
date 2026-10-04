@@ -199,12 +199,41 @@ export function TopFoodPortal({
 
   // Referência para rolagem horizontal do carrossel de blocos de categorias
   const categoriesCarouselRef = useRef<HTMLDivElement>(null);
+  // Referência para rolagem suave até a seção expandida abaixo quando o usuário clica em uma categoria
+  const expandedSectionRef = useRef<HTMLDivElement>(null);
 
   const scrollCategoriesCarousel = (direction: "left" | "right") => {
     if (categoriesCarouselRef.current) {
       const scrollAmount = direction === "left" ? -336 : 336;
       categoriesCarouselRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
+  };
+
+  // Grupo ativo para a seção expandida abaixo do carrossel
+  const expandedCategoryGroup = useMemo(() => {
+    if (groupedTenants.length === 0) return null;
+    if (!selectedCategory || selectedCategory === "todos") {
+      return null;
+    }
+    const found = groupedTenants.find(
+      (g) =>
+        doesCategoryMatch(g.category, selectedCategory) ||
+        g.category.id.toLowerCase() === selectedCategory.toLowerCase() ||
+        g.category.name.toLowerCase() === selectedCategory.toLowerCase() ||
+        slugifyCategory(g.category.name) === slugifyCategory(selectedCategory)
+    );
+    if (found) return found;
+    if (categoryFilteredStores.length > 0 && activeCategoryObj) {
+      return { category: activeCategoryObj, stores: categoryFilteredStores };
+    }
+    return null;
+  }, [groupedTenants, selectedCategory, categoryFilteredStores, activeCategoryObj]);
+
+  const handleCategoryClickFromBlock = (catId: string) => {
+    setSelectedCategory((prev) => (prev.toLowerCase() === catId.toLowerCase() ? "todos" : catId));
+    setTimeout(() => {
+      expandedSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 80);
   };
 
   return (
@@ -232,12 +261,12 @@ export function TopFoodPortal({
       {/* Conteúdo Principal do Marketplace */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 pt-4 sm:pt-6 pb-12">
         {/* Barra de Stories das Lojas (Ao Vivo / 24 Horas) */}
-        {!searchQuery && selectedCategory === "todos" && (
+        {!searchQuery && (
           <PortalStoriesBar tenants={activeTenants} />
         )}
 
         {/* Carrosséis do Topo da Vitrine Principal */}
-        {!searchQuery && selectedCategory === "todos" && (
+        {!searchQuery && (
           <>
             {isFirstLoad ? (
               <div className="space-y-6">
@@ -361,18 +390,14 @@ export function TopFoodPortal({
             )}
           </div>
         ) : (
-          /* MODO 2: NAVEGAÇÃO POR CATEGORIAS E CARROSSEL MULTI-EIXO (HORIZONTAL + VERTICAL INTERNO) */
+          /* MODO 2: NAVEGAÇÃO POR CATEGORIAS E CARROSSEL MULTI-EIXO (HORIZONTAL + VERTICAL 1 LOJA POR VEZ) */
           <>
             {/* Título Principal da Seção + Controles do Carrossel Horizontal de Categorias */}
             <div className="mt-8 mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
                   <Store className="h-5 w-5 text-primary shrink-0" />
-                  <span className="truncate">
-                    {selectedCategory === "todos"
-                      ? "Estabelecimentos por Categoria"
-                      : `Categoria: ${activeCategoryObj?.name || selectedCategory}`}
-                  </span>
+                  <span className="truncate">Estabelecimentos por Categoria</span>
                 </h2>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {isFirstLoad ? (
@@ -382,24 +407,15 @@ export function TopFoodPortal({
                     </span>
                   ) : (
                     <>
-                      {`${totalAvailableStores} ${
-                        totalAvailableStores === 1
+                      {`${lojas.length} ${
+                        lojas.length === 1
                           ? "loja parceira disponível"
                           : "lojas parceiras disponíveis"
                       } no Top Food`}
-                      {selectedCategory === "todos" && displayedGroups.length > 1 && (
+                      {groupedTenants.length > 1 && (
                         <span className="hidden sm:inline text-gray-400 dark:text-gray-500">
-                          {" "}• Deslize para o lado entre as {displayedGroups.length} categorias
+                          {" "}• Clique em uma categoria para expandir todas as lojas abaixo
                         </span>
-                      )}
-                      {selectedCategory !== "todos" && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCategory("todos")}
-                          className="ml-2 font-bold text-primary hover:underline cursor-pointer"
-                        >
-                          (Mostrar todas as categorias)
-                        </button>
                       )}
                     </>
                   )}
@@ -407,7 +423,7 @@ export function TopFoodPortal({
               </div>
 
               {/* Setas de navegação horizontal entre os blocos de categoria */}
-              {!isFirstLoad && displayedGroups.length > 1 && (
+              {!isFirstLoad && groupedTenants.length > 1 && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
@@ -431,25 +447,87 @@ export function TopFoodPortal({
               )}
             </div>
 
-            {/* CARROSSEL MULTI-EIXO: Eixo Horizontal (Blocos de Categorias) + Eixo Vertical Interno (Lojas da Categoria) */}
+            {/* CARROSSEL MULTI-EIXO: Eixo Horizontal (Blocos de Categorias) + Eixo Vertical Interno (1 Loja por Vez com Snap-Y Mandatory) */}
             {isFirstLoad ? (
               <PortalStoreListSkeleton />
-            ) : displayedGroups.length > 0 ? (
-              <div
-                ref={categoriesCarouselRef}
-                className="flex items-start gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none snap-x snap-mandatory overscroll-x-contain"
-              >
-                {displayedGroups.map((group) => (
-                  <CategoryStoreSection
-                    key={group.category.id}
-                    category={group.category}
-                    tenants={group.stores}
-                    onSelectStore={onSelectStore}
-                    onFilterByCategory={(catId) => setSelectedCategory(catId)}
-                    isFocused={selectedCategory !== "todos"}
-                  />
-                ))}
-              </div>
+            ) : groupedTenants.length > 0 ? (
+              <>
+                <div
+                  ref={categoriesCarouselRef}
+                  className="flex items-start gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none snap-x snap-mandatory scroll-smooth overscroll-x-contain"
+                >
+                  {groupedTenants.map((group) => {
+                    const isSelectedCat =
+                      selectedCategory !== "todos" &&
+                      (doesCategoryMatch(group.category, selectedCategory) ||
+                        group.category.id.toLowerCase() === selectedCategory.toLowerCase() ||
+                        slugifyCategory(group.category.name) === slugifyCategory(selectedCategory));
+
+                    return (
+                      <CategoryStoreSection
+                        key={group.category.id}
+                        category={group.category}
+                        tenants={group.stores}
+                        onSelectStore={onSelectStore}
+                        onFilterByCategory={handleCategoryClickFromBlock}
+                        isFocused={isSelectedCat}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* SEÇÃO EXPANDIDA ABAIXO DO CARROSSEL QUANDO UMA CATEGORIA É CLICADA/SELECIONADA */}
+                {expandedCategoryGroup && (
+                  <div
+                    ref={expandedSectionRef}
+                    id={`expanded-category-${expandedCategoryGroup.category.id}`}
+                    className="mt-8 pt-6 border-t border-gray-200/80 dark:border-slate-800 transition-all"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 dark:bg-primary/20 text-2xl border border-primary/25">
+                          <span>{expandedCategoryGroup.category.icon || "🍽️"}</span>
+                        </div>
+                        <div>
+                          <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2 flex-wrap">
+                            <span>Todas as lojas de {expandedCategoryGroup.category.name}</span>
+                            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary text-white">
+                              {expandedCategoryGroup.stores.length}{" "}
+                              {expandedCategoryGroup.stores.length === 1 ? "loja" : "lojas"}
+                            </span>
+                          </h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Exibindo todos os estabelecimentos cadastrados na categoria{" "}
+                            <strong className="text-gray-700 dark:text-gray-300">
+                              {expandedCategoryGroup.category.name}
+                            </strong>
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCategory("todos")}
+                        className="self-start sm:self-auto inline-flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-3.5 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 transition shadow-2xs cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5 text-gray-500" />
+                        <span>Fechar categoria</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {expandedCategoryGroup.stores.map((store) => (
+                        <StoreCard
+                          key={`expanded-${store.id || store.slug}`}
+                          tenant={store}
+                          variant="grid"
+                          onSelectStore={onSelectStore}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="mt-8 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-xs">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 mb-3">

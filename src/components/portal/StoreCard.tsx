@@ -11,6 +11,7 @@ interface StoreCardProps {
   variant?: "carousel" | "grid";
   rank?: number;
   fullWidth?: boolean;
+  fillHeight?: boolean;
 }
 
 export function StoreCard({
@@ -19,6 +20,7 @@ export function StoreCard({
   variant = "grid",
   rank,
   fullWidth = false,
+  fillHeight = false,
 }: StoreCardProps) {
   const { establishmentCategories, getStoreActiveStories, openStoreStoriesModal } = useStore();
   const allCategories = establishmentCategories && establishmentCategories.length > 0
@@ -54,7 +56,9 @@ export function StoreCard({
         onClick={handleCardClick}
         className={`group relative flex ${
           fullWidth ? "w-full" : "w-[210px] sm:w-[220px]"
-        } shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${
+        } ${
+          fillHeight ? "h-full" : ""
+        } shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all duration-300 hover:shadow-md cursor-pointer ${
           tenant.isFeatured
             ? "border-amber-400/60 dark:border-amber-500/40 shadow-amber-500/5 ring-1 ring-amber-500/20"
             : "border-gray-200/80 dark:border-slate-800"
