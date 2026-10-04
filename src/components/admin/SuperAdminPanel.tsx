@@ -69,6 +69,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     toggleTenantStatus,
     deleteTenant,
     createNewTenant,
+    updateTenant,
     refreshTenants,
     logout,
     currentUser,
@@ -648,7 +649,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       showFeaturedCarousel: tenant.showFeaturedCarousel !== false,
       adminEmail: (tenant as any).adminEmail || tenant.email || `admin@${tenant.slug}.com`,
       adminPassword: (tenant as any).adminPassword || "123456",
-      businessType: tenant.businessType || "Lanchonetes",
+      businessType: tenant.businessType || tenant.category || "Hambúrgueres",
       localidade: tenant.localidade || "Gargaú",
       isFeatured: Boolean(tenant.isFeatured),
       priorityOrder: Number(tenant.priorityOrder) || 0,
@@ -682,8 +683,9 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         }
       }
 
-      // 2. Salva configurações da loja
-      const res = await updateTenantApi(editingTenantConfig.id, {
+      // 2. Salva configurações e categoria da loja no Cloudflare D1 / KV e sincroniza estado global
+      const selectedCategory = (configForm.businessType || "Hambúrgueres").trim();
+      const res = await updateTenant(editingTenantConfig.id, {
         name: configForm.name.trim(),
         logo: configForm.logo,
         bannerImage: configForm.bannerImage,
@@ -700,7 +702,10 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
         themeMode: configForm.themeMode,
         menuLayout: configForm.menuLayout,
         showFeaturedCarousel: configForm.showFeaturedCarousel,
-        businessType: configForm.businessType || "Lanchonetes",
+        businessType: selectedCategory,
+        category: selectedCategory,
+        categoryId: selectedCategory,
+        category_id: selectedCategory,
         localidade: configForm.localidade?.trim() || "Gargaú",
         isFeatured: Boolean(configForm.isFeatured),
         priorityOrder: Number(configForm.priorityOrder) || 0,
@@ -708,12 +713,14 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
       });
 
       if (res.success) {
-        await refreshTenants();
-        setConfigSuccessMessage("Configurações e credenciais da loja atualizadas com sucesso no banco de dados!");
+        if (res.tenant) {
+          setEditingTenantConfig(res.tenant);
+        }
+        setConfigSuccessMessage("Categoria, configurações e credenciais da loja salvas com sucesso no banco de dados!");
         setTimeout(() => {
           setIsStoreConfigModalOpen(false);
           setEditingTenantConfig(null);
-        }, 1500);
+        }, 1200);
       } else {
         setConfigErrorMessage(res.error || "Erro ao salvar configurações da loja.");
       }
@@ -1878,8 +1885,22 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       </button>
                     </div>
 
-                    {/* Linha 2: Badges e Selos (Demo/Plano, Localidade, Destaque/P10, Ativa/Pausada) - Sempre visíveis e sem truncamento */}
+                    {/* Linha 2: Badges e Selos (Categoria, Demo/Plano, Localidade, Destaque/P10, Ativa/Pausada) - Sempre visíveis e sem truncamento */}
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1 border-t border-slate-800/50 w-full">
+                      {/* Categoria da Loja (Clicável para editar no modal de configurações) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenStoreConfig(t);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/35 hover:bg-amber-500/25 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition"
+                        title={`Categoria: ${t.businessType || t.category || "Hambúrgueres"} (Clique para alterar)`}
+                      >
+                        <Tag className="h-3 w-3 text-amber-400" />
+                        <span>{t.businessType || t.category || "Hambúrgueres"}</span>
+                      </button>
+
                       {/* Localidade / Região */}
                       <span
                         className="inline-flex items-center gap-1 rounded-full bg-slate-800 text-slate-200 border border-slate-700/80 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium whitespace-nowrap"
@@ -2051,6 +2072,40 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                       {t.tagline && (
                         <p className="text-[11px] text-slate-400 line-clamp-1 px-0.5">{t.tagline}</p>
                       )}
+
+                      {/* Seletor Rápido de Categoria Direto no Card Expandido */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Tag className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                          <span className="text-[11px] font-bold text-amber-300">Categoria da Loja (Vitrine):</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={t.businessType || t.category || "Hambúrgueres"}
+                            onChange={async (e) => {
+                              const newCat = e.target.value;
+                              await updateTenant(t.id, {
+                                businessType: newCat,
+                                category: newCat,
+                                categoryId: newCat,
+                                category_id: newCat,
+                              });
+                            }}
+                            className="rounded-lg border border-amber-500/40 bg-slate-950 px-2.5 py-1 text-[11px] font-bold text-white outline-none focus:border-amber-400 cursor-pointer"
+                            title="Alterar e salvar automaticamente a categoria da loja no banco D1"
+                          >
+                            {availableCategories.map((cat) => (
+                              <option key={cat.id} value={cat.name}>
+                                {cat.icon} {cat.name}
+                              </option>
+                            ))}
+                            {t.businessType &&
+                              !availableCategories.some(
+                                (cat) => cat.name.toLowerCase() === (t.businessType || "").toLowerCase()
+                              ) && <option value={t.businessType}>🏪 {t.businessType}</option>}
+                          </select>
+                        </div>
+                      </div>
 
                       {/* 2. Informações de Contato & Stats em Grid Compacta */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 text-[11px] rounded-lg border border-slate-800/80 bg-slate-950/50 p-2 text-slate-300">

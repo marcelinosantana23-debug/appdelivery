@@ -116,6 +116,70 @@ export function isTenantPermanentlyDeleted(idOrSlug: string): boolean {
   return deleted.includes(lower);
 }
 
+// =========================================================================
+// PERSISTÊNCIA DE ALTERAÇÕES DE LOJAS EM DISCO / MEMÓRIA (NODE.JS / PREVIEW)
+// =========================================================================
+export function getPersistedTenantOverrides(): Record<string, Partial<Tenant>> {
+  const result: Record<string, Partial<Tenant>> = {};
+  try {
+    if (
+      typeof globalThis !== "undefined" &&
+      (globalThis as any).__TOPFOOD_TENANT_OVERRIDES__ &&
+      typeof (globalThis as any).__TOPFOOD_TENANT_OVERRIDES__ === "object"
+    ) {
+      Object.assign(result, (globalThis as any).__TOPFOOD_TENANT_OVERRIDES__);
+    }
+  } catch (_e) {
+    void _e;
+  }
+
+  try {
+    const proc = (globalThis as any).process;
+    const req = (globalThis as any).require;
+    if (typeof proc !== "undefined" && typeof req === "function") {
+      const fs = req("fs");
+      const path = req("path");
+      const filePath = path.resolve(proc.cwd(), ".topfood_tenant_overrides.json");
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          Object.assign(result, parsed);
+        }
+      }
+    }
+  } catch (_e) {
+    void _e;
+  }
+
+  return result;
+}
+
+export function persistTenantOverride(tenantId: string, partial: Partial<Tenant>): void {
+  if (!tenantId) return;
+  try {
+    const current = getPersistedTenantOverrides();
+    current[tenantId] = {
+      ...(current[tenantId] || {}),
+      ...partial,
+      updatedAt: Date.now(),
+    };
+    if (typeof globalThis !== "undefined") {
+      (globalThis as any).__TOPFOOD_TENANT_OVERRIDES__ = current;
+    }
+    const proc = (globalThis as any).process;
+    const req = (globalThis as any).require;
+    if (typeof proc !== "undefined" && typeof req === "function") {
+      const fs = req("fs");
+      const path = req("path");
+      const filePath = path.resolve(proc.cwd(), ".topfood_tenant_overrides.json");
+      fs.writeFileSync(filePath, JSON.stringify(current, null, 2), "utf-8");
+    }
+  } catch (_e) {
+    void _e;
+  }
+}
+
 // Seed data para demonstração e inicialização
 const initialTenants: Tenant[] = [
   // 1. Açaiteria
@@ -2219,9 +2283,33 @@ export function setPersistedSuperAdmin(admin: { id: string; email: string; passw
 
 // In-memory data store for Node.js / preview runtime (with persistence)
 class MemoryStore {
-  tenants: Tenant[] = initialTenants.filter(
-    (t) => !isTenantPermanentlyDeleted(t.id) && !isTenantPermanentlyDeleted(t.slug)
-  );
+  tenants: Tenant[] = (() => {
+    const overrides = getPersistedTenantOverrides();
+    return initialTenants
+      .filter((t) => !isTenantPermanentlyDeleted(t.id) && !isTenantPermanentlyDeleted(t.slug))
+      .map((t) => {
+        const ov = overrides[t.id] || overrides[t.slug];
+        if (ov) {
+          const merged = { ...t, ...ov };
+          const resolvedCat =
+            merged.businessType ||
+            merged.category ||
+            merged.categoryId ||
+            (merged as any).category_id ||
+            t.businessType ||
+            "Hambúrgueres";
+          merged.businessType = resolvedCat;
+          merged.category = resolvedCat;
+          merged.categoryId = resolvedCat;
+          return merged;
+        }
+        return {
+          ...t,
+          category: t.businessType,
+          categoryId: t.businessType,
+        };
+      });
+  })();
   users: User[] = (() => {
     const list = initialUsers.filter((u) => !u.tenantId || !isTenantPermanentlyDeleted(u.tenantId));
     const persisted = getPersistedSuperAdmin();
@@ -2509,6 +2597,8 @@ export class Database {
         "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
         "ALTER TABLE users ADD COLUMN updated_at INTEGER DEFAULT 0",
         "ALTER TABLE tenants ADD COLUMN business_type TEXT DEFAULT 'Lanchonetes'",
+        "ALTER TABLE tenants ADD COLUMN category TEXT DEFAULT ''",
+        "ALTER TABLE tenants ADD COLUMN category_id TEXT DEFAULT ''",
         "ALTER TABLE tenants ADD COLUMN is_featured INTEGER DEFAULT 0",
         "ALTER TABLE tenants ADD COLUMN priority_order INTEGER DEFAULT 0",
         "ALTER TABLE establishment_categories ADD COLUMN order_index INTEGER DEFAULT 0",
@@ -3414,9 +3504,26 @@ export class Database {
             ? String((partial as any).motoboy_name).trim()
             : (tenant.motoboyName || (tenant as any).motoboy_name || ""));
 
+    const resolvedBusinessType =
+      partial.businessType !== undefined && String(partial.businessType).trim() !== ""
+        ? String(partial.businessType).trim()
+        : partial.category !== undefined && String(partial.category).trim() !== ""
+        ? String(partial.category).trim()
+        : partial.categoryId !== undefined && String(partial.categoryId).trim() !== ""
+        ? String(partial.categoryId).trim()
+        : (partial as any).category_id !== undefined && String((partial as any).category_id).trim() !== ""
+        ? String((partial as any).category_id).trim()
+        : (partial as any).business_type !== undefined && String((partial as any).business_type).trim() !== ""
+        ? String((partial as any).business_type).trim()
+        : tenant.businessType || tenant.category || "Hambúrgueres";
+
     const updated: Tenant = {
       ...tenant,
       ...partial,
+      businessType: resolvedBusinessType,
+      category: resolvedBusinessType,
+      categoryId: resolvedBusinessType,
+      category_id: resolvedBusinessType,
       localidade: localidadeVal,
       motoboyPhone: motoboyPhoneVal,
       motoboy_phone: motoboyPhoneVal,
@@ -3433,14 +3540,51 @@ export class Database {
       updatedAt: Date.now(),
     };
 
+    // Persiste em disco/memória global para manter a alteração mesmo após reinício ou refresh
+    persistTenantOverride(tenant.id, {
+      name: updated.name,
+      whatsapp: updated.whatsapp,
+      pixKey: updated.pixKey,
+      pixKeyType: updated.pixKeyType,
+      deliveryFee: updated.deliveryFee,
+      address: updated.address,
+      hours: updated.hours,
+      tagline: updated.tagline,
+      logo: updated.logo,
+      bannerImage: updated.bannerImage,
+      primaryColor: updated.primaryColor,
+      primaryDark: updated.primaryDark,
+      primaryLight: updated.primaryLight,
+      accentColor: updated.accentColor,
+      businessType: resolvedBusinessType,
+      category: resolvedBusinessType,
+      categoryId: resolvedBusinessType,
+      category_id: resolvedBusinessType,
+      localidade: updated.localidade,
+      motoboyPhone: updated.motoboyPhone,
+      motoboyName: updated.motoboyName,
+      status: updated.status,
+      isOpen: updated.isOpen,
+      isFeatured: updated.isFeatured,
+      priorityOrder: updated.priorityOrder,
+      subscriptionStatus: updated.subscriptionStatus,
+      billingDay: updated.billingDay,
+      lastPaymentAt: updated.lastPaymentAt,
+      paidUntil: updated.paidUntil,
+      nextDueDate: updated.nextDueDate,
+      monthlyFee: updated.monthlyFee,
+      updatedAt: updated.updatedAt,
+    });
+
     if (this.env?.DB) {
+      await this.ensureTables();
       try {
         await this.env.DB.prepare(
           `UPDATE tenants SET 
             name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
             delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
-            logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-            accent_color = ?, business_type = ?, localidade = ?, motoboy_phone = ?, motoboy_name = ?, status = ?, is_open = ?,
+            logo = ?, banner = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
+            accent_color = ?, business_type = ?, category = ?, category_id = ?, localidade = ?, motoboy_phone = ?, motoboy_name = ?, status = ?, is_open = ?,
             is_featured = ?, priority_order = ?,
             subscription_status = ?, billing_day = ?, last_payment_at = ?, monthly_fee = ?,
             updated_at = ?
@@ -3457,11 +3601,14 @@ export class Database {
             updated.tagline,
             updated.logo,
             updated.bannerImage || "",
+            updated.bannerImage || "",
             updated.primaryColor,
             updated.primaryDark,
             updated.primaryLight,
             updated.accentColor,
-            updated.businessType || "Lanchonetes",
+            resolvedBusinessType,
+            resolvedBusinessType,
+            resolvedBusinessType,
             updated.localidade || "Gargaú",
             updated.motoboyPhone || "",
             updated.motoboyName || "",
@@ -3484,8 +3631,9 @@ export class Database {
             `UPDATE tenants SET 
               name = ?, whatsapp = ?, pix_key = ?, pix_key_type = ?, 
               delivery_fee = ?, address = ?, hours = ?, tagline = ?, 
-              logo = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
-              accent_color = ?, business_type = ?, localidade = ?, motoboy_phone = ?, motoboy_name = ?, status = ?, is_open = ?, updated_at = ?
+              logo = ?, banner_image = ?, primary_color = ?, primary_dark = ?, primary_light = ?, 
+              accent_color = ?, business_type = ?, localidade = ?, motoboy_phone = ?, motoboy_name = ?, status = ?, is_open = ?,
+              is_featured = ?, priority_order = ?, updated_at = ?
             WHERE id = ?`
           )
             .bind(
@@ -3498,16 +3646,19 @@ export class Database {
               updated.hours,
               updated.tagline,
               updated.logo,
+              updated.bannerImage || "",
               updated.primaryColor,
               updated.primaryDark,
               updated.primaryLight,
               updated.accentColor,
-              updated.businessType || "Lanchonetes",
+              resolvedBusinessType,
               updated.localidade || "Gargaú",
               updated.motoboyPhone || "",
               updated.motoboyName || "",
               updated.status,
               updated.isOpen ? 1 : 0,
+              updated.isFeatured ? 1 : 0,
+              updated.priorityOrder || 0,
               updated.updatedAt,
               tenant.id
             )
@@ -3527,6 +3678,8 @@ export class Database {
       try {
         await kv.put(`tenant:${updated.id}`, JSON.stringify(updated));
         await kv.put(`tenant:${updated.slug.toLowerCase()}`, JSON.stringify(updated));
+        await kv.delete("tenants:all");
+        await kv.delete("categories:active");
       } catch (e) {
         console.warn("KV update tenant error:", e);
       }
@@ -5707,10 +5860,16 @@ export class Database {
   // Row mappers for D1 SQL
   private mapTenantRow(row: any): Tenant {
     const seedTenant = initialTenants.find((it) => it.id === row.id || it.slug === row.slug);
+    const overrides = getPersistedTenantOverrides();
+    const ov = overrides[row.id] || overrides[row.slug];
     const resolvedBusinessType =
-      row.business_type && row.business_type !== "Lanchonetes"
-        ? row.business_type
-        : row.category || seedTenant?.businessType || row.business_type || "Hambúrgueres";
+      (row.category && String(row.category).trim() !== "")
+        ? String(row.category).trim()
+        : (row.category_id && String(row.category_id).trim() !== "")
+        ? String(row.category_id).trim()
+        : (row.business_type && String(row.business_type).trim() !== "")
+        ? String(row.business_type).trim()
+        : ov?.businessType || ov?.category || seedTenant?.businessType || "Hambúrgueres";
 
     return {
       id: row.id,
@@ -5739,6 +5898,9 @@ export class Database {
       isFeatured: row.is_featured !== undefined ? Boolean(row.is_featured) : Boolean(row.isFeatured || false),
       priorityOrder: Number(row.priority_order !== undefined ? row.priority_order : (row.priorityOrder || 0)),
       businessType: resolvedBusinessType,
+      category: resolvedBusinessType,
+      categoryId: resolvedBusinessType,
+      category_id: resolvedBusinessType,
       localidade: (row.localidade && row.localidade !== "undefined") ? row.localidade : "Gargaú",
       motoboyPhone: row.motoboy_phone || row.motoboyPhone || "",
       motoboy_phone: row.motoboy_phone || row.motoboyPhone || "",

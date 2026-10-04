@@ -183,6 +183,10 @@ interface StoreContextValue {
     priorityOrder?: number;
     localidade?: string;
   }) => Promise<{ success: boolean; tenant?: Tenant; user?: User; error?: string }>;
+  updateTenant: (
+    slugOrId: string,
+    data: Partial<Tenant> & { adminEmail?: string; adminPassword?: string }
+  ) => Promise<{ success: boolean; tenant?: Tenant; error?: string; message?: string }>;
   toggleTenantStatus: (slugOrId: string, status: TenantStatus) => Promise<boolean>;
   activateSubscription: (
     slugOrId: string,
@@ -279,6 +283,9 @@ function tenantToStoreConfig(t: Tenant): StoreConfig {
     showFeaturedCarousel: t.showFeaturedCarousel !== false,
     status: t.status,
     isOpen: t.isOpen,
+    businessType: t.businessType || t.category || t.categoryId || (t as any).category_id || "Hambúrgueres",
+    category: t.category || t.businessType || t.categoryId || (t as any).category_id || "Hambúrgueres",
+    categoryId: t.categoryId || (t as any).category_id || t.businessType || t.category || "Hambúrgueres",
     localidade: t.localidade || "Gargaú",
     motoboyPhone: t.motoboyPhone || (t as any).motoboy_phone || "",
     motoboyName: t.motoboyName || (t as any).motoboy_name || "",
@@ -1340,8 +1347,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---------------- STORE CONFIG & SETTINGS ----------------
   const updateConfig = useCallback(
     async (partial: Partial<StoreConfig>) => {
+      const resolvedCategory =
+        partial.businessType ||
+        partial.category ||
+        partial.categoryId ||
+        partial.category_id ||
+        undefined;
+
       setConfig((prev) => {
-        const next = { ...prev, ...partial };
+        const next = {
+          ...prev,
+          ...partial,
+          ...(resolvedCategory
+            ? {
+                businessType: resolvedCategory,
+                category: resolvedCategory,
+                categoryId: resolvedCategory,
+              }
+            : {}),
+        };
         applyThemeColors(next);
         return next;
       });
@@ -1349,6 +1373,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (targetTenantId) {
         const payload: Partial<Tenant> = {
           ...partial,
+          ...(resolvedCategory
+            ? {
+                businessType: resolvedCategory,
+                category: resolvedCategory,
+                categoryId: resolvedCategory,
+                category_id: resolvedCategory,
+              }
+            : {}),
           ...(partial.motoboyPhone !== undefined
             ? { motoboyPhone: partial.motoboyPhone, motoboy_phone: partial.motoboyPhone }
             : {}),
@@ -1360,8 +1392,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (updated.success && updated.tenant) {
           setCurrentTenant(updated.tenant);
           setTenants((prev) => {
-            const next = prev.map((t) => (t.id === updated.tenant!.id ? updated.tenant! : t));
+            const next = prev.map((t) =>
+              t.id === updated.tenant!.id || t.slug === updated.tenant!.slug ? updated.tenant! : t
+            );
             saveCachedTenants(next);
+            return next;
+          });
+          setFeaturedStoresRanked((prev) => {
+            const next = prev.map((s) =>
+              s.id === updated.tenant!.id || s.slug === updated.tenant!.slug
+                ? { ...s, ...updated.tenant! }
+                : s
+            );
+            saveCachedFeaturedStores(next);
             return next;
           });
           try {
@@ -1370,10 +1413,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           } catch {
             // ignore
           }
+          await Promise.all([
+            refreshTenants(),
+            refreshEstablishmentCategories(),
+            refreshFeaturedStoresRanked(),
+          ]);
         }
       }
     },
-    [currentTenant, config.id, config.slug]
+    [
+      currentTenant,
+      config.id,
+      config.slug,
+      refreshTenants,
+      refreshEstablishmentCategories,
+      refreshFeaturedStoresRanked,
+    ]
   );
 
   const toggleStore = useCallback(async () => {
@@ -2148,11 +2203,124 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }) => {
       const res = await createTenantApi(data);
       if (res.success && res.tenant) {
-        await Promise.all([refreshTenants(), refreshLocalities()]);
+        await Promise.all([refreshTenants(), refreshLocalities(), refreshEstablishmentCategories()]);
       }
       return res;
     },
-    [refreshTenants, refreshLocalities]
+    [refreshTenants, refreshLocalities, refreshEstablishmentCategories]
+  );
+
+  const updateTenant = useCallback(
+    async (
+      slugOrId: string,
+      data: Partial<Tenant> & { adminEmail?: string; adminPassword?: string }
+    ): Promise<{ success: boolean; tenant?: Tenant; error?: string; message?: string }> => {
+      const resolvedCategory =
+        data.businessType ||
+        data.category ||
+        data.categoryId ||
+        (data as any).category_id ||
+        undefined;
+
+      const payload: Partial<Tenant> & { adminEmail?: string; adminPassword?: string } = {
+        ...data,
+        ...(resolvedCategory
+          ? {
+              businessType: resolvedCategory,
+              category: resolvedCategory,
+              categoryId: resolvedCategory,
+              category_id: resolvedCategory,
+            }
+          : {}),
+      };
+
+      // 1. Atualização otimista imediata no estado global e no cache localStorage
+      setTenants((prev) => {
+        const next = prev.map((t) =>
+          t.id === slugOrId || t.slug === slugOrId ? { ...t, ...payload, updatedAt: Date.now() } : t
+        );
+        saveCachedTenants(next);
+        return next;
+      });
+
+      setFeaturedStoresRanked((prev) => {
+        const next = prev.map((s) =>
+          s.id === slugOrId || s.slug === slugOrId ? { ...s, ...payload } : s
+        );
+        saveCachedFeaturedStores(next);
+        return next;
+      });
+
+      setCurrentTenant((prev) => {
+        if (prev && (prev.id === slugOrId || prev.slug === slugOrId)) {
+          const updated = { ...prev, ...payload, updatedAt: Date.now() };
+          try {
+            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        }
+        return prev;
+      });
+
+      // 2. Persistência no Cloudflare D1 / KV via API
+      const res = await updateTenantApi(slugOrId, payload);
+      if (res.success && res.tenant) {
+        const savedTenant = res.tenant;
+        setTenants((prev) => {
+          const next = prev.map((t) =>
+            t.id === savedTenant.id || t.slug === savedTenant.slug || t.id === slugOrId || t.slug === slugOrId
+              ? { ...t, ...savedTenant }
+              : t
+          );
+          saveCachedTenants(next);
+          return next;
+        });
+
+        setFeaturedStoresRanked((prev) => {
+          const next = prev.map((s) =>
+            s.id === savedTenant.id || s.slug === savedTenant.slug || s.id === slugOrId || s.slug === slugOrId
+              ? { ...s, ...savedTenant }
+              : s
+          );
+          saveCachedFeaturedStores(next);
+          return next;
+        });
+
+        setCurrentTenant((prev) => {
+          if (
+            prev &&
+            (prev.id === savedTenant.id ||
+              prev.slug === savedTenant.slug ||
+              prev.id === slugOrId ||
+              prev.slug === slugOrId)
+          ) {
+            const updated = { ...prev, ...savedTenant };
+            try {
+              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
+              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          }
+          return prev;
+        });
+
+        // Revalida em paralelo do banco de dados para garantir 100% de sincronia na vitrine
+        await Promise.all([
+          refreshTenants(),
+          refreshEstablishmentCategories(),
+          refreshFeaturedStoresRanked(),
+          refreshLocalities(),
+        ]);
+      }
+
+      return res;
+    },
+    [refreshTenants, refreshEstablishmentCategories, refreshFeaturedStoresRanked, refreshLocalities]
   );
 
   const toggleTenantStatus = useCallback(
@@ -2706,6 +2874,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         getTenantCredentials,
         getAllTenantCredentials,
         createNewTenant,
+        updateTenant,
         toggleTenantStatus,
         activateSubscription,
         updateMonthlyFee,

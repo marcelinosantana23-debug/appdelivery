@@ -102,6 +102,9 @@ export interface Tenant {
   isFeatured?: boolean;
   priorityOrder?: number;
   businessType?: string;
+  category?: string;
+  categoryId?: string;
+  category_id?: string;
   localidade?: string;
   rating?: number;
   ratingCount?: number;

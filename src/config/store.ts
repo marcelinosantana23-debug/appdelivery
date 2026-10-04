@@ -27,6 +27,9 @@ export interface StoreConfig {
   status?: "active" | "inactive";
   isOpen?: boolean;
   businessType?: string;
+  category?: string;
+  categoryId?: string;
+  category_id?: string;
   localidade?: string;
   geminiApiKey?: string;
   motoboyPhone?: string;

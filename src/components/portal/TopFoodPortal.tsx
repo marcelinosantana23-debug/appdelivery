@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useStore } from "@/context/StoreContext";
 import { PortalHeader } from "./PortalHeader";
 import { EstablishmentCategories } from "./EstablishmentCategories";
@@ -129,6 +129,19 @@ export function TopFoodPortal({
       return doesCategoryMatch(matched, selectedCategory, tenant.businessType);
     });
   }, [lojas, selectedCategory, dynamicCategories]);
+
+  // Se a categoria selecionada ficar vazia (0 lojas) após uma alteração de categoria no SuperAdmin,
+  // volta automaticamente para "todos" para nunca exibir uma categoria vazia.
+  useEffect(() => {
+    if (
+      selectedCategory &&
+      selectedCategory !== "todos" &&
+      lojas.length > 0 &&
+      categoryFilteredStores.length === 0
+    ) {
+      setSelectedCategory("todos");
+    }
+  }, [selectedCategory, lojas.length, categoryFilteredStores.length]);
 
   // Lojas filtradas pela busca global (nome, categoria ou culinária) e pela categoria selecionada
   const matchingStores = useMemo(() => {

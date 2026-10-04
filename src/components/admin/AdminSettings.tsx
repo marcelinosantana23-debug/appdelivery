@@ -20,6 +20,7 @@ import {
   User,
   Phone,
   AlertTriangle,
+  Tag,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { getOfficialStoreUrl, copyTextToClipboard } from "@/utils/url";
@@ -49,10 +50,21 @@ const PIX_TYPES: { value: PixKeyType; label: string }[] = [
 ];
 
 export function AdminSettings() {
-  const { config, updateConfig, isStoreOpen, toggleStore, orders, showToast, deleteTenant, logout } = useStore();
+  const {
+    config,
+    updateConfig,
+    isStoreOpen,
+    toggleStore,
+    orders,
+    showToast,
+    deleteTenant,
+    logout,
+    establishmentCategories,
+  } = useStore();
 
   const [form, setForm] = useState({
     name: config.name,
+    businessType: config.businessType || config.category || "Hambúrgueres",
     bannerImage: config.bannerImage || "",
     whatsapp: config.whatsapp,
     motoboyPhone: config.motoboyPhone || "",
@@ -85,6 +97,7 @@ export function AdminSettings() {
   useEffect(() => {
     setForm({
       name: config.name,
+      businessType: config.businessType || config.category || "Hambúrgueres",
       bannerImage: config.bannerImage || "",
       whatsapp: config.whatsapp,
       motoboyPhone: config.motoboyPhone || "",
@@ -104,6 +117,8 @@ export function AdminSettings() {
     config.id,
     config.slug,
     config.name,
+    config.businessType,
+    config.category,
     config.whatsapp,
     config.motoboyPhone,
     config.motoboyName,
@@ -192,6 +207,9 @@ export function AdminSettings() {
     try {
       await updateConfig({
         name: form.name.trim(),
+        businessType: form.businessType.trim() || "Hambúrgueres",
+        category: form.businessType.trim() || "Hambúrgueres",
+        categoryId: form.businessType.trim() || "Hambúrgueres",
         bannerImage: form.bannerImage,
         whatsapp: form.whatsapp.trim(),
         motoboyPhone: form.motoboyPhone.trim(),
@@ -512,6 +530,46 @@ export function AdminSettings() {
               className="form-input"
               placeholder="Nome do estabelecimento"
             />
+          </FormField>
+
+          <FormField label="Categoria na Vitrine Top Food" icon={<Tag className="h-4 w-4" />}>
+            <select
+              value={form.businessType}
+              onChange={(e) => set("businessType", e.target.value)}
+              className="form-input"
+            >
+              {establishmentCategories && establishmentCategories.length > 0 ? (
+                establishmentCategories.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.icon} {cat.name}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="Hambúrgueres">🍔 Hambúrgueres</option>
+                  <option value="Pizzarias">🍕 Pizzarias</option>
+                  <option value="Açaí">🍧 Açaí</option>
+                  <option value="Lanchonetes">🌭 Lanchonetes</option>
+                  <option value="Padarias">🥖 Padarias</option>
+                  <option value="Japonesa">🍣 Japonesa</option>
+                  <option value="Bebidas">🍺 Bebidas</option>
+                  <option value="Docerias">🍰 Docerias</option>
+                  <option value="Churrascarias">🥩 Churrascarias</option>
+                  <option value="Pastelarias">🥟 Pastelarias</option>
+                  <option value="Saudáveis">🥗 Saudáveis</option>
+                </>
+              )}
+              {form.businessType &&
+                establishmentCategories &&
+                !establishmentCategories.some(
+                  (c) =>
+                    c.name.toLowerCase() === form.businessType.toLowerCase() ||
+                    c.id.toLowerCase() === form.businessType.toLowerCase()
+                ) && <option value={form.businessType}>🏪 {form.businessType}</option>}
+            </select>
+            <p className="mt-1 text-xs text-gray-400">
+              Define em qual categoria da tela inicial do Top Food esta loja será exibida.
+            </p>
           </FormField>
 
           <FormField label="WhatsApp (com DDD, apenas números)" icon={<MessageCircle className="h-4 w-4" />}>

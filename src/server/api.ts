@@ -2228,8 +2228,29 @@ const handleTenantUpdate = async (c: any) => {
       }
     }
 
+    const rawCategory =
+      body.businessType !== undefined && String(body.businessType).trim() !== ""
+        ? String(body.businessType).trim()
+        : body.business_type !== undefined && String(body.business_type).trim() !== ""
+        ? String(body.business_type).trim()
+        : body.category !== undefined && String(body.category).trim() !== ""
+        ? String(body.category).trim()
+        : body.categoryId !== undefined && String(body.categoryId).trim() !== ""
+        ? String(body.categoryId).trim()
+        : body.category_id !== undefined && String(body.category_id).trim() !== ""
+        ? String(body.category_id).trim()
+        : undefined;
+
     const payload = {
       ...body,
+      ...(rawCategory !== undefined
+        ? {
+            businessType: rawCategory,
+            category: rawCategory,
+            categoryId: rawCategory,
+            category_id: rawCategory,
+          }
+        : {}),
       ...(body.localidade !== undefined ? { localidade: String(body.localidade).trim() } : {}),
       ...(body.motoboyPhone !== undefined ? { motoboyPhone: String(body.motoboyPhone).trim(), motoboy_phone: String(body.motoboyPhone).trim() } : {}),
       ...(body.motoboy_phone !== undefined ? { motoboyPhone: String(body.motoboy_phone).trim(), motoboy_phone: String(body.motoboy_phone).trim() } : {}),
@@ -2238,7 +2259,12 @@ const handleTenantUpdate = async (c: any) => {
     };
 
     const updated = await db.updateTenant(tenant.id, payload);
-    return c.json({ success: true, tenant: updated }, 200);
+    return c.json({
+      success: true,
+      tenant: updated,
+      store: updated,
+      message: "Categoria e configurações da loja salvas com sucesso no banco de dados!",
+    }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao atualizar" }, 500);
   }
@@ -2246,6 +2272,12 @@ const handleTenantUpdate = async (c: any) => {
 
 api.put("/tenants/:slugOrId", handleTenantUpdate);
 api.patch("/tenants/:slugOrId", handleTenantUpdate);
+api.put("/admin/stores/:slugOrId", handleTenantUpdate);
+api.patch("/admin/stores/:slugOrId", handleTenantUpdate);
+api.put("/admin/tenants/:slugOrId", handleTenantUpdate);
+api.patch("/admin/tenants/:slugOrId", handleTenantUpdate);
+api.put("/stores/:slugOrId", handleTenantUpdate);
+api.patch("/stores/:slugOrId", handleTenantUpdate);
 
 api.patch("/tenants/:slugOrId/status", async (c) => {
   try {
@@ -2431,7 +2463,30 @@ api.delete("/tenants/:slugOrId", async (c) => {
 const handleGetEstablishmentCategories = async (c: any) => {
   try {
     const db = getDb(c);
-    const categories = await db.getEstablishmentCategories();
+    const activeOnly = c.req.query("activeOnly") === "true" || c.req.query("nonEmpty") === "true";
+    let categories = await db.getEstablishmentCategories();
+
+    if (activeOnly) {
+      const tenants = await db.getTenants();
+      const activeTenants = tenants.filter((t) => t.status !== "inactive");
+      const norm = (str?: string) =>
+        (str || "")
+          .toLowerCase()
+          .trim()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+
+      categories = categories.filter((cat) => {
+        if (cat.id === "todos" || norm(cat.name) === "todos") return true;
+        const cId = norm(cat.id);
+        const cName = norm(cat.name);
+        return activeTenants.some((t) => {
+          const bType = norm(t.businessType || t.category || t.categoryId);
+          return bType === cId || bType === cName || (bType && (bType.includes(cName) || cName.includes(bType)));
+        });
+      });
+    }
+
     return c.json({ success: true, categories }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao carregar categorias" }, 500);
