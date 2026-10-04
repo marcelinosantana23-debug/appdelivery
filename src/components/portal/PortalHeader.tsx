@@ -5,20 +5,23 @@ import { LocalitySelector } from "@/components/portal/LocalitySelector";
 import { useStore } from "@/context/StoreContext";
 
 const POPULAR_SEARCH_CHIPS = [
-  { label: "Hambúrgueres", icon: "🍔", term: "Hambúrguer" },
-  { label: "Pizzarias", icon: "🍕", term: "Pizza" },
-  { label: "Açaí", icon: "🍧", term: "Açaí" },
-  { label: "Japonesa", icon: "🍣", term: "Japonesa" },
-  { label: "Sorvetes", icon: "🍨", term: "Sorvete" },
-  { label: "Churrasco", icon: "🥩", term: "Churrasco" },
-  { label: "Doces", icon: "🍰", term: "Doces" },
+  { label: "Hambúrgueres", icon: "🍔", term: "Hambúrguer", categoryId: "hamburgueres" },
+  { label: "Pizzarias", icon: "🍕", term: "Pizza", categoryId: "pizzarias" },
+  { label: "Açaí", icon: "🍧", term: "Açaí", categoryId: "acaiterias" },
+  { label: "Japonesa", icon: "🍣", term: "Japonesa", categoryId: "japonesa" },
+  { label: "Padarias", icon: "🥖", term: "Padaria", categoryId: "padarias-cafes" },
+  { label: "Sorvetes", icon: "🍨", term: "Sorvete", categoryId: "sorveterias" },
+  { label: "Churrasco", icon: "🥩", term: "Churrasco", categoryId: "churrascaria" },
+  { label: "Doces", icon: "🍰", term: "Doces", categoryId: "doces" },
 ];
 
 interface PortalHeaderProps {
   searchQuery: string;
   onSearchChange: (val: string) => void;
   onStoreAdminClick?: () => void;
-  totalStores: number;
+  totalStores?: number;
+  selectedCategory?: string;
+  onSelectCategory?: (catId: string) => void;
 }
 
 export function PortalHeader({
@@ -26,8 +29,14 @@ export function PortalHeader({
   onSearchChange,
   onStoreAdminClick,
   totalStores,
+  selectedCategory = "todos",
+  onSelectCategory,
 }: PortalHeaderProps) {
-  const { platformSettings, isLoadingTenants } = useStore();
+  const { platformSettings, isLoadingTenants, tenants } = useStore();
+  const activeStoresCount =
+    typeof totalStores === "number" && totalStores > 0
+      ? totalStores
+      : (tenants || []).filter((t) => t.status !== "inactive").length;
 
   const bannerImg =
     platformSettings?.bannerUrl?.trim() ||
@@ -231,10 +240,10 @@ export function PortalHeader({
             <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-gray-500 dark:text-gray-400 px-1 shrink-0">
               <span className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
                 <Sparkles className="h-3.5 w-3.5" style={{ color: primaryColor }} />
-                {isLoadingTenants ? (
+                {isLoadingTenants && activeStoresCount === 0 ? (
                   <span className="inline-block h-3.5 w-20 bg-gray-200 dark:bg-slate-700 animate-pulse rounded" />
                 ) : (
-                  `${totalStores} ${totalStores === 1 ? "loja parceira" : "lojas parceiras"}`
+                  `${activeStoresCount} ${activeStoresCount === 1 ? "loja parceira" : "lojas parceiras"}`
                 )}
               </span>
             </div>
@@ -246,13 +255,22 @@ export function PortalHeader({
               Populares:
             </span>
             {POPULAR_SEARCH_CHIPS.map((chip) => {
-              const isSelected = searchQuery.toLowerCase().trim() === chip.term.toLowerCase();
+              const isSelected =
+                (onSelectCategory && selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) ||
+                searchQuery.toLowerCase().trim() === chip.term.toLowerCase();
               return (
                 <button
                   key={chip.term}
                   type="button"
                   onClick={() => {
-                    if (isSelected) {
+                    if (onSelectCategory) {
+                      onSearchChange("");
+                      if (selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) {
+                        onSelectCategory("todos");
+                      } else {
+                        onSelectCategory(chip.categoryId);
+                      }
+                    } else if (isSelected) {
                       onSearchChange("");
                     } else {
                       onSearchChange(chip.term);

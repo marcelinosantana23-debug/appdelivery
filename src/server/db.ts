@@ -2669,10 +2669,10 @@ export class Database {
           id, name, slug, email, phone, whatsapp, pix_key, pix_key_type,
           delivery_fee, min_order, estimated_time, address, hours, tagline,
           announcement, logo, banner, banner_image, primary_color, secondary_color,
-          primary_dark, primary_light, accent_color, localidade, motoboy_phone, motoboy_name, status, is_open,
+          primary_dark, primary_light, accent_color, business_type, localidade, motoboy_phone, motoboy_name, status, is_open,
           is_featured, priority_order,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           t.id,
@@ -2698,6 +2698,7 @@ export class Database {
           t.primaryDark,
           t.primaryLight,
           t.accentColor,
+          t.businessType || "Hambúrgueres",
           t.localidade || "Gargaú",
           t.motoboyPhone || (t as any).motoboy_phone || "",
           t.motoboyName || (t as any).motoboy_name || "",
@@ -5705,6 +5706,12 @@ export class Database {
 
   // Row mappers for D1 SQL
   private mapTenantRow(row: any): Tenant {
+    const seedTenant = initialTenants.find((it) => it.id === row.id || it.slug === row.slug);
+    const resolvedBusinessType =
+      row.business_type && row.business_type !== "Lanchonetes"
+        ? row.business_type
+        : row.category || seedTenant?.businessType || row.business_type || "Hambúrgueres";
+
     return {
       id: row.id,
       name: row.name || "Estabelecimento",
@@ -5731,7 +5738,7 @@ export class Database {
       showFeaturedCarousel: row.show_featured_carousel !== undefined ? Boolean(row.show_featured_carousel) : true,
       isFeatured: row.is_featured !== undefined ? Boolean(row.is_featured) : Boolean(row.isFeatured || false),
       priorityOrder: Number(row.priority_order !== undefined ? row.priority_order : (row.priorityOrder || 0)),
-      businessType: row.business_type || row.category || "Lanchonetes",
+      businessType: resolvedBusinessType,
       localidade: (row.localidade && row.localidade !== "undefined") ? row.localidade : "Gargaú",
       motoboyPhone: row.motoboy_phone || row.motoboyPhone || "",
       motoboy_phone: row.motoboy_phone || row.motoboyPhone || "",

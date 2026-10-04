@@ -1,10 +1,10 @@
 import type { Tenant, FeaturedStoreRanked, TopSellingProduct, EstablishmentCategory } from "@/types";
 
-const CACHE_KEY_TENANTS = "topfood_cache_tenants_v2";
-const CACHE_KEY_FEATURED = "topfood_cache_featured_v2";
-const CACHE_KEY_TOP_PRODUCTS = "topfood_cache_top_products_v2";
-const CACHE_KEY_CATEGORIES = "topfood_cache_categories_v2";
-const CACHE_TIMESTAMP_KEY = "topfood_cache_updated_at_v2";
+const CACHE_KEY_TENANTS = "topfood_cache_tenants_v3";
+const CACHE_KEY_FEATURED = "topfood_cache_featured_v3";
+const CACHE_KEY_TOP_PRODUCTS = "topfood_cache_top_products_v3";
+const CACHE_KEY_CATEGORIES = "topfood_cache_categories_v3";
+const CACHE_TIMESTAMP_KEY = "topfood_cache_updated_at_v3";
 
 /**
  * Carrega a lista de lojas salva no cache do navegador (localStorage)

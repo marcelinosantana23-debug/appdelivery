@@ -1,7 +1,12 @@
 import { useRef, useEffect, useMemo } from "react";
 import type { Tenant, EstablishmentCategory } from "@/types";
 import { useStore } from "@/context/StoreContext";
-import { extractDynamicCategories, matchStoreCategory, slugifyCategory } from "./portalUtils";
+import {
+  extractDynamicCategories,
+  matchStoreCategory,
+  slugifyCategory,
+  doesCategoryMatch,
+} from "./portalUtils";
 import { CategoryPillsSkeleton } from "./PortalSkeleton";
 
 interface EstablishmentCategoriesProps {
@@ -40,20 +45,19 @@ export function EstablishmentCategories({
     const counts: Record<string, number> = { todos: tenants.length };
 
     dynamicCategories.forEach((cat) => {
-      counts[cat.id] = 0;
-    });
-
-    tenants.forEach((tenant) => {
-      const matched = matchStoreCategory(tenant, dynamicCategories);
-      if (matched && matched.id !== "todos") {
-        counts[matched.id] = (counts[matched.id] || 0) + 1;
-      }
+      counts[cat.id] = tenants.filter((tenant) => {
+        const matched = matchStoreCategory(tenant, dynamicCategories);
+        return (
+          doesCategoryMatch(matched, cat.id, tenant.businessType) ||
+          doesCategoryMatch(matched, cat.name, tenant.businessType)
+        );
+      }).length;
     });
 
     return counts;
   }, [dynamicCategories, tenants]);
 
-  // Filtra para exibir apenas categorias que possuem pelo menos 1 loja ativa (mais a opção "Todos")
+  // Filtra para exibir todas as categorias que possuem pelo menos 1 loja ativa (mais a opção "Todos")
   const visibleCategories = useMemo(() => {
     return allCategories.filter((cat) => {
       if (cat.id === "todos") return true;
@@ -87,15 +91,18 @@ export function EstablishmentCategories({
         ref={scrollRef}
         className="no-scrollbar mx-auto flex max-w-5xl gap-2 overflow-x-auto px-4 py-3 scrollbar-none"
       >
-        {isLoadingTenants ? (
+        {isLoadingTenants && tenants.length === 0 ? (
           <CategoryPillsSkeleton />
         ) : (
           visibleCategories.map((cat) => {
             const count = categoryCounts[cat.id] ?? 0;
             const isActive =
-              activeCategory === cat.id ||
-              activeCategory.toLowerCase() === cat.name.toLowerCase() ||
-              slugifyCategory(activeCategory) === slugifyCategory(cat.name);
+              cat.id === "todos"
+                ? !activeCategory || activeCategory.toLowerCase() === "todos"
+                : activeCategory === cat.id ||
+                  activeCategory.toLowerCase() === cat.name.toLowerCase() ||
+                  slugifyCategory(activeCategory) === slugifyCategory(cat.name) ||
+                  doesCategoryMatch(cat, activeCategory);
 
             return (
               <button

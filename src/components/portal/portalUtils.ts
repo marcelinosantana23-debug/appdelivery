@@ -81,12 +81,17 @@ export function extractDynamicCategories(
 ): EstablishmentCategory[] {
   const map = new Map<string, EstablishmentCategory>();
 
-  // 1. Incorpora categorias já cadastradas no Cloudflare D1 (mantendo ícones e ordenação)
-  (dbCategories || []).forEach((c) => {
+  // 1. Incorpora categorias padrão e categorias já cadastradas no Cloudflare D1 (mantendo ícones e ordenação)
+  const baseCategories =
+    dbCategories && dbCategories.length > 0
+      ? [...DEFAULT_ESTABLISHMENT_CATEGORIES, ...dbCategories]
+      : DEFAULT_ESTABLISHMENT_CATEGORIES;
+
+  baseCategories.forEach((c) => {
     if (c.id === "todos") return;
     const nameTrimmed = c.name.trim();
     if (!nameTrimmed) return;
-    const key = nameTrimmed.toLowerCase();
+    const key = slugifyCategory(nameTrimmed);
     map.set(key, {
       id: c.id || slugifyCategory(nameTrimmed),
       name: nameTrimmed,
@@ -96,33 +101,32 @@ export function extractDynamicCategories(
   });
 
   // 2. Extrai dinamicamente todas as categorias únicas atribuídas às lojas ativas
+  const currentCatalog = Array.from(map.values());
   (tenants || []).forEach((tenant) => {
     if (tenant.status === "inactive") return;
-    const rawName = (tenant.businessType || (tenant as any).category || "").trim();
-    if (!rawName) return;
+    const matched = matchStoreCategory(tenant, currentCatalog);
+    if (!matched || matched.id === "todos") return;
 
-    const key = rawName.toLowerCase();
+    const key = slugifyCategory(matched.name);
     if (!map.has(key)) {
       map.set(key, {
-        id: slugifyCategory(rawName),
-        name: rawName,
-        icon: getCategoryIcon(rawName),
-        order: 99,
+        id: matched.id || key,
+        name: matched.name,
+        icon: matched.icon || getCategoryIcon(matched.name),
+        order: matched.order ?? 99,
       });
     }
   });
 
-  // 3. Filtra para manter estritamente as categorias que possuem pelo menos 1 loja associada
+  // 3. Filtra para manter todas as categorias que possuem pelo menos 1 loja ativa associada
+  const allCandidates = Array.from(map.values());
   const activeCategoriesList: EstablishmentCategory[] = [];
-  map.forEach((cat) => {
+
+  allCandidates.forEach((cat) => {
     const hasStores = (tenants || []).some((t) => {
       if (t.status === "inactive") return false;
-      const tCat = (t.businessType || (t as any).category || "").trim().toLowerCase();
-      return (
-        tCat === cat.name.toLowerCase() ||
-        tCat === cat.id.toLowerCase() ||
-        slugifyCategory(tCat) === slugifyCategory(cat.name)
-      );
+      const matched = matchStoreCategory(t, allCandidates);
+      return doesCategoryMatch(matched, cat.id, t.businessType) || doesCategoryMatch(matched, cat.name, t.businessType);
     });
 
     if (hasStores) {
@@ -130,7 +134,7 @@ export function extractDynamicCategories(
     }
   });
 
-  // 4. Ordena por ordem configurada e por nome
+  // 4. Ordena por ordem configurada e por nome (sem qualquer limite de quantidade)
   activeCategoriesList.sort((a, b) => {
     if ((a.order ?? 99) !== (b.order ?? 99)) {
       return (a.order ?? 99) - (b.order ?? 99);
@@ -146,26 +150,95 @@ export function normalizeCategory(businessType?: string, name?: string, tagline?
   return slugifyCategory(combined.trim() || "lanchonetes");
 }
 
+export function doesCategoryMatch(
+  storeCategory: EstablishmentCategory,
+  targetCategoryIdOrName: string,
+  rawTenantBusinessType?: string
+): boolean {
+  if (!targetCategoryIdOrName || targetCategoryIdOrName.toLowerCase() === "todos") {
+    return true;
+  }
+
+  const targetNorm = normalizeSearchText(targetCategoryIdOrName);
+  const targetSlug = slugifyCategory(targetCategoryIdOrName);
+
+  const catIdNorm = normalizeSearchText(storeCategory.id);
+  const catNameNorm = normalizeSearchText(storeCategory.name);
+  const catSlug = slugifyCategory(storeCategory.name);
+  const catIdSlug = slugifyCategory(storeCategory.id);
+  const rawNorm = normalizeSearchText(rawTenantBusinessType);
+  const rawSlug = slugifyCategory(rawTenantBusinessType || "");
+
+  if (
+    catIdNorm === targetNorm ||
+    catNameNorm === targetNorm ||
+    catSlug === targetSlug ||
+    catIdSlug === targetSlug ||
+    (rawNorm && (rawNorm === targetNorm || rawSlug === targetSlug))
+  ) {
+    return true;
+  }
+
+  // Correspondência parcial semântica (ex: "Padarias" -> "Padarias & Cafés", "Açaí" -> "Açaíterias", "Lanchonetes" -> "Hambúrgueres")
+  if (targetNorm.length >= 3) {
+    if (
+      catNameNorm.includes(targetNorm) ||
+      targetNorm.includes(catNameNorm) ||
+      catSlug.includes(targetSlug) ||
+      targetSlug.includes(catSlug) ||
+      (rawNorm && (rawNorm.includes(targetNorm) || targetNorm.includes(rawNorm)))
+    ) {
+      return true;
+    }
+  }
+
+  if (
+    (targetNorm.includes("hamburg") || targetNorm.includes("lanche") || targetNorm.includes("burger")) &&
+    (catNameNorm.includes("hamburg") || catNameNorm.includes("lanche") || rawNorm.includes("lanche") || rawNorm.includes("hamburg"))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Associa com precisão um estabelecimento à sua respectiva Categoria real
  */
 export function matchStoreCategory(
   tenant: Tenant,
-  categories: EstablishmentCategory[] = []
+  categories: EstablishmentCategory[] = DEFAULT_ESTABLISHMENT_CATEGORIES
 ): EstablishmentCategory {
   const rawType = (tenant.businessType || (tenant as any).category || "").trim();
   const bTypeLower = rawType.toLowerCase();
+  const bTypeNorm = normalizeSearchText(rawType);
+  const listToSearch = categories.length > 0 ? categories : DEFAULT_ESTABLISHMENT_CATEGORIES;
 
   // 1. Tentar bater exatamente pelo ID, pelo Nome ou por Slug nas categorias fornecidas
-  if (rawType && categories.length > 0) {
-    const directMatch = categories.find(
+  if (rawType && listToSearch.length > 0) {
+    const directMatch = listToSearch.find(
       (c) =>
-        c.id.toLowerCase() === bTypeLower ||
-        c.name.toLowerCase() === bTypeLower ||
-        slugifyCategory(c.name) === slugifyCategory(rawType) ||
-        slugifyCategory(c.id) === slugifyCategory(rawType)
+        c.id !== "todos" &&
+        (c.id.toLowerCase() === bTypeLower ||
+          c.name.toLowerCase() === bTypeLower ||
+          slugifyCategory(c.name) === slugifyCategory(rawType) ||
+          slugifyCategory(c.id) === slugifyCategory(rawType))
     );
     if (directMatch) return directMatch;
+
+    // 1b. Correspondência semântica (ex: "Lanchonetes" -> "Hambúrgueres", "Açaí" -> "Açaíterias", "Padarias" -> "Padarias & Cafés")
+    const semanticMatch = listToSearch.find((c) => {
+      if (c.id === "todos") return false;
+      const cNorm = normalizeSearchText(c.name);
+      if (
+        (bTypeNorm.includes("lanche") || bTypeNorm.includes("hamburg") || bTypeNorm.includes("burger")) &&
+        (cNorm.includes("hamburg") || cNorm.includes("lanche"))
+      ) {
+        return true;
+      }
+      return bTypeNorm.length >= 4 && (cNorm.includes(bTypeNorm) || bTypeNorm.includes(cNorm));
+    });
+    if (semanticMatch) return semanticMatch;
   }
 
   // 2. Se a categoria da loja existir, retorna ela com seu ícone dinâmico sem rebaixar para salgados/lanchonetes
@@ -179,7 +252,7 @@ export function matchStoreCategory(
   }
 
   // 3. Fallback genérico se a loja não tiver categoria preenchida
-  return { id: "lanchonetes", name: "Hambúrgueres", icon: "🍔", order: 2 };
+  return { id: "hamburgueres", name: "Hambúrgueres", icon: "🍔", order: 2 };
 }
 
 /**

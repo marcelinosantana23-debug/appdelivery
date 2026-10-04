@@ -827,14 +827,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
         setSelectedLocalityState((current) => {
-          if (current && res.localities.includes(current)) {
+          const isAllLoc = (loc?: string | null) => {
+            if (!loc) return false;
+            const norm = loc.trim().toLowerCase();
+            return (
+              norm === "todas" ||
+              norm === "todas as localidades" ||
+              norm === "todas as regiões" ||
+              norm === "todos"
+            );
+          };
+          if (isAllLoc(current) || (current && res.localities.includes(current))) {
             return current;
           }
           const stored = typeof window !== "undefined" ? localStorage.getItem("topfood_selected_locality") : null;
+          if (isAllLoc(stored)) {
+            return "Todas as Localidades";
+          }
           if (stored && res.localities.includes(stored)) {
             return stored;
           }
-          const fallback = res.localities[0] || "Gargaú";
+          const fallback = "Todas as Localidades";
           if (typeof window !== "undefined") {
             try {
               localStorage.setItem("topfood_selected_locality", fallback);

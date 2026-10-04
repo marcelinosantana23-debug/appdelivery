@@ -7,6 +7,7 @@ import {
   matchStoreSearch,
   extractDynamicCategories,
   slugifyCategory,
+  doesCategoryMatch,
 } from "./portalUtils";
 import { FeaturedStoresCarousel } from "./FeaturedStoresCarousel";
 import { TopSellingProductsCarousel } from "./TopSellingProductsCarousel";
@@ -31,34 +32,35 @@ export function TopFoodPortal({
 }: TopFoodPortalProps) {
   const {
     tenants,
+    featuredStoresRanked,
     establishmentCategories,
     isLoadingTenants,
     isLoadingPortal,
-    selectedLocality,
   } = useStore();
-  const [activeCategory, setActiveCategory] = useState<string>("todos");
+  const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Apenas lojas ativas no marketplace E cadastradas na localidade selecionada
-  const activeTenants = useMemo(() => {
-    const raw = (tenants || []).filter((t) => t.status !== "inactive");
+  // FONTE DE DADOS ÚNICA (20 LOJAS):
+  // Unifica o array completo de lojas carregado do banco/superadmin (tenants + featuredStoresRanked)
+  // sem filtrar ou ocultar lojas por localidade secundária.
+  const lojas = useMemo<Tenant[]>(() => {
+    const map = new Map<string, Tenant>();
 
-    const targetLoc = (selectedLocality || "").trim().toLowerCase();
-    const isAll =
-      !targetLoc ||
-      targetLoc === "todas" ||
-      targetLoc === "todas as localidades" ||
-      targetLoc === "todas as regiões" ||
-      targetLoc === "todos";
+    (tenants || []).forEach((t) => {
+      if (t.status !== "inactive") {
+        map.set(t.id || t.slug, t);
+      }
+    });
 
-    const filteredByLocality = isAll
-      ? raw
-      : raw.filter((t) => {
-          const tLoc = (t.localidade || "").trim().toLowerCase();
-          return !tLoc || tLoc === "undefined" || tLoc === targetLoc;
-        });
+    (featuredStoresRanked || []).forEach((s) => {
+      if (s.status !== "inactive") {
+        const key = s.id || s.slug;
+        const existing = map.get(key);
+        map.set(key, existing ? { ...s, ...existing } : s);
+      }
+    });
 
-    return filteredByLocality.sort((a, b) => {
+    return Array.from(map.values()).sort((a, b) => {
       const aFeat = a.isFeatured ? 1 : 0;
       const bFeat = b.isFeatured ? 1 : 0;
       if (aFeat !== bFeat) return bFeat - aFeat;
@@ -67,85 +69,133 @@ export function TopFoodPortal({
       if (aPri !== bPri) return bPri - aPri;
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
-  }, [tenants, selectedLocality]);
+  }, [tenants, featuredStoresRanked]);
+
+  const activeTenants = lojas;
 
   // Exibe skeleton screens leves apenas no primeiro acesso do usuário (quando o cache local estiver vazio)
-  const isFirstLoad = (isLoadingTenants || isLoadingPortal) && activeTenants.length === 0;
+  const isFirstLoad = (isLoadingTenants || isLoadingPortal) && lojas.length === 0;
 
-  // 1. Extração dinâmica de TODAS as categorias únicas atribuídas às lojas ativas no banco de dados (D1 / KV)
+  // 1. Extração dinâmica de TODAS as categorias únicas atribuídas às 20 lojas ativas no banco de dados (sem truncamento)
   const dynamicCategories = useMemo<EstablishmentCategory[]>(() => {
-    return extractDynamicCategories(activeTenants, establishmentCategories || []);
-  }, [activeTenants, establishmentCategories]);
+    return extractDynamicCategories(lojas, establishmentCategories || []);
+  }, [lojas, establishmentCategories]);
 
-  // Agrupamento de estabelecimentos por categoria ativa
+  // 2. Agrupamento completo de todas as categorias e todas as 20 lojas (sem ocultar nenhuma loja)
   const groupedTenants = useMemo(() => {
-    const groups: { category: EstablishmentCategory; stores: Tenant[] }[] = [];
+    const groupsMap = new Map<string, { category: EstablishmentCategory; stores: Tenant[] }>();
 
+    // Inicializa os grupos na ordem das categorias extraídas
     dynamicCategories.forEach((cat) => {
-      const storesInCat = activeTenants.filter((tenant) => {
-        const matched = matchStoreCategory(tenant, dynamicCategories);
-        const matchesCategory =
-          matched.id.toLowerCase() === cat.id.toLowerCase() ||
-          matched.name.toLowerCase() === cat.name.toLowerCase() ||
-          slugifyCategory(matched.name) === slugifyCategory(cat.name);
+      groupsMap.set(cat.id.toLowerCase(), { category: cat, stores: [] });
+    });
 
-        if (!matchesCategory) return false;
+    // Mapeia e agrupa CADA UMA das 20 lojas na sua respectiva categoria
+    lojas.forEach((tenant) => {
+      if (searchQuery.trim() && !matchStoreSearch(tenant, searchQuery, dynamicCategories)) {
+        return;
+      }
 
-        // Se houver busca por texto (nome, categoria ou culinária)
-        if (searchQuery.trim()) {
-          if (!matchStoreSearch(tenant, searchQuery, dynamicCategories)) return false;
-        }
+      const matched = matchStoreCategory(tenant, dynamicCategories);
+      // Localiza o grupo correspondente ou cria dinamicamente para garantir que nenhuma das 20 lojas fique de fora
+      let targetGroup =
+        groupsMap.get(matched.id.toLowerCase()) ||
+        Array.from(groupsMap.values()).find(
+          (g) =>
+            doesCategoryMatch(g.category, matched.id, tenant.businessType) ||
+            doesCategoryMatch(g.category, matched.name, tenant.businessType)
+        );
 
-        return true;
-      });
+      if (!targetGroup) {
+        targetGroup = { category: matched, stores: [] };
+        groupsMap.set(matched.id.toLowerCase(), targetGroup);
+      }
 
-      if (storesInCat.length > 0) {
-        groups.push({ category: cat, stores: storesInCat });
+      if (!targetGroup.stores.some((s) => (s.id || s.slug) === (tenant.id || tenant.slug))) {
+        targetGroup.stores.push(tenant);
       }
     });
 
-    return groups;
-  }, [dynamicCategories, activeTenants, searchQuery]);
+    return Array.from(groupsMap.values()).filter((g) => g.stores.length > 0);
+  }, [dynamicCategories, lojas, searchQuery]);
 
-  // Lojas filtradas pela busca global (nome, categoria ou culinária) e pela categoria ativa
+  // Lojas filtradas pela categoria selecionada no topo
+  const categoryFilteredStores = useMemo(() => {
+    if (!selectedCategory || selectedCategory === "todos") {
+      return lojas;
+    }
+    return lojas.filter((tenant) => {
+      const matched = matchStoreCategory(tenant, dynamicCategories);
+      return doesCategoryMatch(matched, selectedCategory, tenant.businessType);
+    });
+  }, [lojas, selectedCategory, dynamicCategories]);
+
+  // Lojas filtradas pela busca global (nome, categoria ou culinária) e pela categoria selecionada
   const matchingStores = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    return activeTenants.filter((tenant) => {
-      if (!matchStoreSearch(tenant, searchQuery, dynamicCategories)) return false;
-      if (activeCategory !== "todos") {
-        const cat = matchStoreCategory(tenant, dynamicCategories);
-        const matchesCat =
-          cat.id.toLowerCase() === activeCategory.toLowerCase() ||
-          cat.name.toLowerCase() === activeCategory.toLowerCase() ||
-          slugifyCategory(cat.name) === slugifyCategory(activeCategory);
-        if (!matchesCat) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [activeTenants, searchQuery, dynamicCategories, activeCategory]);
+    return categoryFilteredStores.filter((tenant) =>
+      matchStoreSearch(tenant, searchQuery, dynamicCategories)
+    );
+  }, [categoryFilteredStores, searchQuery, dynamicCategories]);
 
-  // Filtra as categorias exibidas caso o usuário tenha clicado em uma categoria específica no topo
+  // Filtra as seções exibidas caso o usuário tenha clicado em uma categoria específica no topo
   const displayedGroups = useMemo(() => {
-    if (activeCategory === "todos") {
+    if (!selectedCategory || selectedCategory === "todos") {
       return groupedTenants;
     }
-    return groupedTenants.filter(
+    const filteredGroups = groupedTenants.filter(
       (g) =>
-        g.category.id.toLowerCase() === activeCategory.toLowerCase() ||
-        g.category.name.toLowerCase() === activeCategory.toLowerCase() ||
-        slugifyCategory(g.category.name) === slugifyCategory(activeCategory)
+        doesCategoryMatch(g.category, selectedCategory) ||
+        g.category.id.toLowerCase() === selectedCategory.toLowerCase() ||
+        g.category.name.toLowerCase() === selectedCategory.toLowerCase() ||
+        slugifyCategory(g.category.name) === slugifyCategory(selectedCategory)
     );
-  }, [groupedTenants, activeCategory]);
 
-  // Total de lojas correspondentes no filtro atual
-  const totalFilteredCount = useMemo(() => {
+    if (filteredGroups.length > 0) {
+      return filteredGroups;
+    }
+
+    if (categoryFilteredStores.length > 0) {
+      const catObj = dynamicCategories.find((c) => doesCategoryMatch(c, selectedCategory)) || {
+        id: slugifyCategory(selectedCategory),
+        name: selectedCategory,
+        icon: "🍽️",
+        order: 99,
+      };
+      return [{ category: catObj, stores: categoryFilteredStores }];
+    }
+
+    return [];
+  }, [groupedTenants, selectedCategory, categoryFilteredStores, dynamicCategories]);
+
+  // Categoria ativa resolvida para exibição de título
+  const activeCategoryObj = useMemo(() => {
+    if (!selectedCategory || selectedCategory === "todos") return null;
+    return (
+      dynamicCategories.find(
+        (c) =>
+          doesCategoryMatch(c, selectedCategory) ||
+          c.id.toLowerCase() === selectedCategory.toLowerCase() ||
+          c.name.toLowerCase() === selectedCategory.toLowerCase() ||
+          slugifyCategory(c.name) === slugifyCategory(selectedCategory)
+      ) || null
+    );
+  }, [dynamicCategories, selectedCategory]);
+
+  // Subtítulo dinâmico: soma de todas as lojas cadastradas (20 lojas parceiras disponíveis no Top Food)
+  // ou o total da categoria quando uma categoria específica estiver filtrada
+  const totalAvailableStores = useMemo(() => {
     if (searchQuery.trim()) {
       return matchingStores.length;
     }
-    return displayedGroups.reduce((acc, g) => acc + g.stores.length, 0);
-  }, [searchQuery, matchingStores, displayedGroups]);
+    if (selectedCategory !== "todos") {
+      return categoryFilteredStores.length;
+    }
+    return lojas.length;
+  }, [searchQuery, matchingStores, selectedCategory, categoryFilteredStores, lojas]);
+
+  // Contador geral dinâmico de lojas parceiras cadastradas no sistema
+  const partnerStoresCount = lojas.length;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 flex flex-col transition-colors">
@@ -154,13 +204,17 @@ export function TopFoodPortal({
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onStoreAdminClick={onStoreAdminClick}
-        totalStores={activeTenants.length}
+        totalStores={partnerStoresCount}
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
       />
 
       {/* Barra de Categorias de Estabelecimentos (Scroll Horizontal dinâmico) */}
       <EstablishmentCategories
-        activeCategory={activeCategory}
-        onSelectCategory={setActiveCategory}
+        activeCategory={selectedCategory}
+        onSelectCategory={(catId) => {
+          setSelectedCategory(catId);
+        }}
         tenants={activeTenants}
         customCategories={dynamicCategories}
       />
@@ -168,12 +222,12 @@ export function TopFoodPortal({
       {/* Conteúdo Principal do Marketplace */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 pt-4 sm:pt-6 pb-12">
         {/* Barra de Stories das Lojas (Ao Vivo / 24 Horas) */}
-        {!searchQuery && activeCategory === "todos" && (
+        {!searchQuery && selectedCategory === "todos" && (
           <PortalStoriesBar tenants={activeTenants} />
         )}
 
         {/* Carrosséis do Topo da Vitrine Principal */}
-        {!searchQuery && activeCategory === "todos" && (
+        {!searchQuery && selectedCategory === "todos" && (
           <>
             {isFirstLoad ? (
               <div className="space-y-6">
@@ -215,7 +269,7 @@ export function TopFoodPortal({
                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                       {matchingStores.length}{" "}
                       {matchingStores.length === 1 ? "loja encontrada" : "lojas encontradas"} por nome, categoria ou tipo de culinária
-                      {activeCategory !== "todos" && ` na categoria "${dynamicCategories.find((c) => c.id.toLowerCase() === activeCategory.toLowerCase() || slugifyCategory(c.name) === slugifyCategory(activeCategory))?.name || activeCategory}"`}
+                      {selectedCategory !== "todos" && ` na categoria "${activeCategoryObj?.name || selectedCategory}"`}
                     </p>
                   </div>
                 </div>
@@ -225,7 +279,7 @@ export function TopFoodPortal({
                     type="button"
                     onClick={() => {
                       setSearchQuery("");
-                      setActiveCategory("todos");
+                      setSelectedCategory("todos");
                     }}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 transition shadow-xs cursor-pointer"
                   >
@@ -286,7 +340,7 @@ export function TopFoodPortal({
                     type="button"
                     onClick={() => {
                       setSearchQuery("");
-                      setActiveCategory("todos");
+                      setSelectedCategory("todos");
                     }}
                     className="rounded-xl bg-primary px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-primary-dark transition cursor-pointer"
                   >
@@ -297,24 +351,17 @@ export function TopFoodPortal({
             )}
           </div>
         ) : (
-          /* MODO 2: NAVEGAÇÃO NORMAL POR CATEGORIAS E CARROSSÉIS */
+          /* MODO 2: NAVEGAÇÃO POR CATEGORIAS E VITRINE COMPLETA */
           <>
             {/* Título Principal da Seção */}
-            <div className="mt-8 mb-2 flex items-center justify-between">
+            <div className="mt-8 mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
                   <Store className="h-5 w-5 text-primary" />
                   <span>
-                    {activeCategory === "todos"
+                    {selectedCategory === "todos"
                       ? "Estabelecimentos por Categoria"
-                      : `Categoria: ${
-                          dynamicCategories.find(
-                            (c) =>
-                              c.id.toLowerCase() === activeCategory.toLowerCase() ||
-                              c.name.toLowerCase() === activeCategory.toLowerCase() ||
-                              slugifyCategory(c.name) === slugifyCategory(activeCategory)
-                          )?.name || activeCategory
-                        }`}
+                      : `Categoria: ${activeCategoryObj?.name || selectedCategory}`}
                   </span>
                 </h2>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -325,12 +372,15 @@ export function TopFoodPortal({
                     </span>
                   ) : (
                     <>
-                      {totalFilteredCount}{" "}
-                      {totalFilteredCount === 1 ? "opção disponível" : "opções disponíveis"} no Top Food
-                      {activeCategory !== "todos" && (
+                      {`${totalAvailableStores} ${
+                        totalAvailableStores === 1
+                          ? "loja parceira disponível"
+                          : "lojas parceiras disponíveis"
+                      } no Top Food`}
+                      {selectedCategory !== "todos" && (
                         <button
                           type="button"
-                          onClick={() => setActiveCategory("todos")}
+                          onClick={() => setSelectedCategory("todos")}
                           className="ml-2 font-bold text-primary hover:underline cursor-pointer"
                         >
                           (Mostrar todas as categorias)
@@ -342,9 +392,46 @@ export function TopFoodPortal({
               </div>
             </div>
 
-            {/* Listagem Agrupada em Carrosséis Horizontais por Categoria */}
+            {/* Quando uma categoria específica está selecionada: exibe apenas as lojas dessa categoria; quando "todos", exibe todas as seções por categoria */}
             {isFirstLoad ? (
               <PortalStoreListSkeleton />
+            ) : selectedCategory !== "todos" ? (
+              categoryFilteredStores.length > 0 ? (
+                <div className="space-y-6">
+                  {displayedGroups.map((group) => (
+                    <CategoryStoreSection
+                      key={group.category.id}
+                      category={group.category}
+                      tenants={group.stores}
+                      onSelectStore={onSelectStore}
+                      onFilterByCategory={(catId) => setSelectedCategory(catId)}
+                      isFocused={true}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-8 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-xs">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 mb-3">
+                    <SearchX className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
+                    Nenhum estabelecimento encontrado nesta categoria
+                  </h3>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                    Não encontramos lojas para a categoria selecionada. Clique abaixo para ver todas as lojas e categorias.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSelectedCategory("todos");
+                    }}
+                    className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-dark transition cursor-pointer"
+                  >
+                    Ver todas as categorias
+                  </button>
+                </div>
+              )
             ) : displayedGroups.length > 0 ? (
               <div className="space-y-6">
                 {displayedGroups.map((group) => (
@@ -353,8 +440,8 @@ export function TopFoodPortal({
                     category={group.category}
                     tenants={group.stores}
                     onSelectStore={onSelectStore}
-                    onFilterByCategory={(catId) => setActiveCategory(catId)}
-                    isFocused={activeCategory === group.category.id}
+                    onFilterByCategory={(catId) => setSelectedCategory(catId)}
+                    isFocused={false}
                   />
                 ))}
               </div>
@@ -364,20 +451,16 @@ export function TopFoodPortal({
                   <SearchX className="h-6 w-6" />
                 </div>
                 <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
-                  {activeTenants.length === 0
-                    ? `Nenhum estabelecimento encontrado em ${selectedLocality || "Gargaú"}`
-                    : "Nenhum estabelecimento encontrado"}
+                  Nenhum estabelecimento encontrado
                 </h3>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                  {activeTenants.length === 0
-                    ? `Ainda não há estabelecimentos com entrega ativa para "${selectedLocality || "Gargaú"}". Você pode alternar a localidade na barra superior do topo.`
-                    : "Não encontramos lojas correspondentes nesta busca. Tente buscar por outros termos ou limpe o filtro de categorias."}
+                  Não encontramos lojas correspondentes nesta busca. Tente buscar por outros termos ou limpe o filtro de categorias.
                 </p>
                 <button
                   type="button"
                   onClick={() => {
                     setSearchQuery("");
-                    setActiveCategory("todos");
+                    setSelectedCategory("todos");
                   }}
                   className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-dark transition cursor-pointer"
                 >
