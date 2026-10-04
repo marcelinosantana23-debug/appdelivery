@@ -429,7 +429,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
                   {getSafeDisplayName(config.name, "Minha Lanchonete")}
                 </h1>
                 <span className="hidden sm:inline-block rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400 border border-slate-700 shrink-0">
-                  {isSuperAdmin ? "Super Admin" : "Admin"}
+                  {isSuperAdmin ? "Super Admin" : "Lojista"}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
@@ -515,9 +515,10 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
             {soundEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
           </button>
 
-          {/* Voltar ao Super Admin (se aplicável) */}
+          {/* Voltar ao Super Admin (exibido ESTRITAMENTE para o Super Admin gerenciando a loja) */}
           {isSuperAdmin && (
             <button
+              id="admin-header-back-to-superadmin-btn"
               type="button"
               onClick={() => {
                 setSuperAdminViewingStore(null);
@@ -527,11 +528,11 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
                   onExit();
                 }
               }}
-              className="hidden sm:flex items-center gap-1 rounded-xl bg-amber-500/15 border border-amber-500/30 px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition shrink-0"
-              title="Voltar ao Super Admin"
+              className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 px-2 sm:px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition shrink-0"
+              title="Voltar ao Painel Geral do Super Admin"
             >
               <CornerUpLeft className="h-3.5 w-3.5" />
-              <span>Super Admin</span>
+              <span className="hidden xs:inline sm:inline">Super Admin</span>
             </button>
           )}
 

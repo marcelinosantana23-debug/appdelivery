@@ -2536,7 +2536,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const isStoreOpen = config.isOpen ?? true;
   const userRole = currentUser?.role || null;
   const isAdminAuthed = Boolean(currentUser);
-  const isSuperAdmin = currentUser?.role === "super_admin";
+  const isSuperAdmin = Boolean(
+    (currentUser &&
+      (String(currentUser.role).toLowerCase() === "super_admin" ||
+        String(currentUser.role).toLowerCase() === "superadmin")) ||
+      (() => {
+        try {
+          if (typeof window === "undefined") return false;
+          const saved = sessionStorage.getItem("topfood_admin_session");
+          if (saved) {
+            const user = JSON.parse(saved);
+            const r = String(user?.role || "").toLowerCase();
+            return r === "super_admin" || r === "superadmin";
+          }
+        } catch {
+          // ignore
+        }
+        return false;
+      })()
+  );
 
   // ==========================================
   // STORIES DA LOJA (ESTADO GLOBAL E MODAL)
