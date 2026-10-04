@@ -2,14 +2,15 @@ import { useState, useMemo } from "react";
 import { useStore } from "@/context/StoreContext";
 import { PortalHeader } from "./PortalHeader";
 import { EstablishmentCategories } from "./EstablishmentCategories";
-import { DEFAULT_ESTABLISHMENT_CATEGORIES, matchStoreCategory } from "./portalUtils";
+import { DEFAULT_ESTABLISHMENT_CATEGORIES, matchStoreCategory, matchStoreSearch } from "./portalUtils";
 import { FeaturedStoresCarousel } from "./FeaturedStoresCarousel";
 import { TopSellingProductsCarousel } from "./TopSellingProductsCarousel";
 import { CategoryStoreSection } from "./CategoryStoreSection";
+import { StoreCard } from "./StoreCard";
 import { PortalStoriesBar } from "./PortalStoriesBar";
 import { PortalCarouselSkeleton, PortalStoreListSkeleton } from "./PortalSkeleton";
 import type { EstablishmentCategory, Tenant } from "@/types";
-import { Store, SearchX } from "lucide-react";
+import { Store, SearchX, Search, X } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 
 interface TopFoodPortalProps {
@@ -72,11 +73,9 @@ export function TopFoodPortal({
         const matched = matchStoreCategory(tenant, allCategories);
         if (matched.id !== cat.id) return false;
 
-        // Se houver busca por texto
+        // Se houver busca por texto (nome, categoria ou culinária)
         if (searchQuery.trim()) {
-          const query = searchQuery.toLowerCase().trim();
-          const searchPool = `${tenant.name} ${tenant.tagline || ""} ${tenant.address || ""} ${tenant.businessType || ""} ${tenant.slug}`.toLowerCase();
-          if (!searchPool.includes(query)) return false;
+          if (!matchStoreSearch(tenant, searchQuery, allCategories)) return false;
         }
 
         return true;
@@ -89,6 +88,21 @@ export function TopFoodPortal({
 
     return groups;
   }, [allCategories, activeTenants, searchQuery]);
+
+  // Lojas filtradas pela busca global (nome, categoria ou culinária) e pela categoria ativa
+  const matchingStores = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return activeTenants.filter((tenant) => {
+      if (!matchStoreSearch(tenant, searchQuery, allCategories)) return false;
+      if (activeCategory !== "todos") {
+        const cat = matchStoreCategory(tenant, allCategories);
+        if (cat.id !== activeCategory && cat.name.toLowerCase() !== activeCategory.toLowerCase()) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [activeTenants, searchQuery, allCategories, activeCategory]);
 
   // Filtra as categorias exibidas caso o usuário tenha clicado em uma categoria específica no topo
   const displayedGroups = useMemo(() => {
@@ -104,8 +118,11 @@ export function TopFoodPortal({
 
   // Total de lojas correspondentes no filtro atual
   const totalFilteredCount = useMemo(() => {
+    if (searchQuery.trim()) {
+      return matchingStores.length;
+    }
     return displayedGroups.reduce((acc, g) => acc + g.stores.length, 0);
-  }, [displayedGroups]);
+  }, [searchQuery, matchingStores, displayedGroups]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 flex flex-col transition-colors">
@@ -156,86 +173,190 @@ export function TopFoodPortal({
           </>
         )}
 
-        {/* Título Principal da Seção */}
-        <div className="mt-8 mb-2 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-              <Store className="h-5 w-5 text-primary" />
-              <span>
-                {activeCategory === "todos"
-                  ? "Estabelecimentos por Categoria"
-                  : `Categoria: ${
-                      allCategories.find((c) => c.id === activeCategory)?.name || activeCategory
-                    }`}
-              </span>
-            </h2>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {isFirstLoad ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block h-3.5 w-24 bg-gray-200 dark:bg-slate-800 animate-pulse rounded" />
-                  <span className="text-gray-400 dark:text-gray-500 text-[11px]">Buscando estabelecimentos...</span>
-                </span>
-              ) : (
-                <>
-                  {totalFilteredCount}{" "}
-                  {totalFilteredCount === 1 ? "opção disponível" : "opções disponíveis"} no Top Food
-                  {activeCategory !== "todos" && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveCategory("todos")}
-                      className="ml-2 font-bold text-primary hover:underline cursor-pointer"
-                    >
-                      (Mostrar todas as categorias)
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* MODO 1: RESULTADOS DA BUSCA GLOBAL ATIVA */}
+        {searchQuery.trim() ? (
+          <div className="mt-4 sm:mt-6">
+            {/* Banner Informativo de Status da Busca */}
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 dark:bg-amber-500/5 p-4 sm:p-5 mb-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                    <Search className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                      <span>Resultados da busca:</span>
+                      <span className="text-amber-600 dark:text-amber-400 font-extrabold">&ldquo;{searchQuery}&rdquo;</span>
+                    </h2>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                      {matchingStores.length}{" "}
+                      {matchingStores.length === 1 ? "loja encontrada" : "lojas encontradas"} por nome, categoria ou tipo de culinária
+                      {activeCategory !== "todos" && ` na categoria "${allCategories.find((c) => c.id === activeCategory)?.name || activeCategory}"`}
+                    </p>
+                  </div>
+                </div>
 
-        {/* Listagem Agrupada em Carrosséis Horizontais por Categoria */}
-        {isFirstLoad ? (
-          <PortalStoreListSkeleton />
-        ) : displayedGroups.length > 0 ? (
-          <div className="space-y-6">
-            {displayedGroups.map((group) => (
-              <CategoryStoreSection
-                key={group.category.id}
-                category={group.category}
-                tenants={group.stores}
-                onSelectStore={onSelectStore}
-                onFilterByCategory={(catId) => setActiveCategory(catId)}
-                isFocused={activeCategory === group.category.id}
-              />
-            ))}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setActiveCategory("todos");
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 transition shadow-xs cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-gray-500" />
+                    <span>Limpar busca</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Grid de Lojas Correspondentes */}
+            {matchingStores.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {matchingStores.map((tenant) => (
+                  <StoreCard
+                    key={tenant.id || tenant.slug}
+                    tenant={tenant}
+                    variant="grid"
+                    onSelectStore={onSelectStore}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 sm:p-10 text-center shadow-xs">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500 mb-3.5 border border-amber-500/20">
+                  <SearchX className="h-7 w-7" />
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
+                  Nenhuma loja encontrada para &ldquo;{searchQuery}&rdquo;
+                </h3>
+                <p className="mt-1.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto leading-relaxed">
+                  Não encontramos estabelecimentos correspondentes a essa pesquisa. Tente buscar por outro nome, categoria ou culinária como <strong className="text-gray-700 dark:text-gray-300">&ldquo;burger&rdquo;</strong>, <strong className="text-gray-700 dark:text-gray-300">&ldquo;pizza&rdquo;</strong>, <strong className="text-gray-700 dark:text-gray-300">&ldquo;açaí&rdquo;</strong> ou <strong className="text-gray-700 dark:text-gray-300">&ldquo;japonesa&rdquo;</strong>.
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("Burger")}
+                    className="rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    🍔 Hambúrgueres
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("Pizza")}
+                    className="rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    🍕 Pizzas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("Açaí")}
+                    className="rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    🍧 Açaí
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setActiveCategory("todos");
+                    }}
+                    className="rounded-xl bg-primary px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-primary-dark transition cursor-pointer"
+                  >
+                    Ver todas as lojas
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="mt-8 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-xs">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 mb-3">
-              <SearchX className="h-6 w-6" />
+          /* MODO 2: NAVEGAÇÃO NORMAL POR CATEGORIAS E CARROSSÉIS */
+          <>
+            {/* Título Principal da Seção */}
+            <div className="mt-8 mb-2 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+                  <Store className="h-5 w-5 text-primary" />
+                  <span>
+                    {activeCategory === "todos"
+                      ? "Estabelecimentos por Categoria"
+                      : `Categoria: ${
+                          allCategories.find((c) => c.id === activeCategory)?.name || activeCategory
+                        }`}
+                  </span>
+                </h2>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {isFirstLoad ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-block h-3.5 w-24 bg-gray-200 dark:bg-slate-800 animate-pulse rounded" />
+                      <span className="text-gray-400 dark:text-gray-500 text-[11px]">Buscando estabelecimentos...</span>
+                    </span>
+                  ) : (
+                    <>
+                      {totalFilteredCount}{" "}
+                      {totalFilteredCount === 1 ? "opção disponível" : "opções disponíveis"} no Top Food
+                      {activeCategory !== "todos" && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveCategory("todos")}
+                          className="ml-2 font-bold text-primary hover:underline cursor-pointer"
+                        >
+                          (Mostrar todas as categorias)
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-            <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
-              {activeTenants.length === 0
-                ? `Nenhum estabelecimento encontrado em ${selectedLocality || "Gargaú"}`
-                : "Nenhum estabelecimento encontrado"}
-            </h3>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-              {activeTenants.length === 0
-                ? `Ainda não há estabelecimentos com entrega ativa para "${selectedLocality || "Gargaú"}". Você pode alternar a localidade na barra superior do topo.`
-                : "Não encontramos lojas correspondentes nesta busca. Tente buscar por outros termos ou limpe o filtro de categorias."}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setActiveCategory("todos");
-              }}
-              className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-dark transition cursor-pointer"
-            >
-              Ver todas as categorias
-            </button>
-          </div>
+
+            {/* Listagem Agrupada em Carrosséis Horizontais por Categoria */}
+            {isFirstLoad ? (
+              <PortalStoreListSkeleton />
+            ) : displayedGroups.length > 0 ? (
+              <div className="space-y-6">
+                {displayedGroups.map((group) => (
+                  <CategoryStoreSection
+                    key={group.category.id}
+                    category={group.category}
+                    tenants={group.stores}
+                    onSelectStore={onSelectStore}
+                    onFilterByCategory={(catId) => setActiveCategory(catId)}
+                    isFocused={activeCategory === group.category.id}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-8 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-xs">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 mb-3">
+                  <SearchX className="h-6 w-6" />
+                </div>
+                <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
+                  {activeTenants.length === 0
+                    ? `Nenhum estabelecimento encontrado em ${selectedLocality || "Gargaú"}`
+                    : "Nenhum estabelecimento encontrado"}
+                </h3>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                  {activeTenants.length === 0
+                    ? `Ainda não há estabelecimentos com entrega ativa para "${selectedLocality || "Gargaú"}". Você pode alternar a localidade na barra superior do topo.`
+                    : "Não encontramos lojas correspondentes nesta busca. Tente buscar por outros termos ou limpe o filtro de categorias."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setActiveCategory("todos");
+                  }}
+                  className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-dark transition cursor-pointer"
+                >
+                  Ver todas as categorias
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {/* Banner PWA discreto */}

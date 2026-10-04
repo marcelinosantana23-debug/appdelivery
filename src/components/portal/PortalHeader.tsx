@@ -1,8 +1,18 @@
-import { Search, Sparkles, Store, UtensilsCrossed, ShieldCheck, MessageCircle } from "lucide-react";
+import { Search, Sparkles, Store, UtensilsCrossed, ShieldCheck, MessageCircle, X } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { LocalitySelector } from "@/components/portal/LocalitySelector";
 import { useStore } from "@/context/StoreContext";
+
+const POPULAR_SEARCH_CHIPS = [
+  { label: "Hambúrgueres", icon: "🍔", term: "Hambúrguer" },
+  { label: "Pizzarias", icon: "🍕", term: "Pizza" },
+  { label: "Açaí", icon: "🍧", term: "Açaí" },
+  { label: "Japonesa", icon: "🍣", term: "Japonesa" },
+  { label: "Sorvetes", icon: "🍨", term: "Sorvete" },
+  { label: "Churrasco", icon: "🥩", term: "Churrasco" },
+  { label: "Doces", icon: "🍰", term: "Doces" },
+];
 
 interface PortalHeaderProps {
   searchQuery: string;
@@ -185,42 +195,80 @@ export function PortalHeader({
           </div>
         </div>
 
-        {/* 3. Campo de Busca Rápida de Estabelecimentos (Com espaçamento adequado) */}
-        <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
-            <input
-              type="text"
-              id="portal-search-input"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Buscar por lanchonete, pizzaria, açaí, burger, comida..."
-              className="w-full rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-50/90 dark:bg-slate-800/90 pl-10 pr-4 py-2.5 sm:py-3 text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-primary/20 shadow-xs"
-              style={{
-                borderColor: undefined,
-              }}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => onSearchChange("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
-              >
-                Limpar
-              </button>
-            )}
+        {/* 3. Barra de Busca Global de Estabelecimentos (Nome, Categoria ou Culinária) */}
+        <div className="mt-5 sm:mt-6 space-y-2.5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="relative flex-1 group">
+              <Search
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors text-gray-400 group-focus-within:text-amber-500 dark:text-gray-500"
+              />
+              <input
+                type="text"
+                id="portal-search-input"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    onSearchChange("");
+                  }
+                }}
+                placeholder="Buscar lojas por nome, categoria ou culinária (ex: burger, pizza, açaí, japonesa)..."
+                className="w-full rounded-2xl border border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/90 pl-10 pr-10 py-2.5 sm:py-3 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all shadow-sm focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/20"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 transition cursor-pointer"
+                  title="Limpar busca (Esc)"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Contador de Lojas */}
+            <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-gray-500 dark:text-gray-400 px-1 shrink-0">
+              <span className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
+                <Sparkles className="h-3.5 w-3.5" style={{ color: primaryColor }} />
+                {isLoadingTenants ? (
+                  <span className="inline-block h-3.5 w-20 bg-gray-200 dark:bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  `${totalStores} ${totalStores === 1 ? "loja parceira" : "lojas parceiras"}`
+                )}
+              </span>
+            </div>
           </div>
 
-          {/* Contador de Lojas */}
-          <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
-            <span className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
-              <Sparkles className="h-3.5 w-3.5" style={{ color: primaryColor }} />
-              {isLoadingTenants ? (
-                <span className="inline-block h-3.5 w-20 bg-gray-200 dark:bg-slate-700 animate-pulse rounded" />
-              ) : (
-                `${totalStores} ${totalStores === 1 ? "loja parceira" : "lojas parceiras"}`
-              )}
+          {/* Sugestões Rápidas de Culinária / Categorias */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0 hidden sm:inline mr-1">
+              Populares:
             </span>
+            {POPULAR_SEARCH_CHIPS.map((chip) => {
+              const isSelected = searchQuery.toLowerCase().trim() === chip.term.toLowerCase();
+              return (
+                <button
+                  key={chip.term}
+                  type="button"
+                  onClick={() => {
+                    if (isSelected) {
+                      onSearchChange("");
+                    } else {
+                      onSearchChange(chip.term);
+                    }
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer border ${
+                    isSelected
+                      ? "bg-amber-500 text-slate-950 border-amber-500 shadow-xs"
+                      : "bg-gray-100/90 dark:bg-slate-800/80 text-gray-600 dark:text-gray-300 border-gray-200/80 dark:border-slate-700/80 hover:bg-gray-200/80 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <span className="text-xs">{chip.icon}</span>
+                  <span>{chip.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

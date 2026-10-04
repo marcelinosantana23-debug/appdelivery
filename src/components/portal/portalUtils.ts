@@ -120,3 +120,80 @@ export function matchStoreCategory(
   const firstValid = categories.find((c) => c.id !== "todos");
   return firstValid || { id: "lanchonetes", name: "Hambúrgueres", icon: "🍔", order: 2 };
 }
+
+/**
+ * Normaliza textos para busca flexível, ignorando acentos, maiúsculas e pontuações
+ */
+export function normalizeSearchText(text?: string): string {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+/**
+ * Filtra estabelecimentos por nome da loja, categoria ou tipo de culinária
+ */
+export function matchStoreSearch(
+  tenant: Tenant,
+  rawQuery: string,
+  categories: EstablishmentCategory[] = DEFAULT_ESTABLISHMENT_CATEGORIES
+): boolean {
+  const query = normalizeSearchText(rawQuery);
+  if (!query) return true;
+
+  const matchedCat = matchStoreCategory(tenant, categories);
+  const catName = normalizeSearchText(matchedCat?.name);
+  const catId = normalizeSearchText(matchedCat?.id);
+
+  const name = normalizeSearchText(tenant.name);
+  const bType = normalizeSearchText(tenant.businessType);
+  const tagline = normalizeSearchText(tenant.tagline);
+  const announcement = normalizeSearchText(tenant.announcement);
+  const address = normalizeSearchText(tenant.address);
+  const localidade = normalizeSearchText(tenant.localidade);
+  const slug = normalizeSearchText(tenant.slug);
+
+  // Palavras-chave semânticas por tipo de culinária
+  let cuisineKeywords = "";
+  const combined = `${bType} ${name} ${tagline} ${catName} ${catId}`;
+
+  if (combined.includes("burger") || combined.includes("lanche") || combined.includes("hamburg")) {
+    cuisineKeywords += " hamburguer lanches artesanal burger smash batata frita combo americano x-tudo";
+  }
+  if (combined.includes("pizza")) {
+    cuisineKeywords += " pizzaria pizzas calzone forno a lenha italiana massa brotinho fatia";
+  }
+  if (combined.includes("acai")) {
+    cuisineKeywords += " acaiteria bowls tigela cupuacu sorvete frutas granola leite ninho smoothie vitamina";
+  }
+  if (combined.includes("japones") || combined.includes("sushi")) {
+    cuisineKeywords += " japonesa oriental sushi sashimi temaki yakisoba hot roll niguiri uramaki salmao";
+  }
+  if (combined.includes("sorvet") || combined.includes("gelat")) {
+    cuisineKeywords += " sorveteria gelato picole sundae milkshake sobremesas acai sobremesa cone taca";
+  }
+  if (combined.includes("churrasc") || combined.includes("carne")) {
+    cuisineKeywords += " churrascaria churrasco carnes espetinho picanha costela grelhados brasa maminha almoço";
+  }
+  if (combined.includes("marmit") || combined.includes("caseir")) {
+    cuisineKeywords += " marmitaria marmitex almoço comida caseira refeicao feijoada executivo prato feito comercial";
+  }
+  if (combined.includes("doce") || combined.includes("bolo") || combined.includes("confeit")) {
+    cuisineKeywords += " doceria confeitaria doces bolos tortas brigadeiro sobremesas chocolate gourmet cafe";
+  }
+  if (combined.includes("salgado") || combined.includes("coxinha") || combined.includes("pastel")) {
+    cuisineKeywords += " salgados pastel salgaderia coxinha kibe empada esfirra lanche fritos assados";
+  }
+  if (combined.includes("bebid") || combined.includes("cervej") || combined.includes("adega")) {
+    cuisineKeywords += " bebidas distribuidora adega cerveja chopp refrigerante sucos agua vinho destilados gelo";
+  }
+
+  const searchPool = `${name} ${catName} ${catId} ${bType} ${tagline} ${announcement} ${address} ${localidade} ${slug} ${cuisineKeywords}`;
+
+  // Suporte a múltiplos termos digitados pelo usuário (ex: "pizza artesanal" ou "burger batata")
+  const tokens = query.split(/\s+/).filter(Boolean);
+  return tokens.every((token) => searchPool.includes(token));
+}
