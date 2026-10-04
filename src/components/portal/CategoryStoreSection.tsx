@@ -62,13 +62,9 @@ export function CategoryStoreSection({
   return (
     <section
       id={`category-section-${category.id}`}
-      className={`flex flex-col shrink-0 snap-start rounded-2xl border p-3.5 sm:p-4 shadow-xs transition-all duration-200 ${
-        isFocused
-          ? "w-[285px] xs:w-[300px] sm:w-[320px] ring-2 ring-primary border-primary bg-primary/5 dark:bg-primary/10 shadow-md"
-          : "w-[285px] xs:w-[300px] sm:w-[320px] bg-white dark:bg-slate-900/95 border-gray-200/80 dark:border-slate-800 hover:border-gray-300 dark:hover:border-slate-700"
-      }`}
+      className="flex flex-col shrink-0 snap-start w-[210px] sm:w-[220px]"
     >
-      {/* Cabeçalho Clicável da Categoria (Seleciona e expande a lista completa abaixo) */}
+      {/* Cabeçalho Compacto posicionado LOGO ACIMA do card original da loja */}
       <div
         role="button"
         tabIndex={0}
@@ -79,111 +75,108 @@ export function CategoryStoreSection({
             handleSelectCategory();
           }
         }}
-        className="group/header flex items-center justify-between gap-2 pb-3 mb-3 border-b border-gray-100 dark:border-slate-800/80 shrink-0 cursor-pointer select-none"
+        className={`group/header flex items-center justify-between gap-1.5 px-2.5 py-1.5 mb-2 rounded-xl border transition-all cursor-pointer select-none shadow-2xs ${
+          isFocused
+            ? "bg-primary text-white border-primary ring-2 ring-primary/30"
+            : "bg-white dark:bg-slate-900 border-gray-200/80 dark:border-slate-800 hover:border-primary/40"
+        }`}
         title={`Clique para ver todas as lojas de ${category.name} abaixo`}
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl border transition-colors ${
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm shrink-0 leading-none">
+            {category.icon || "🍽️"}
+          </span>
+          <h3
+            className={`text-xs font-extrabold tracking-tight truncate transition-colors ${
               isFocused
-                ? "bg-primary text-white border-primary"
-                : "bg-amber-500/10 dark:bg-amber-500/20 border-amber-500/20 group-hover/header:border-primary/40"
+                ? "text-white"
+                : "text-gray-900 dark:text-white group-hover/header:text-primary"
             }`}
           >
-            <span>{category.icon || "🍽️"}</span>
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h3 className="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white group-hover/header:text-primary transition-colors tracking-tight truncate">
-                {category.name}
-              </h3>
-              <span
-                className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors ${
-                  isFocused
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300"
-                }`}
-              >
-                {sortedTenants.length} {sortedTenants.length === 1 ? "loja" : "lojas"}
-              </span>
-            </div>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1">
-              {sortedTenants.length > 1 ? (
-                <span>
-                  Loja {activeIndex + 1} de {sortedTenants.length} • Role ↕ ou clique
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-0.5 text-primary font-semibold">
-                  <span>Ver lista abaixo</span>
-                  <ChevronRight className="h-3 w-3" />
-                </span>
-              )}
-            </p>
-          </div>
+            {category.name}
+          </h3>
+          <span
+            className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+              isFocused
+                ? "bg-white/20 text-white"
+                : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300"
+            }`}
+          >
+            {sortedTenants.length > 1
+              ? `${activeIndex + 1}/${sortedTenants.length}`
+              : `${sortedTenants.length}`}
+          </span>
         </div>
 
-        {/* Controles Verticais (1 loja por vez) */}
+        {/* Setinhas de rolagem vertical (ou indicador de expansão) */}
         <div
-          className="flex items-center gap-1 shrink-0"
+          className="flex items-center gap-0.5 shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
           {sortedTenants.length > 1 ? (
-            <div className="flex items-center gap-1">
+            <>
               <button
                 type="button"
                 onClick={() => scrollVertically("up")}
                 disabled={activeIndex === 0}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-35 transition cursor-pointer"
+                className={`flex h-5 w-5 items-center justify-center rounded-md border transition cursor-pointer disabled:opacity-35 ${
+                  isFocused
+                    ? "border-white/30 bg-white/15 text-white hover:bg-white/25"
+                    : "border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+                }`}
                 aria-label={`Loja anterior em ${category.name}`}
                 title="Loja anterior (acima)"
               >
-                <ChevronUp className="h-3.5 w-3.5" />
+                <ChevronUp className="h-3 w-3" />
               </button>
               <button
                 type="button"
                 onClick={() => scrollVertically("down")}
                 disabled={activeIndex >= sortedTenants.length - 1}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-35 transition cursor-pointer"
+                className={`flex h-5 w-5 items-center justify-center rounded-md border transition cursor-pointer disabled:opacity-35 ${
+                  isFocused
+                    ? "border-white/30 bg-white/15 text-white hover:bg-white/25"
+                    : "border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+                }`}
                 aria-label={`Próxima loja em ${category.name}`}
                 title="Próxima loja (abaixo)"
               >
-                <ChevronDown className="h-3.5 w-3.5" />
+                <ChevronDown className="h-3 w-3" />
               </button>
-            </div>
+            </>
           ) : (
             <button
               type="button"
               onClick={handleSelectCategory}
-              className={`text-[11px] font-bold flex items-center gap-0.5 transition px-2 py-1 rounded-lg cursor-pointer ${
+              className={`flex h-5 w-5 items-center justify-center rounded-md transition cursor-pointer ${
                 isFocused
-                  ? "bg-primary text-white"
+                  ? "text-white hover:bg-white/20"
                   : "text-primary hover:bg-primary/10"
               }`}
               title={`Expandir todas as lojas de ${category.name} abaixo`}
             >
-              <span>{isFocused ? "Ativa" : "Expandir"}</span>
               <ChevronRight className="h-3 w-3" />
             </button>
           )}
         </div>
       </div>
 
-      {/* EIXO VERTICAL INTERNO COM PAGINAÇÃO MANDATÓRIA (SNAP-Y SNAP-MANDATORY - ESTRITAMENTE 1 LOJA POR VEZ) */}
+      {/* CONTAINER DE ROLAGEM VERTICAL COM ALTURA EXATAMENTE IGUAL AO CARD DE LOJA ORIGINAL */}
       <div
         ref={verticalScrollRef}
         onScroll={handleVerticalScroll}
-        className="h-[256px] sm:h-[268px] w-full overflow-y-auto overflow-x-hidden scrollbar-none snap-y snap-mandatory scroll-smooth overscroll-y-contain"
+        className={`h-[256px] sm:h-[268px] w-[210px] sm:w-[220px] overflow-y-auto overflow-x-hidden scrollbar-none snap-y snap-mandatory scroll-smooth overscroll-y-contain rounded-2xl ${
+          isFocused ? "ring-2 ring-primary rounded-2xl" : ""
+        }`}
       >
         {sortedTenants.map((store) => (
           <div
             key={store.id || store.slug}
-            className="snap-start snap-always shrink-0 w-full h-full"
+            className="snap-start snap-always shrink-0 w-[210px] sm:w-[220px] h-[256px] sm:h-[268px]"
           >
             <StoreCard
               tenant={store}
               variant="carousel"
-              fullWidth={true}
-              fillHeight={true}
               onSelectStore={onSelectStore}
             />
           </div>

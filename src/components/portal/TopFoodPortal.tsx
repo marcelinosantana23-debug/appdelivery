@@ -204,7 +204,7 @@ export function TopFoodPortal({
 
   const scrollCategoriesCarousel = (direction: "left" | "right") => {
     if (categoriesCarouselRef.current) {
-      const scrollAmount = direction === "left" ? -336 : 336;
+      const scrollAmount = direction === "left" ? -230 : 230;
       categoriesCarouselRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
   };
@@ -454,7 +454,7 @@ export function TopFoodPortal({
               <>
                 <div
                   ref={categoriesCarouselRef}
-                  className="flex items-start gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none snap-x snap-mandatory scroll-smooth overscroll-x-contain"
+                  className="flex items-start gap-3.5 overflow-x-auto pb-4 pt-1 scrollbar-none snap-x snap-mandatory scroll-smooth overscroll-x-contain"
                 >
                   {groupedTenants.map((group) => {
                     const isSelectedCat =

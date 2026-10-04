@@ -10,8 +10,6 @@ interface StoreCardProps {
   onSelectStore: (slug: string) => void;
   variant?: "carousel" | "grid";
   rank?: number;
-  fullWidth?: boolean;
-  fillHeight?: boolean;
 }
 
 export function StoreCard({
@@ -19,8 +17,6 @@ export function StoreCard({
   onSelectStore,
   variant = "grid",
   rank,
-  fullWidth = false,
-  fillHeight = false,
 }: StoreCardProps) {
   const { establishmentCategories, getStoreActiveStories, openStoreStoriesModal } = useStore();
   const allCategories = establishmentCategories && establishmentCategories.length > 0
@@ -54,18 +50,14 @@ export function StoreCard({
       <div
         id={`store-card-carousel-${tenant.slug}`}
         onClick={handleCardClick}
-        className={`group relative flex ${
-          fullWidth ? "w-full" : "w-[210px] sm:w-[220px]"
-        } ${
-          fillHeight ? "h-full" : ""
-        } shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all duration-300 hover:shadow-md cursor-pointer ${
+        className={`group relative flex w-[210px] sm:w-[220px] h-[256px] sm:h-[268px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all duration-300 hover:shadow-md cursor-pointer ${
           tenant.isFeatured
             ? "border-amber-400/60 dark:border-amber-500/40 shadow-amber-500/5 ring-1 ring-amber-500/20"
             : "border-gray-200/80 dark:border-slate-800"
         }`}
       >
-        {/* Banner com Foto da Loja (Compacto, max-h-36 com object-fit cover) */}
-        <div className="relative h-28 sm:h-32 max-h-36 w-full overflow-hidden bg-slate-900">
+        {/* Banner com Foto da Loja */}
+        <div className="relative h-28 sm:h-32 max-h-36 w-full shrink-0 overflow-hidden bg-slate-900">
           {tenant.bannerImage ? (
             <img
               src={tenant.bannerImage}
@@ -83,9 +75,9 @@ export function StoreCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
 
           {/* Badges no topo do Banner */}
-          <div className="absolute top-2 left-2 flex items-center gap-1 z-10">
+          <div className="absolute top-1.5 left-2 flex items-center gap-1 z-10">
             {tenant.isFeatured && (
-              <div className="flex items-center gap-1 rounded-full bg-amber-500 text-slate-950 px-2 py-0.5 text-[9px] font-extrabold shadow-md backdrop-blur-xs">
+              <div className="flex items-center gap-1 rounded-full bg-amber-500 text-slate-950 px-1.5 py-0.5 text-[9px] font-extrabold shadow-md backdrop-blur-xs">
                 <Sparkles className="h-2.5 w-2.5 fill-slate-950" />
                 <span>Patrocinado</span>
               </div>
@@ -105,9 +97,9 @@ export function StoreCard({
           </div>
 
           {/* Status Badge */}
-          <div className="absolute top-2 right-2">
+          <div className="absolute top-1.5 right-2">
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold backdrop-blur-md ${
+              className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold backdrop-blur-md ${
                 isOpen ? "bg-emerald-500/90 text-white" : "bg-gray-800/85 text-gray-200"
               }`}
             >
@@ -124,7 +116,7 @@ export function StoreCard({
                 openStoreStoriesModal(tenant, stories);
               }
             }}
-            className={`absolute -bottom-2 left-2.5 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-lg shadow-md transition-transform ${
+            className={`absolute -bottom-1.5 left-2 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-base shadow-md transition-transform ${
               hasStories
                 ? "p-[2px] bg-gradient-to-tr from-amber-500 via-rose-500 to-emerald-500 ring-2 ring-emerald-400/80 cursor-pointer hover:scale-110"
                 : "border-2 border-white dark:border-slate-900"
@@ -140,17 +132,17 @@ export function StoreCard({
                 decoding="async"
               />
             ) : (
-              <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[10px]" />
+              <StoreLogo logo={tenant.logo} name={tenant.name} className="h-full w-full object-cover rounded-[9px]" />
             )}
           </div>
         </div>
 
-        {/* Informações da Loja (Paddings reduzidos e layout verticalmente compacto) */}
-        <div className="flex flex-1 flex-col justify-between p-2.5 pt-3">
+        {/* Informações da Loja */}
+        <div className="flex flex-1 flex-col justify-between p-2.5 pt-3 min-h-0">
           <div>
             <div className="flex items-center justify-between gap-1">
               <div className="flex items-center gap-1 min-w-0">
-                <span className="inline-flex items-center gap-0.5 rounded-md bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
+                <span className="inline-flex items-center gap-0.5 rounded-md bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
                   <span>{catInfo.icon}</span>
                   <span className="truncate">{catInfo.label}</span>
                 </span>
@@ -162,7 +154,7 @@ export function StoreCard({
               </div>
 
               {/* Avaliação */}
-              <div className="flex items-center gap-0.5 text-[11px] font-bold text-amber-500 dark:text-amber-400 shrink-0">
+              <div className="flex items-center gap-0.5 text-[10px] sm:text-[11px] font-bold text-amber-500 dark:text-amber-400 shrink-0">
                 <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                 <span>{rating.toFixed(1)}</span>
               </div>
@@ -177,8 +169,8 @@ export function StoreCard({
             </p>
           </div>
 
-          <div className="mt-2 border-t border-gray-100 dark:border-slate-800 pt-2">
-            <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1.5">
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 mb-1.5">
               <span className="flex items-center gap-1 truncate">
                 <Bike className="h-3 w-3 text-primary shrink-0" />
                 <span>{deliveryText}</span>
