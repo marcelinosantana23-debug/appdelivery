@@ -11,16 +11,34 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Carrega credenciais do Super Admin persistidas em disco (para ambiente Node.js / preview)
+  // Carrega credenciais do Super Admin e alterações de lojas persistidas em disco (para ambiente Node.js / preview)
   try {
     const credFile = path.resolve(process.cwd(), ".topfood_superadmin.json");
     if (fs.existsSync(credFile)) {
       const parsed = JSON.parse(fs.readFileSync(credFile, "utf-8"));
       (globalThis as any).__TOPFOOD_SUPERADMIN__ = parsed;
     }
+    const overridesFile = path.resolve(process.cwd(), ".topfood_tenant_overrides.json");
+    if (fs.existsSync(overridesFile)) {
+      const parsedOverrides = JSON.parse(fs.readFileSync(overridesFile, "utf-8"));
+      (globalThis as any).__TOPFOOD_TENANT_OVERRIDES__ = parsedOverrides;
+    }
+    const deletedFile = path.resolve(process.cwd(), ".topfood_deleted_tenants.json");
+    if (fs.existsSync(deletedFile)) {
+      const parsedDeleted = JSON.parse(fs.readFileSync(deletedFile, "utf-8"));
+      (globalThis as any).__TOPFOOD_DELETED_TENANTS__ = parsedDeleted;
+    }
   } catch {
     // ignore
   }
+  (globalThis as any).__TOPFOOD_PERSIST_OVERRIDE__ = (data: Record<string, any>) => {
+    try {
+      const overridesFile = path.resolve(process.cwd(), ".topfood_tenant_overrides.json");
+      fs.writeFileSync(overridesFile, JSON.stringify(data, null, 2), "utf-8");
+    } catch {
+      // ignore
+    }
+  };
 
   // Global CORS middleware for official domains and mobile app consumption
   app.use((req, res, next) => {

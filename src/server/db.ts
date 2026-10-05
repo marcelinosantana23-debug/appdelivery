@@ -166,6 +166,9 @@ export function persistTenantOverride(tenantId: string, partial: Partial<Tenant>
     };
     if (typeof globalThis !== "undefined") {
       (globalThis as any).__TOPFOOD_TENANT_OVERRIDES__ = current;
+      if (typeof (globalThis as any).__TOPFOOD_PERSIST_OVERRIDE__ === "function") {
+        (globalThis as any).__TOPFOOD_PERSIST_OVERRIDE__(current);
+      }
     }
     const proc = (globalThis as any).process;
     const req = (globalThis as any).require;

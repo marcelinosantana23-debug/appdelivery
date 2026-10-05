@@ -120,13 +120,13 @@ export function PortalHeader({
       </div>
 
       {/* 2. INFORMAÇÕES DO PORTAL (Logo com sobreposição 3D sobre o banner e título 100% na área clara) */}
-      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 pb-6">
-        <div className="relative z-20 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div className="flex items-end gap-3.5 sm:gap-5 min-w-0 flex-1">
+      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 pb-5 sm:pb-6">
+        <div className="relative z-20 flex flex-col md:flex-row md:items-end md:justify-between gap-2.5 sm:gap-4">
+          <div className="flex items-start sm:items-end gap-3 sm:gap-5 min-w-0 flex-1">
             {/* Logo Oficial ou Ícone do Top Food (TF) - apenas a logo tem sobreposição negativa sobre o banner */}
             <div
               id="topfood-portal-logo"
-              className="relative z-20 -mt-12 sm:-mt-16 md:-mt-20 flex h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 shrink-0 items-center justify-center overflow-hidden rounded-3xl border-4 border-white dark:border-slate-900 shadow-2xl select-none bg-slate-950 transition-transform duration-300 hover:scale-105 hover:-translate-y-1"
+              className="relative z-20 -mt-10 sm:-mt-16 md:-mt-20 flex h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 shrink-0 items-center justify-center overflow-hidden rounded-3xl border-4 border-white dark:border-slate-900 shadow-2xl select-none bg-slate-950 transition-transform duration-300 hover:scale-105 hover:-translate-y-1"
               style={{
                 boxShadow: `0 16px 36px -8px ${primaryColor}55, 0 4px 14px rgba(0,0,0,0.3)`,
               }}
@@ -155,62 +155,89 @@ export function PortalHeader({
               >
                 <div className="text-center font-black leading-none drop-shadow-md select-none">
                   <span className="text-2xl sm:text-3xl md:text-4xl tracking-tighter">TF</span>
-                  <span className="block text-[8px] sm:text-[9px] font-extrabold tracking-widest text-amber-200 uppercase mt-0.5">Delivery</span>
+                  <span className="block text-[8px] sm:text-[9px] font-extrabold tracking-widest text-amber-200 uppercase mt-0.5">
+                    Delivery
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Nome da Plataforma, Tag Multi-Lojas e Descrição (100% na área clara, com espaçamento seguro) */}
-            <div className="flex-1 min-w-0 pt-3 sm:pt-4 md:pt-5 pb-1 sm:pb-2">
-              {/* a) Nome da Plataforma em grande destaque na área clara */}
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-gray-950 dark:text-white leading-tight">
-                {displayTitle}
-              </h1>
+            {/* Nome da Plataforma, Tag Multi-Lojas, Botão Mobile Compacto e Descrição */}
+            <div className="flex-1 min-w-0 pt-2.5 sm:pt-4 md:pt-5 pb-0.5 sm:pb-2">
+              {/* Linha do Título + Botão "Cadastre sua loja aqui" compacto no mobile */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1 className="text-xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-gray-950 dark:text-white leading-tight truncate">
+                    {displayTitle}
+                  </h1>
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-extrabold shadow-xs transition shrink-0"
+                    style={{
+                      backgroundColor: `${primaryColor}15`,
+                      borderColor: `${primaryColor}40`,
+                      color: primaryColor,
+                    }}
+                  >
+                    <ShieldCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+                    <span className="whitespace-nowrap">Multi-Lojas</span>
+                  </span>
+                </div>
 
-              {/* b) Tag/Badge Multi-Lojas posicionada logo abaixo do nome Top Food */}
-              <div className="mt-1 sm:mt-1.5 flex items-center gap-2">
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-0.5 text-[11px] sm:text-xs font-extrabold shadow-xs transition"
-                  style={{
-                    backgroundColor: `${primaryColor}15`,
-                    borderColor: `${primaryColor}40`,
-                    color: primaryColor,
-                  }}
+                {/* Botão "Cadastre sua loja aqui" compacto no mobile ao lado do título */}
+                <a
+                  href={whatsappPartnerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="md:hidden inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs px-2.5 py-1.5 shadow-sm shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer border border-emerald-400/30 shrink-0"
+                  title="Cadastre sua loja no Top Food pelo WhatsApp"
                 >
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Multi-Lojas
-                </span>
+                  <MessageCircle className="h-3.5 w-3.5 text-emerald-100 shrink-0" />
+                  <span className="whitespace-nowrap">Cadastre sua loja aqui</span>
+                </a>
               </div>
 
-              {/* c) Descrição com espaçamento limpo e elegante */}
+              {/* Descrição com espaçamento limpo e elegante */}
               <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium leading-relaxed mt-1.5 max-w-2xl">
                 {heroSubtitle}
               </p>
             </div>
           </div>
 
-          {/* Botão de Atração de Novos Parceiros ("Cadastre sua loja aqui") */}
-          <div className="shrink-0 self-start md:self-end mt-1 md:mt-0 mb-1 sm:mb-2">
+          {/* Botão de Atração de Novos Parceiros ("Cadastre sua loja aqui") - Visível em telas md+ */}
+          <div className="hidden md:block shrink-0 self-end mb-2">
             <a
               href={whatsappPartnerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 transition-all transform hover:-translate-y-0.5 active:scale-95 cursor-pointer border border-emerald-400/30"
+              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm px-4 py-2.5 shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 transition-all transform hover:-translate-y-0.5 active:scale-95 cursor-pointer border border-emerald-400/30"
               title="Cadastre sua loja no Top Food pelo WhatsApp"
             >
-              <MessageCircle className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-emerald-100 shrink-0" />
+              <MessageCircle className="h-4 w-4 text-emerald-100 shrink-0" />
               <span className="whitespace-nowrap">Cadastre sua loja aqui</span>
             </a>
           </div>
         </div>
 
-        {/* 3. Barra de Busca Global de Estabelecimentos (Nome, Categoria ou Culinária) */}
-        <div className="mt-5 sm:mt-6 space-y-2.5">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="relative flex-1 group">
-              <Search
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors text-gray-400 group-focus-within:text-amber-500 dark:text-gray-500"
+        {/* 3. Barra de Busca Global e Contador de Lojas na MESMA LINHA (Mobile & Desktop) */}
+        <div className="mt-4 sm:mt-5 space-y-2.5">
+          <div className="flex flex-row items-center gap-2 sm:gap-3">
+            <div className="relative flex-1 min-w-0 group">
+              <Search className="absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors text-gray-400 group-focus-within:text-amber-500 dark:text-gray-500 pointer-events-none" />
+              {/* Input Mobile com placeholder curto */}
+              <input
+                type="text"
+                id="portal-search-input-mobile"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    onSearchChange("");
+                  }
+                }}
+                placeholder="Buscar lojas ou pratos..."
+                className="sm:hidden w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/90 pl-9 pr-8 py-2 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all shadow-sm focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/20"
               />
+              {/* Input Desktop/Tablet com placeholder completo */}
               <input
                 type="text"
                 id="portal-search-input"
@@ -222,13 +249,13 @@ export function PortalHeader({
                   }
                 }}
                 placeholder="Buscar lojas por nome, categoria ou culinária (ex: burger, pizza, açaí, japonesa)..."
-                className="w-full rounded-2xl border border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/90 pl-10 pr-10 py-2.5 sm:py-3 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all shadow-sm focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/20"
+                className="hidden sm:block w-full rounded-2xl border border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/90 pl-10 pr-10 py-2.5 sm:py-3 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all shadow-sm focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/20"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => onSearchChange("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 transition cursor-pointer"
+                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 transition cursor-pointer"
                   title="Limpar busca (Esc)"
                 >
                   <X className="h-3 w-3" />
@@ -236,12 +263,12 @@ export function PortalHeader({
               )}
             </div>
 
-            {/* Contador de Lojas */}
-            <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-gray-500 dark:text-gray-400 px-1 shrink-0">
-              <span className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
-                <Sparkles className="h-3.5 w-3.5" style={{ color: primaryColor }} />
+            {/* Contador de Lojas fixo e compacto à direita na mesma linha */}
+            <div className="flex items-center shrink-0 rounded-xl border border-gray-200/80 dark:border-slate-700/80 bg-gray-50/90 dark:bg-slate-800/80 px-2.5 sm:px-3 py-2 sm:py-2.5 text-[11px] sm:text-xs text-gray-600 dark:text-gray-300 shadow-2xs">
+              <span className="flex items-center gap-1 sm:gap-1.5 font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" style={{ color: primaryColor }} />
                 {isLoadingTenants && activeStoresCount === 0 ? (
-                  <span className="inline-block h-3.5 w-20 bg-gray-200 dark:bg-slate-700 animate-pulse rounded" />
+                  <span className="inline-block h-3.5 w-16 sm:w-20 bg-gray-200 dark:bg-slate-700 animate-pulse rounded" />
                 ) : (
                   `${activeStoresCount} ${activeStoresCount === 1 ? "loja parceira" : "lojas parceiras"}`
                 )}
@@ -249,44 +276,46 @@ export function PortalHeader({
             </div>
           </div>
 
-          {/* Sugestões Rápidas de Culinária / Categorias */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0 hidden sm:inline mr-1">
-              Populares:
+          {/* 4. Secção de Populares: rótulo "POPULARES:" sempre visível em mobile e desktop + rolagem horizontal */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-0.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider shrink-0 whitespace-nowrap">
+              POPULARES:
             </span>
-            {POPULAR_SEARCH_CHIPS.map((chip) => {
-              const isSelected =
-                (onSelectCategory && selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) ||
-                searchQuery.toLowerCase().trim() === chip.term.toLowerCase();
-              return (
-                <button
-                  key={chip.term}
-                  type="button"
-                  onClick={() => {
-                    if (onSelectCategory) {
-                      onSearchChange("");
-                      if (selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) {
-                        onSelectCategory("todos");
+            <div className="flex items-center gap-1.5 shrink-0">
+              {POPULAR_SEARCH_CHIPS.map((chip) => {
+                const isSelected =
+                  (onSelectCategory && selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) ||
+                  searchQuery.toLowerCase().trim() === chip.term.toLowerCase();
+                return (
+                  <button
+                    key={chip.term}
+                    type="button"
+                    onClick={() => {
+                      if (onSelectCategory) {
+                        onSearchChange("");
+                        if (selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) {
+                          onSelectCategory("todos");
+                        } else {
+                          onSelectCategory(chip.categoryId);
+                        }
+                      } else if (isSelected) {
+                        onSearchChange("");
                       } else {
-                        onSelectCategory(chip.categoryId);
+                        onSearchChange(chip.term);
                       }
-                    } else if (isSelected) {
-                      onSearchChange("");
-                    } else {
-                      onSearchChange(chip.term);
-                    }
-                  }}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer border ${
-                    isSelected
-                      ? "bg-amber-500 text-slate-950 border-amber-500 shadow-xs"
-                      : "bg-gray-100/90 dark:bg-slate-800/80 text-gray-600 dark:text-gray-300 border-gray-200/80 dark:border-slate-700/80 hover:bg-gray-200/80 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  <span className="text-xs">{chip.icon}</span>
-                  <span>{chip.label}</span>
-                </button>
-              );
-            })}
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all shrink-0 whitespace-nowrap cursor-pointer border ${
+                      isSelected
+                        ? "bg-amber-500 text-slate-950 border-amber-500 shadow-xs"
+                        : "bg-gray-100/90 dark:bg-slate-800/80 text-gray-600 dark:text-gray-300 border-gray-200/80 dark:border-slate-700/80 hover:bg-gray-200/80 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    <span className="text-xs">{chip.icon}</span>
+                    <span>{chip.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
