@@ -1,4 +1,4 @@
-import { Star, Clock, Bike, ArrowRight, Sparkles } from "lucide-react";
+import { Star, Clock, Bike, ArrowRight, Sparkles, MapPin } from "lucide-react";
 import type { Tenant } from "@/types";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
@@ -34,6 +34,7 @@ export function StoreCard({
     icon: matchedCat?.icon || "🍽️",
   };
 
+  const storeLocation = (tenant.location || tenant.localidade || "Gargaú").trim() || "Gargaú";
   const rating = tenant.rating || 4.9;
   const ratingCount = tenant.ratingCount || 120;
   const isOpen = tenant.isOpen !== false && tenant.status !== "inactive";
@@ -138,7 +139,7 @@ export function StoreCard({
         </div>
 
         {/* Informações da Loja */}
-        <div className="flex flex-1 flex-col justify-between p-2.5 pt-3 min-h-0">
+        <div className="flex flex-1 flex-col justify-between p-2.5 pt-2.5 min-h-0">
           <div>
             <div className="flex items-center justify-between gap-1">
               <div className="flex items-center gap-1 min-w-0">
@@ -147,7 +148,7 @@ export function StoreCard({
                   <span className="truncate">{catInfo.label}</span>
                 </span>
                 {tenant.completedOrdersCount !== undefined && tenant.completedOrdersCount > 0 && (
-                  <span className="inline-flex items-center rounded-md bg-emerald-500/15 border border-emerald-500/30 px-1 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <span className="inline-flex items-center rounded-md bg-emerald-500/15 border border-emerald-500/30 px-1 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
                     <span>🔥 {tenant.completedOrdersCount}</span>
                   </span>
                 )}
@@ -164,12 +165,14 @@ export function StoreCard({
               {getSafeDisplayName(tenant.name, "Estabelecimento")}
             </h3>
 
-            <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1">
-              {tenant.tagline || "Cardápio exclusivo no Top Food"}
-            </p>
+            {/* Localidade da Loja */}
+            <div className="mt-0.5 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-400 truncate">
+              <MapPin className="h-3 w-3 text-primary/80 shrink-0" />
+              <span className="truncate">{storeLocation}</span>
+            </div>
           </div>
 
-          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800">
+          <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 mb-1.5">
               <span className="flex items-center gap-1 truncate">
                 <Bike className="h-3 w-3 text-primary shrink-0" />
@@ -277,10 +280,14 @@ export function StoreCard({
       <div className="flex flex-1 flex-col justify-between p-4">
         <div>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300">
                 <span>{catInfo.icon}</span>
                 <span>{catInfo.label}</span>
+              </span>
+              <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-400">
+                <MapPin className="h-3 w-3 text-primary/80 shrink-0" />
+                <span>{storeLocation}</span>
               </span>
               {tenant.isFeatured && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
@@ -291,7 +298,7 @@ export function StoreCard({
             </div>
 
             {/* Avaliação */}
-            <div className="flex items-center gap-1 text-xs font-bold text-amber-500 dark:text-amber-400">
+            <div className="flex items-center gap-1 text-xs font-bold text-amber-500 dark:text-amber-400 shrink-0">
               <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
               <span>{rating.toFixed(1)}</span>
               <span className="text-[10px] font-normal text-gray-400">({ratingCount})</span>

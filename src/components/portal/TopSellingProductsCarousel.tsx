@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Flame, ChevronLeft, ChevronRight, ShoppingBag, ArrowRight, Store } from "lucide-react";
+import { Flame, ChevronLeft, ChevronRight, ShoppingBag, ArrowRight, Store, MapPin } from "lucide-react";
 import type { TopSellingProduct } from "@/types";
 import { useStore } from "@/context/StoreContext";
 
@@ -13,7 +13,7 @@ export function TopSellingProductsCarousel({
   onSelectStore,
 }: TopSellingProductsCarouselProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { topSellingProducts: contextProducts } = useStore();
+  const { topSellingProducts: contextProducts, tenants } = useStore();
 
   const products = propProducts !== undefined ? propProducts : contextProducts;
 
@@ -89,6 +89,18 @@ export function TopSellingProductsCarousel({
           const rank = item.rank || index + 1;
           const isLeader = rank === 1;
 
+          const matchedTenant = (tenants || []).find(
+            (t) => t.id === item.tenantId || t.slug === item.tenantSlug
+          );
+          const itemLocation =
+            (
+              item.location ||
+              item.localidade ||
+              matchedTenant?.location ||
+              matchedTenant?.localidade ||
+              "Gargaú"
+            ).trim() || "Gargaú";
+
           const uniqueKey = item.id ? `${item.id}-${index}` : `top-product-${item.tenantId}-${item.productId}-${index}`;
 
           return (
@@ -163,6 +175,12 @@ export function TopSellingProductsCarousel({
                   <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">
                     {item.name}
                   </h3>
+
+                  {/* Localidade da Loja */}
+                  <div className="mt-0.5 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-400 truncate">
+                    <MapPin className="h-3 w-3 text-primary/80 shrink-0" />
+                    <span className="truncate">{itemLocation}</span>
+                  </div>
 
                   {item.description ? (
                     <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 leading-tight">

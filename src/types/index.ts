@@ -106,6 +106,7 @@ export interface Tenant {
   categoryId?: string;
   category_id?: string;
   localidade?: string;
+  location?: string;
   rating?: number;
   ratingCount?: number;
   status: TenantStatus;
@@ -298,6 +299,8 @@ export interface TopSellingProduct {
   tenantSlug: string;
   tenantLogo?: string;
   tenantPrimaryColor?: string;
+  location?: string;
+  localidade?: string;
   totalSold: number;
   rank?: number;
 }

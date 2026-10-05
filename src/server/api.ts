@@ -1982,8 +1982,11 @@ const handleGetTenantsList = async (c: any) => {
           o.status === "entregue" ||
           o.status === "finalizado"
       );
+      const loc = (t.localidade || t.location || "Gargaú").trim() || "Gargaú";
       return {
         ...t,
+        localidade: loc,
+        location: loc,
         productCount: products.length,
         orderCount: orders.length,
         completedOrdersCount: completedOrders.length,
@@ -2000,48 +2003,54 @@ const handleGetTenantsList = async (c: any) => {
 
 api.get("/tenants", handleGetTenantsList);
 api.get("/stores", handleGetTenantsList);
+api.get("/api/tenants", handleGetTenantsList);
+api.get("/api/stores", handleGetTenantsList);
 
 // Endpoint para o Carrossel 1: Lojas em Destaque ranqueadas por vendas (com filtro opcional por localidade)
-api.get("/featured-stores", async (c) => {
+const handleGetFeaturedStores = async (c: any) => {
   try {
     c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     const db = getDb(c);
     const locationParam = c.req.query("location") || c.req.query("localidade") || undefined;
-    const stores = await db.getFeaturedStoresRanked(locationParam);
+    const rawStores = await db.getFeaturedStoresRanked(locationParam);
+    const stores = rawStores.map((s) => {
+      const loc = (s.localidade || s.location || "Gargaú").trim() || "Gargaú";
+      return { ...s, localidade: loc, location: loc };
+    });
     return c.json({ success: true, stores }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao consultar lojas em destaque" }, 500);
   }
-});
+};
+
+api.get("/featured-stores", handleGetFeaturedStores);
+api.get("/api/featured-stores", handleGetFeaturedStores);
 
 // Endpoint para o Carrossel 2: Mais Pedidos (com filtro opcional por localidade)
-api.get("/top-selling-products", async (c) => {
+const handleGetPopularProducts = async (c: any) => {
   try {
     c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     const db = getDb(c);
     const limit = Number(c.req.query("limit")) || 10;
     const days = Number(c.req.query("days")) || 30;
     const locationParam = c.req.query("location") || c.req.query("localidade") || undefined;
-    const products = await db.getTopSellingProducts(limit, days, locationParam);
+    const rawProducts = await db.getTopSellingProducts(limit, days, locationParam);
+    const products = rawProducts.map((p) => {
+      const loc = (p.location || p.localidade || "Gargaú").trim() || "Gargaú";
+      return { ...p, location: loc, localidade: loc };
+    });
     return c.json({ success: true, products }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao consultar produtos mais vendidos" }, 500);
   }
-});
+};
 
-api.get("/mais-pedidos", async (c) => {
-  try {
-    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-    const db = getDb(c);
-    const limit = Number(c.req.query("limit")) || 10;
-    const days = Number(c.req.query("days")) || 30;
-    const locationParam = c.req.query("location") || c.req.query("localidade") || undefined;
-    const products = await db.getTopSellingProducts(limit, days, locationParam);
-    return c.json({ success: true, products }, 200);
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Erro ao consultar produtos mais pedidos" }, 500);
-  }
-});
+api.get("/top-selling-products", handleGetPopularProducts);
+api.get("/api/top-selling-products", handleGetPopularProducts);
+api.get("/mais-pedidos", handleGetPopularProducts);
+api.get("/api/mais-pedidos", handleGetPopularProducts);
+api.get("/products/popular", handleGetPopularProducts);
+api.get("/api/products/popular", handleGetPopularProducts);
 
 api.get("/tenants/:slugOrId/credentials", async (c) => {
   try {

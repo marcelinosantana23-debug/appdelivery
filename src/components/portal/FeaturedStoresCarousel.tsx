@@ -33,12 +33,12 @@ export function FeaturedStoresCarousel({
     };
 
     if (propStores && propStores.length > 0) {
-      return propStores.filter((s) => matchLoc(s.localidade));
+      return propStores.filter((s) => matchLoc(s.location || s.localidade));
     }
 
     if (propTenants) {
       return propTenants
-        .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive" && matchLoc(t.localidade))
+        .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive" && matchLoc(t.location || t.localidade))
         .sort((a, b) => {
           const aCompleted = a.completedOrdersCount || 0;
           const bCompleted = b.completedOrdersCount || 0;
@@ -56,11 +56,11 @@ export function FeaturedStoresCarousel({
     }
 
     if (featuredStoresRanked && featuredStoresRanked.length > 0) {
-      return featuredStoresRanked.filter((s) => matchLoc(s.localidade));
+      return featuredStoresRanked.filter((s) => matchLoc(s.location || s.localidade));
     }
 
     return (contextTenants || [])
-      .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive" && matchLoc(t.localidade))
+      .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive" && matchLoc(t.location || t.localidade))
       .sort((a, b) => {
         const aCompleted = a.completedOrdersCount || 0;
         const bCompleted = b.completedOrdersCount || 0;

@@ -67,13 +67,13 @@ export function TopFoodPortal({
     const map = new Map<string, Tenant>();
 
     (tenants || []).forEach((t) => {
-      if (t.status !== "inactive" && matchesSelectedLocation(t.localidade)) {
+      if (t.status !== "inactive" && matchesSelectedLocation(t.location || t.localidade)) {
         map.set(t.id || t.slug, t);
       }
     });
 
     (featuredStoresRanked || []).forEach((s) => {
-      if (s.status !== "inactive" && matchesSelectedLocation(s.localidade)) {
+      if (s.status !== "inactive" && matchesSelectedLocation(s.location || s.localidade)) {
         const key = s.id || s.slug;
         const existing = map.get(key);
         map.set(key, existing ? { ...s, ...existing } : s);
@@ -98,7 +98,9 @@ export function TopFoodPortal({
     const activeIds = new Set(lojas.map((l) => l.id));
     const activeSlugs = new Set(lojas.map((l) => l.slug));
     return (topSellingProducts || []).filter(
-      (p) => activeIds.has(p.tenantId) || (p.tenantSlug && activeSlugs.has(p.tenantSlug))
+      (p) =>
+        matchesSelectedLocation(p.location || p.localidade) &&
+        (activeIds.has(p.tenantId) || (p.tenantSlug && activeSlugs.has(p.tenantSlug)) || Boolean(p.location || p.localidade))
     );
   }, [topSellingProducts, lojas, isAllLocations]);
 

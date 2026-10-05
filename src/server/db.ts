@@ -3115,15 +3115,22 @@ export class Database {
               this.insertTenantRow(initT).catch(() => {});
             }
           }
-          return d1Tenants;
+      const normalizeTenantLoc = (t: Tenant): Tenant => {
+        const loc = (t.localidade || t.location || "Gargaú").trim() || "Gargaú";
+        return { ...t, localidade: loc, location: loc };
+      };
+      return d1Tenants.map(normalizeTenantLoc);
         }
       } catch (e) {
         console.warn("D1 query failed, using memory store:", e);
       }
     }
-    const memTenants = globalStore.tenants.filter(
-      (t) => !isTenantPermanentlyDeleted(t.id) && !isTenantPermanentlyDeleted(t.slug)
-    );
+    const memTenants = globalStore.tenants
+      .filter((t) => !isTenantPermanentlyDeleted(t.id) && !isTenantPermanentlyDeleted(t.slug))
+      .map((t) => {
+        const loc = (t.localidade || t.location || "Gargaú").trim() || "Gargaú";
+        return { ...t, localidade: loc, location: loc };
+      });
     memTenants.sort((a, b) => {
       const aFeat = Boolean(a.isFeatured);
       const bFeat = Boolean(b.isFeatured);
@@ -5933,6 +5940,7 @@ export class Database {
       categoryId: resolvedBusinessType,
       category_id: resolvedBusinessType,
       localidade: (row.localidade && row.localidade !== "undefined") ? row.localidade : "Gargaú",
+      location: (row.localidade && row.localidade !== "undefined") ? row.localidade : "Gargaú",
       motoboyPhone: row.motoboy_phone || row.motoboyPhone || "",
       motoboy_phone: row.motoboy_phone || row.motoboyPhone || "",
       motoboyName: row.motoboy_name || row.motoboyName || "",
@@ -6382,8 +6390,11 @@ export class Database {
           o.status === "finalizado"
       );
       const nonCancelledOrders = storeOrders.filter((o) => o.status !== "cancelled");
+      const loc = (t.localidade || t.location || "Gargaú").trim() || "Gargaú";
       return {
         ...t,
+        localidade: loc,
+        location: loc,
         completedOrdersCount: completedOrders.length,
         salesCount: nonCancelledOrders.length,
         rank: 0,
@@ -6439,6 +6450,7 @@ export class Database {
             MAX(t.slug) as tenantSlug,
             MAX(t.logo) as tenantLogo,
             MAX(t.primary_color) as tenantPrimaryColor,
+            COALESCE(NULLIF(MAX(t.localidade), ''), 'Gargaú') as location,
             SUM(oi.quantity) as totalSold
           FROM order_items oi
           JOIN tenants t ON t.id = oi.tenant_id
@@ -6469,6 +6481,7 @@ export class Database {
               MAX(t.slug) as tenantSlug,
               MAX(t.logo) as tenantLogo,
               MAX(t.primary_color) as tenantPrimaryColor,
+              COALESCE(NULLIF(MAX(t.localidade), ''), 'Gargaú') as location,
               SUM(oi.quantity) as totalSold
             FROM order_items oi
             JOIN tenants t ON t.id = oi.tenant_id
@@ -6491,6 +6504,7 @@ export class Database {
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, "-")
               .replace(/(^-|-$)/g, "");
+            const loc = (r.location || r.localidade || "Gargaú").trim() || "Gargaú";
             return {
               id: `top-${idx + 1}-${r.tenantId}-${r.productId}-${safeSlug}`,
               productId: r.productId,
@@ -6503,6 +6517,8 @@ export class Database {
               tenantSlug: r.tenantSlug,
               tenantLogo: r.tenantLogo || "🍔",
               tenantPrimaryColor: r.tenantPrimaryColor || "#E63946",
+              location: loc,
+              localidade: loc,
               totalSold: Number(r.totalSold) || 0,
               rank: idx + 1,
             };
@@ -6527,6 +6543,8 @@ export class Database {
         tenantSlug: string;
         tenantLogo: string;
         tenantPrimaryColor: string;
+        location: string;
+        localidade: string;
         totalSold: number;
       }
     >();
@@ -6560,6 +6578,7 @@ export class Database {
           existing.totalSold += qty;
           if (!existing.image && img) existing.image = img;
         } else {
+          const loc = (tenant.localidade || tenant.location || "Gargaú").trim() || "Gargaú";
           salesMap.set(key, {
             productId: pId,
             name: matchingProduct?.name || item.product?.name || "Lanche Especial",
@@ -6571,6 +6590,8 @@ export class Database {
             tenantSlug: tenant.slug,
             tenantLogo: tenant.logo || "🍔",
             tenantPrimaryColor: tenant.primaryColor || "#E63946",
+            location: loc,
+            localidade: loc,
             totalSold: qty,
           });
         }
