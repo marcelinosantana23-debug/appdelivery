@@ -33,27 +33,47 @@ export function TopFoodPortal({
   const {
     tenants,
     featuredStoresRanked,
+    topSellingProducts,
     establishmentCategories,
+    selectedLocality,
     isLoadingTenants,
     isLoadingPortal,
   } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // FONTE DE DADOS ÚNICA (20 LOJAS):
-  // Unifica o array completo de lojas carregado do banco/superadmin (tenants + featuredStoresRanked)
-  // sem filtrar ou ocultar lojas por localidade secundária.
+  const isAllLocations = useMemo(() => {
+    if (!selectedLocality) return true;
+    const norm = selectedLocality.trim().toLowerCase();
+    return (
+      norm === "" ||
+      norm === "todas" ||
+      norm === "todas as localidades" ||
+      norm === "todas as regiões" ||
+      norm === "todas as regioes" ||
+      norm === "todos" ||
+      norm === "all"
+    );
+  }, [selectedLocality]);
+
+  const matchesSelectedLocation = (loc?: string) => {
+    if (isAllLocations) return true;
+    return (loc || "Gargaú").trim().toLowerCase() === selectedLocality.trim().toLowerCase();
+  };
+
+  // FONTE DE DADOS REATIVA POR LOCALIDADE:
+  // Unifica o array de lojas ativas e filtra pela localidade selecionada (ou mostra todas se "Todas as Localidades").
   const lojas = useMemo<Tenant[]>(() => {
     const map = new Map<string, Tenant>();
 
     (tenants || []).forEach((t) => {
-      if (t.status !== "inactive") {
+      if (t.status !== "inactive" && matchesSelectedLocation(t.localidade)) {
         map.set(t.id || t.slug, t);
       }
     });
 
     (featuredStoresRanked || []).forEach((s) => {
-      if (s.status !== "inactive") {
+      if (s.status !== "inactive" && matchesSelectedLocation(s.localidade)) {
         const key = s.id || s.slug;
         const existing = map.get(key);
         map.set(key, existing ? { ...s, ...existing } : s);
@@ -69,7 +89,18 @@ export function TopFoodPortal({
       if (aPri !== bPri) return bPri - aPri;
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
-  }, [tenants, featuredStoresRanked]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenants, featuredStoresRanked, selectedLocality, isAllLocations]);
+
+  // Filtra também os produtos mais vendidos pelas lojas da localidade selecionada
+  const locationFilteredTopProducts = useMemo(() => {
+    if (isAllLocations) return topSellingProducts;
+    const activeIds = new Set(lojas.map((l) => l.id));
+    const activeSlugs = new Set(lojas.map((l) => l.slug));
+    return (topSellingProducts || []).filter(
+      (p) => activeIds.has(p.tenantId) || (p.tenantSlug && activeSlugs.has(p.tenantSlug))
+    );
+  }, [topSellingProducts, lojas, isAllLocations]);
 
   const activeTenants = lojas;
 
@@ -288,8 +319,9 @@ export function TopFoodPortal({
               </div>
             ) : (
               <>
-                {/* Carrossel 1: Mais Pedidos (Ranking Geral de lanches mais vendidos) */}
+                {/* Carrossel 1: Mais Pedidos (Ranking Geral de lanches mais vendidos na localidade ativa) */}
                 <TopSellingProductsCarousel
+                  products={locationFilteredTopProducts}
                   onSelectStore={onSelectStore}
                 />
 

@@ -34,7 +34,7 @@ export function PortalHeader({
 }: PortalHeaderProps) {
   const { platformSettings, isLoadingTenants, tenants } = useStore();
   const activeStoresCount =
-    typeof totalStores === "number" && totalStores > 0
+    typeof totalStores === "number"
       ? totalStores
       : (tenants || []).filter((t) => t.status !== "inactive").length;
 
@@ -66,19 +66,21 @@ export function PortalHeader({
   return (
     <header className="relative w-full bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 transition-colors">
       {/* 1. BANNER PRINCIPAL DO PORTAL (Grande, imersivo e com efeito 3D de sobreposição) */}
-      <div className="relative min-h-[220px] h-52 sm:h-60 md:h-72 w-full overflow-hidden bg-slate-900">
-        {/* Imagem de Capa Marketplace */}
-        <img
-          src={bannerImg}
-          alt={displayTitle}
-          className="h-full w-full object-cover object-center transition-transform duration-700 hover:scale-105"
-        />
+      <div className="relative min-h-[220px] h-52 sm:h-60 md:h-72 w-full bg-slate-900">
+        {/* Container da imagem com overflow-hidden isolado para não cortar o dropdown de localidade */}
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src={bannerImg}
+            alt={displayTitle}
+            className="h-full w-full object-cover object-center transition-transform duration-700 hover:scale-105"
+          />
 
-        {/* Gradiente escuro para legibilidade perfeita */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/30" />
+          {/* Gradiente escuro para legibilidade perfeita */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/30" />
+        </div>
 
         {/* Barra superior flutuante em UMA ÚNICA LINHA (Lado Esquerdo + Lado Direito com space-between) */}
-        <div className="absolute inset-x-0 top-0 z-30 mx-auto max-w-5xl px-2 sm:px-4 pt-2.5 sm:pt-3">
+        <div className="absolute inset-x-0 top-0 z-50 mx-auto max-w-5xl px-2 sm:px-4 pt-2.5 sm:pt-3">
           <div className="flex flex-row flex-nowrap items-center justify-between gap-2 w-full h-8 sm:h-9">
             {/* LADO ESQUERDO: Logo Top Food + Pílula de Localidade colada ao lado */}
             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink">

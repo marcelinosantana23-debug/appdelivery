@@ -1937,12 +1937,35 @@ api.get("/superadmin/tenant-credentials", async (c) => {
   }
 });
 
-api.get("/tenants", async (c) => {
+const isAllLocationParam = (loc?: string | null) => {
+  if (!loc) return true;
+  const norm = loc.trim().toLowerCase();
+  return (
+    norm === "" ||
+    norm === "todas" ||
+    norm === "todas as localidades" ||
+    norm === "todas as regiões" ||
+    norm === "todas as regioes" ||
+    norm === "todos" ||
+    norm === "all"
+  );
+};
+
+const handleGetTenantsList = async (c: any) => {
   c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   c.header("Pragma", "no-cache");
   c.header("Expires", "0");
   const db = getDb(c);
-  const tenants = await db.getTenants();
+  const locationParam = c.req.query("location") || c.req.query("localidade") || "";
+  let tenants = await db.getTenants();
+
+  if (!isAllLocationParam(locationParam)) {
+    const targetLoc = locationParam.trim().toLowerCase();
+    tenants = tenants.filter(
+      (t) => (t.localidade || "Gargaú").trim().toLowerCase() === targetLoc
+    );
+  }
+
   const enriched = await Promise.all(
     tenants.map(async (t) => {
       const [products, orders, creds] = await Promise.all([
@@ -1972,29 +1995,34 @@ api.get("/tenants", async (c) => {
       };
     })
   );
-  return c.json({ success: true, tenants: enriched }, 200);
-});
+  return c.json({ success: true, tenants: enriched, stores: enriched }, 200);
+};
 
-// Endpoint para o Carrossel 1: Lojas em Destaque ranqueadas por vendas
+api.get("/tenants", handleGetTenantsList);
+api.get("/stores", handleGetTenantsList);
+
+// Endpoint para o Carrossel 1: Lojas em Destaque ranqueadas por vendas (com filtro opcional por localidade)
 api.get("/featured-stores", async (c) => {
   try {
     c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     const db = getDb(c);
-    const stores = await db.getFeaturedStoresRanked();
+    const locationParam = c.req.query("location") || c.req.query("localidade") || undefined;
+    const stores = await db.getFeaturedStoresRanked(locationParam);
     return c.json({ success: true, stores }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao consultar lojas em destaque" }, 500);
   }
 });
 
-// Endpoint para o Carrossel 2: Mais Pedidos (lanches com maior volume de vendas de todas as lojas)
+// Endpoint para o Carrossel 2: Mais Pedidos (com filtro opcional por localidade)
 api.get("/top-selling-products", async (c) => {
   try {
     c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     const db = getDb(c);
     const limit = Number(c.req.query("limit")) || 10;
     const days = Number(c.req.query("days")) || 30;
-    const products = await db.getTopSellingProducts(limit, days);
+    const locationParam = c.req.query("location") || c.req.query("localidade") || undefined;
+    const products = await db.getTopSellingProducts(limit, days, locationParam);
     return c.json({ success: true, products }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao consultar produtos mais vendidos" }, 500);
@@ -2007,7 +2035,8 @@ api.get("/mais-pedidos", async (c) => {
     const db = getDb(c);
     const limit = Number(c.req.query("limit")) || 10;
     const days = Number(c.req.query("days")) || 30;
-    const products = await db.getTopSellingProducts(limit, days);
+    const locationParam = c.req.query("location") || c.req.query("localidade") || undefined;
+    const products = await db.getTopSellingProducts(limit, days, locationParam);
     return c.json({ success: true, products }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao consultar produtos mais pedidos" }, 500);
@@ -2118,27 +2147,42 @@ api.put("/tenants/:slugOrId/credentials", async (c) => {
 
 // -----------------------------------------------------------------------------
 // LOCALIDADES / REGIÕES (SELECT DISTINCT nas lojas ativas)
-// GET /api/localities e GET /localities
+// GET /api/locations, GET /locations, GET /api/localities e GET /localities
 // -----------------------------------------------------------------------------
-api.get("/api/localities", async (c) => {
+const handleGetLocations = async (c: any) => {
   try {
+    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     const db = getDb(c);
-    const localities = await db.getDistinctLocalities();
-    return c.json({ success: true, localities }, 200);
+    const distinctLocalities = await db.getDistinctLocalities();
+    const locationsWithAll = [
+      "Todas as Localidades",
+      ...distinctLocalities.filter((l) => l.toLowerCase() !== "todas as localidades"),
+    ];
+    return c.json(
+      {
+        success: true,
+        localities: distinctLocalities,
+        locations: locationsWithAll,
+      },
+      200
+    );
   } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao consultar localidades", localities: [] }, 500);
+    return c.json(
+      {
+        success: false,
+        error: e.message || "Erro ao consultar localidades",
+        localities: [],
+        locations: ["Todas as Localidades"],
+      },
+      500
+    );
   }
-});
+};
 
-api.get("/localities", async (c) => {
-  try {
-    const db = getDb(c);
-    const localities = await db.getDistinctLocalities();
-    return c.json({ success: true, localities }, 200);
-  } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao consultar localidades", localities: [] }, 500);
-  }
-});
+api.get("/api/localities", handleGetLocations);
+api.get("/localities", handleGetLocations);
+api.get("/api/locations", handleGetLocations);
+api.get("/locations", handleGetLocations);
 
 api.post("/tenants", async (c) => {
   try {
@@ -2464,11 +2508,19 @@ const handleGetEstablishmentCategories = async (c: any) => {
   try {
     const db = getDb(c);
     const activeOnly = c.req.query("activeOnly") === "true" || c.req.query("nonEmpty") === "true";
+    const locationParam = c.req.query("location") || c.req.query("localidade") || "";
+    const filterByLoc = !isAllLocationParam(locationParam);
     let categories = await db.getEstablishmentCategories();
 
-    if (activeOnly) {
+    if (activeOnly || filterByLoc) {
       const tenants = await db.getTenants();
-      const activeTenants = tenants.filter((t) => t.status !== "inactive");
+      const activeTenants = tenants.filter((t) => {
+        if (t.status === "inactive") return false;
+        if (filterByLoc) {
+          return (t.localidade || "Gargaú").trim().toLowerCase() === locationParam.trim().toLowerCase();
+        }
+        return true;
+      });
       const norm = (str?: string) =>
         (str || "")
           .toLowerCase()

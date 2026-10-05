@@ -15,7 +15,7 @@ export function TopSellingProductsCarousel({
   const containerRef = useRef<HTMLDivElement>(null);
   const { topSellingProducts: contextProducts } = useStore();
 
-  const products = propProducts && propProducts.length > 0 ? propProducts : contextProducts;
+  const products = propProducts !== undefined ? propProducts : contextProducts;
 
   if (!products || products.length === 0) {
     return null;

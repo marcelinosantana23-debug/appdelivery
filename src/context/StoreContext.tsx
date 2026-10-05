@@ -618,169 +618,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isRevalidatingTenants, setIsRevalidatingTenants] = useState<boolean>(false);
   const isLoadingPortal = isLoadingTenants || isLoadingCategories;
 
-  const refreshFeaturedStoresRanked = useCallback(async () => {
-    try {
-      const res = await fetchFeaturedStoresRankedApi();
-      if (res.success && res.stores) {
-        setFeaturedStoresRanked((prev) => {
-          if (haveStoresRankedChanged(prev, res.stores)) {
-            saveCachedFeaturedStores(res.stores);
-            return res.stores;
-          }
-          return prev;
-        });
-        saveCachedFeaturedStores(res.stores);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const refreshTopSellingProducts = useCallback(async () => {
-    try {
-      const res = await fetchTopSellingProductsApi(10, 30);
-      if (res.success && res.products) {
-        setTopSellingProducts((prev) => {
-          const changed =
-            prev.length !== res.products.length ||
-            prev.some((p, i) => p.id !== res.products[i]?.id);
-          if (changed) {
-            saveCachedTopProducts(res.products);
-            return res.products;
-          }
-          return prev;
-        });
-        saveCachedTopProducts(res.products);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const refreshTenants = useCallback(async () => {
-    // Se não houver tenants em memória/cache, ativa o indicador para exibir skeleton leve
-    setTenants((curr) => {
-      if (curr.length === 0) {
-        setIsLoadingTenants(true);
-      }
-      return curr;
-    });
-    setIsRevalidatingTenants(true);
-
-    try {
-      const [tRes, fRes, pRes] = await Promise.all([
-        fetchTenantsApi(),
-        fetchFeaturedStoresRankedApi(),
-        fetchTopSellingProductsApi(10, 30),
-      ]);
-
-      if (tRes.success && tRes.tenants) {
-        const nextTenants = tRes.tenants;
-        setTenants((prev) => {
-          if (haveTenantsChanged(prev, nextTenants)) {
-            saveCachedTenants(nextTenants);
-            preloadStoreImages(nextTenants);
-            return nextTenants;
-          }
-          return prev;
-        });
-        saveCachedTenants(nextTenants);
-        preloadStoreImages(nextTenants);
-      }
-
-      if (fRes.success && fRes.stores) {
-        setFeaturedStoresRanked((prev) => {
-          if (haveStoresRankedChanged(prev, fRes.stores)) {
-            saveCachedFeaturedStores(fRes.stores);
-            return fRes.stores;
-          }
-          return prev;
-        });
-        saveCachedFeaturedStores(fRes.stores);
-      }
-
-      if (pRes.success && pRes.products) {
-        setTopSellingProducts((prev) => {
-          const changed =
-            prev.length !== pRes.products.length ||
-            prev.some((p, i) => p.id !== pRes.products[i]?.id);
-          if (changed) {
-            saveCachedTopProducts(pRes.products);
-            return pRes.products;
-          }
-          return prev;
-        });
-        saveCachedTopProducts(pRes.products);
-      }
-    } catch (err) {
-      console.warn("[StoreContext] Background revalidation failed, keeping local cache:", err);
-    } finally {
-      setIsLoadingTenants(false);
-      setIsRevalidatingTenants(false);
-    }
-  }, []);
-
-  // Categorias de estabelecimentos (Top Food Portal e Super Admin) com cache local imediato
-  const [establishmentCategories, setEstablishmentCategories] = useState<EstablishmentCategory[]>(loadCachedCategories);
-
-  const refreshEstablishmentCategories = useCallback(async () => {
-    setEstablishmentCategories((curr) => {
-      if (curr.length === 0) {
-        setIsLoadingCategories(true);
-      }
-      return curr;
-    });
-
-    try {
-      const res = await fetchEstablishmentCategoriesApi();
-      if (res.success && res.categories) {
-        const nextCats = res.categories;
-        setEstablishmentCategories((prev) => {
-          const changed =
-            prev.length !== nextCats.length ||
-            prev.some(
-              (c, i) =>
-                c.id !== nextCats[i]?.id ||
-                c.name !== nextCats[i]?.name ||
-                c.order !== nextCats[i]?.order
-            );
-          if (changed) {
-            saveCachedCategories(nextCats);
-            return nextCats;
-          }
-          return prev;
-        });
-        saveCachedCategories(nextCats);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setIsLoadingCategories(false);
-    }
-  }, []);
-
-  const createEstablishmentCategory = useCallback(
-    async (name: string, icon?: string, order?: number) => {
-      const res = await createEstablishmentCategoryApi({ name, icon, order });
-      if (res.success && res.category) {
-        await refreshEstablishmentCategories();
-      }
-      return res;
-    },
-    [refreshEstablishmentCategories]
-  );
-
-  const deleteEstablishmentCategory = useCallback(
-    async (id: string) => {
-      const res = await deleteEstablishmentCategoryApi(id);
-      if (res.success) {
-        await refreshEstablishmentCategories();
-      }
-      return res;
-    },
-    [refreshEstablishmentCategories]
-  );
-
   // Localidades dinâmicas registradas no Cloudflare D1
   const [localities, setLocalities] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
@@ -809,17 +646,217 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return "Todas as Localidades";
   });
 
-  const setSelectedLocality = useCallback((loc: string) => {
-    const trimmed = loc.trim();
-    setSelectedLocalityState(trimmed);
-    if (typeof window !== "undefined") {
+  const refreshFeaturedStoresRanked = useCallback(
+    async (locationOverride?: string) => {
       try {
-        localStorage.setItem("topfood_selected_locality", trimmed);
+        const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
+        const res = await fetchFeaturedStoresRankedApi(loc);
+        if (res.success && res.stores) {
+          setFeaturedStoresRanked((prev) => {
+            if (haveStoresRankedChanged(prev, res.stores)) {
+              saveCachedFeaturedStores(res.stores);
+              return res.stores;
+            }
+            return prev;
+          });
+          saveCachedFeaturedStores(res.stores);
+        }
       } catch {
         // ignore
       }
-    }
-  }, []);
+    },
+    [selectedLocality]
+  );
+
+  const refreshTopSellingProducts = useCallback(
+    async (locationOverride?: string) => {
+      try {
+        const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
+        const res = await fetchTopSellingProductsApi(10, 30, loc);
+        if (res.success && res.products) {
+          setTopSellingProducts((prev) => {
+            const changed =
+              prev.length !== res.products.length ||
+              prev.some((p, i) => p.id !== res.products[i]?.id);
+            if (changed) {
+              saveCachedTopProducts(res.products);
+              return res.products;
+            }
+            return prev;
+          });
+          saveCachedTopProducts(res.products);
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [selectedLocality]
+  );
+
+  const refreshTenants = useCallback(
+    async (locationOverride?: string) => {
+      const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
+      const isAllLoc =
+        !loc ||
+        loc.trim() === "" ||
+        loc.trim().toLowerCase() === "todas as localidades" ||
+        loc.trim().toLowerCase() === "todas" ||
+        loc.trim().toLowerCase() === "todos";
+
+      setTenants((curr) => {
+        if (curr.length === 0) {
+          setIsLoadingTenants(true);
+        }
+        return curr;
+      });
+      setIsRevalidatingTenants(true);
+
+      try {
+        const [tRes, fRes, pRes] = await Promise.all([
+          fetchTenantsApi(),
+          fetchFeaturedStoresRankedApi(loc),
+          fetchTopSellingProductsApi(10, 30, loc),
+        ]);
+
+        if (tRes.success && tRes.tenants) {
+          const nextTenants = tRes.tenants;
+          setTenants((prev) => {
+            if (haveTenantsChanged(prev, nextTenants)) {
+              saveCachedTenants(nextTenants);
+              preloadStoreImages(nextTenants);
+              return nextTenants;
+            }
+            return prev;
+          });
+          saveCachedTenants(nextTenants);
+          preloadStoreImages(nextTenants);
+        }
+
+        if (fRes.success && fRes.stores) {
+          setFeaturedStoresRanked((prev) => {
+            if (haveStoresRankedChanged(prev, fRes.stores)) {
+              if (isAllLoc) saveCachedFeaturedStores(fRes.stores);
+              return fRes.stores;
+            }
+            return prev;
+          });
+          if (isAllLoc) saveCachedFeaturedStores(fRes.stores);
+        }
+
+        if (pRes.success && pRes.products) {
+          setTopSellingProducts((prev) => {
+            const changed =
+              prev.length !== pRes.products.length ||
+              prev.some((p, i) => p.id !== pRes.products[i]?.id);
+            if (changed) {
+              if (isAllLoc) saveCachedTopProducts(pRes.products);
+              return pRes.products;
+            }
+            return prev;
+          });
+          if (isAllLoc) saveCachedTopProducts(pRes.products);
+        }
+      } catch (err) {
+        console.warn("[StoreContext] Background revalidation failed, keeping local cache:", err);
+      } finally {
+        setIsLoadingTenants(false);
+        setIsRevalidatingTenants(false);
+      }
+    },
+    [selectedLocality]
+  );
+
+  // Categorias de estabelecimentos (Top Food Portal e Super Admin) com cache local imediato
+  const [establishmentCategories, setEstablishmentCategories] = useState<EstablishmentCategory[]>(loadCachedCategories);
+
+  const refreshEstablishmentCategories = useCallback(
+    async (locationOverride?: string) => {
+      const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
+      setEstablishmentCategories((curr) => {
+        if (curr.length === 0) {
+          setIsLoadingCategories(true);
+        }
+        return curr;
+      });
+
+      try {
+        const res = await fetchEstablishmentCategoriesApi(loc);
+        if (res.success && res.categories) {
+          const nextCats = res.categories;
+          setEstablishmentCategories((prev) => {
+            const changed =
+              prev.length !== nextCats.length ||
+              prev.some(
+                (c, i) =>
+                  c.id !== nextCats[i]?.id ||
+                  c.name !== nextCats[i]?.name ||
+                  c.order !== nextCats[i]?.order
+              );
+            if (changed) {
+              saveCachedCategories(nextCats);
+              return nextCats;
+            }
+            return prev;
+          });
+          saveCachedCategories(nextCats);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    },
+    [selectedLocality]
+  );
+
+  const createEstablishmentCategory = useCallback(
+    async (name: string, icon?: string, order?: number) => {
+      const res = await createEstablishmentCategoryApi({ name, icon, order });
+      if (res.success && res.category) {
+        await refreshEstablishmentCategories();
+      }
+      return res;
+    },
+    [refreshEstablishmentCategories]
+  );
+
+  const deleteEstablishmentCategory = useCallback(
+    async (id: string) => {
+      const res = await deleteEstablishmentCategoryApi(id);
+      if (res.success) {
+        await refreshEstablishmentCategories();
+      }
+      return res;
+    },
+    [refreshEstablishmentCategories]
+  );
+
+  const setSelectedLocality = useCallback(
+    (loc: string) => {
+      const trimmed = loc.trim() || "Todas as Localidades";
+      setSelectedLocalityState(trimmed);
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("topfood_selected_locality", trimmed);
+        } catch {
+          // ignore
+        }
+      }
+      // Dispara re-fetch automático de todos os blocos da vitrine com a nova localidade
+      Promise.all([
+        refreshTenants(trimmed),
+        refreshFeaturedStoresRanked(trimmed),
+        refreshTopSellingProducts(trimmed),
+        refreshEstablishmentCategories(trimmed),
+      ]).catch(() => {});
+    },
+    [
+      refreshTenants,
+      refreshFeaturedStoresRanked,
+      refreshTopSellingProducts,
+      refreshEstablishmentCategories,
+    ]
+  );
 
   const refreshLocalities = useCallback(async (): Promise<string[]> => {
     try {

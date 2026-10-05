@@ -3218,20 +3218,41 @@ export class Database {
     return this.getTenantByIdOrSlug(slug);
   }
 
+  private isAllLocationsFilter(location?: string): boolean {
+    if (!location) return true;
+    const norm = location.trim().toLowerCase();
+    return (
+      norm === "" ||
+      norm === "todas" ||
+      norm === "todas as localidades" ||
+      norm === "todas as regiões" ||
+      norm === "todas as regioes" ||
+      norm === "todos" ||
+      norm === "all"
+    );
+  }
+
+  private matchesLocationFilter(tenantLocation?: string, filterLocation?: string): boolean {
+    if (this.isAllLocationsFilter(filterLocation)) return true;
+    const tLoc = (tenantLocation || "Gargaú").trim().toLowerCase();
+    const fLoc = (filterLocation || "").trim().toLowerCase();
+    return tLoc === fLoc;
+  }
+
   // Retorna a lista única de localidades cadastradas nas lojas ativas
   async getDistinctLocalities(): Promise<string[]> {
     await this.ensureTables();
     if (this.env?.DB) {
       try {
         const res = await this.env.DB.prepare(
-          "SELECT DISTINCT localidade FROM tenants WHERE status != 'inactive' AND localidade IS NOT NULL AND TRIM(localidade) != '' ORDER BY localidade ASC"
-        ).all<{ localidade: string }>();
+          "SELECT DISTINCT localidade AS location FROM tenants WHERE status != 'inactive' AND localidade IS NOT NULL AND TRIM(localidade) != '' ORDER BY localidade ASC"
+        ).all<{ location: string }>();
         if (res.results && res.results.length > 0) {
           const list = res.results
-            .map((r: any) => r.localidade?.trim())
+            .map((r: any) => (r.location || r.localidade || "").trim())
             .filter(Boolean) as string[];
           if (list.length > 0) {
-            return list;
+            return Array.from(new Set(list)).sort((a, b) => a.localeCompare(b, "pt-BR"));
           }
         }
       } catch (e) {
@@ -3239,16 +3260,23 @@ export class Database {
       }
     }
 
-    const activeTenants = globalStore.tenants.filter((t) => t.status !== "inactive");
+    const activeTenants = globalStore.tenants.filter(
+      (t) =>
+        t.status !== "inactive" &&
+        !isTenantPermanentlyDeleted(t.id) &&
+        !isTenantPermanentlyDeleted(t.slug) &&
+        t.localidade &&
+        t.localidade.trim() !== ""
+    );
     const unique = Array.from(
       new Set(
         activeTenants
-          .map((t) => (t.localidade || "Gargaú").trim())
+          .map((t) => (t.localidade || "").trim())
           .filter(Boolean)
       )
     ).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
-    return unique.length > 0 ? unique : ["Gargaú", "Barra do Itabapoana", "São Francisco (Centro)"];
+    return unique;
   }
 
   async createTenant(data: {
@@ -6279,11 +6307,14 @@ export class Database {
    * Consulta no D1 contando os pedidos concluídos de cada loja (COUNT(orders.id)).
    * A loja patrocinada com MAIOR número de vendas ocupa AUTOMATICAMENTE a 1ª posição (#1).
    */
-  async getFeaturedStoresRanked(): Promise<FeaturedStoreRanked[]> {
+  async getFeaturedStoresRanked(location?: string): Promise<FeaturedStoreRanked[]> {
     await this.ensureTables();
+    const filterByLoc = !this.isAllLocationsFilter(location);
+    const cleanLoc = (location || "").trim();
 
     if (this.env?.DB) {
       try {
+        const whereLocClause = filterByLoc ? " AND LOWER(TRIM(t.localidade)) = LOWER(TRIM(?))" : "";
         const query = `
           SELECT 
             t.*,
@@ -6299,14 +6330,15 @@ export class Database {
             WHERE status != 'cancelled'
             GROUP BY tenant_id
           ) ord_stat ON ord_stat.tenant_id = t.id
-          WHERE (t.is_featured = 1 OR t.is_featured = true) AND t.status != 'inactive'
+          WHERE (t.is_featured = 1 OR t.is_featured = true) AND t.status != 'inactive'${whereLocClause}
           ORDER BY 
             completed_orders_count DESC, 
             sales_count DESC, 
             t.priority_order DESC, 
             t.created_at DESC
         `;
-        const res = await this.env.DB.prepare(query).all<any>();
+        const stmt = this.env.DB.prepare(query);
+        const res = filterByLoc ? await stmt.bind(cleanLoc).all<any>() : await stmt.all<any>();
         if (res.results && res.results.length > 0) {
           return res.results.map((r: any, idx: number) => {
             const tenant = this.mapTenantRow(r);
@@ -6320,6 +6352,9 @@ export class Database {
             };
           });
         }
+        if (filterByLoc && res.results && res.results.length === 0) {
+          // Continua para verificar em memória caso lojas novas/seed estejam na memória
+        }
       } catch (e) {
         console.warn("D1 getFeaturedStoresRanked query warning, falling back to memory:", e);
       }
@@ -6327,7 +6362,12 @@ export class Database {
 
     // Fallback em memória a partir de globalStore
     const featuredTenants = globalStore.tenants.filter(
-      (t) => Boolean(t.isFeatured) && t.status !== "inactive"
+      (t) =>
+        Boolean(t.isFeatured) &&
+        t.status !== "inactive" &&
+        !isTenantPermanentlyDeleted(t.id) &&
+        !isTenantPermanentlyDeleted(t.slug) &&
+        this.matchesLocationFilter(t.localidade, location)
     );
 
     const ranked = featuredTenants.map((t) => {
@@ -6376,12 +6416,15 @@ export class Database {
    * Consulta no D1 contando os itens nos pedidos (order_items com SUM(quantity)).
    * O lanche com maior volume de pedidos da semana/mês ocupa AUTOMATICAMENTE a 1ª posição.
    */
-  async getTopSellingProducts(limit = 10, daysWindow = 30): Promise<TopSellingProduct[]> {
+  async getTopSellingProducts(limit = 10, daysWindow = 30, location?: string): Promise<TopSellingProduct[]> {
     await this.ensureTables();
+    const filterByLoc = !this.isAllLocationsFilter(location);
+    const cleanLoc = (location || "").trim();
 
     if (this.env?.DB) {
       try {
         const cutoffTimestamp = Date.now() - daysWindow * 86400000;
+        const whereLocClause = filterByLoc ? " AND LOWER(TRIM(t.localidade)) = LOWER(TRIM(?))" : "";
 
         // 1. Tenta buscar filtrando pela janela de tempo (semana/mês)
         let query = `
@@ -6403,12 +6446,14 @@ export class Database {
           JOIN orders o ON o.id = oi.order_id
           WHERE t.status != 'inactive'
             AND o.status != 'cancelled'
-            AND oi.created_at >= ?
+            AND oi.created_at >= ?${whereLocClause}
           GROUP BY oi.tenant_id, oi.product_id
           ORDER BY totalSold DESC, name ASC
           LIMIT ?
         `;
-        let res = await this.env.DB.prepare(query).bind(cutoffTimestamp, limit).all<any>();
+        let res = filterByLoc
+          ? await this.env.DB.prepare(query).bind(cutoffTimestamp, cleanLoc, limit).all<any>()
+          : await this.env.DB.prepare(query).bind(cutoffTimestamp, limit).all<any>();
 
         // Se retornar menos de 2 produtos na janela recente, consulta todo o histórico de order_items
         if (!res.results || res.results.length < 2) {
@@ -6430,12 +6475,14 @@ export class Database {
             LEFT JOIN products p ON (p.id = oi.product_id AND p.tenant_id = oi.tenant_id)
             JOIN orders o ON o.id = oi.order_id
             WHERE t.status != 'inactive'
-              AND o.status != 'cancelled'
+              AND o.status != 'cancelled'${whereLocClause}
             GROUP BY oi.tenant_id, oi.product_id
             ORDER BY totalSold DESC, name ASC
             LIMIT ?
           `;
-          res = await this.env.DB.prepare(query).bind(limit).all<any>();
+          res = filterByLoc
+            ? await this.env.DB.prepare(query).bind(cleanLoc, limit).all<any>()
+            : await this.env.DB.prepare(query).bind(limit).all<any>();
         }
 
         if (res.results && res.results.length > 0) {
@@ -6486,7 +6533,14 @@ export class Database {
 
     const validOrders = globalStore.orders.filter((o) => o.status !== "cancelled");
     for (const order of validOrders) {
-      const tenant = globalStore.tenants.find((t) => t.id === order.tenantId && t.status !== "inactive");
+      const tenant = globalStore.tenants.find(
+        (t) =>
+          t.id === order.tenantId &&
+          t.status !== "inactive" &&
+          !isTenantPermanentlyDeleted(t.id) &&
+          !isTenantPermanentlyDeleted(t.slug) &&
+          this.matchesLocationFilter(t.localidade, location)
+      );
       if (!tenant) continue;
 
       for (const item of order.items || []) {

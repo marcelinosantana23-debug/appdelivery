@@ -16,22 +16,51 @@ export function FeaturedStoresCarousel({
   onSelectStore,
 }: FeaturedStoresCarouselProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { featuredStoresRanked, tenants: contextTenants } = useStore();
+  const { featuredStoresRanked, tenants: contextTenants, selectedLocality } = useStore();
 
-  // Exibe apenas lojas com is_featured = true, ranqueadas no D1 por histórico de vendas (COUNT(orders.id)).
-  // A loja com MAIOR número de pedidos concluídos ocupa AUTOMATICAMENTE a 1ª posição (#1).
+  // Exibe apenas lojas com is_featured = true da localidade selecionada, ranqueadas no D1 por histórico de vendas
   const featuredStores = useMemo(() => {
+    const isAllLoc =
+      !selectedLocality ||
+      selectedLocality.trim() === "" ||
+      selectedLocality.trim().toLowerCase() === "todas as localidades" ||
+      selectedLocality.trim().toLowerCase() === "todas" ||
+      selectedLocality.trim().toLowerCase() === "todos";
+
+    const matchLoc = (loc?: string) => {
+      if (isAllLoc) return true;
+      return (loc || "Gargaú").trim().toLowerCase() === selectedLocality.trim().toLowerCase();
+    };
+
     if (propStores && propStores.length > 0) {
-      return propStores;
+      return propStores.filter((s) => matchLoc(s.localidade));
+    }
+
+    if (propTenants) {
+      return propTenants
+        .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive" && matchLoc(t.localidade))
+        .sort((a, b) => {
+          const aCompleted = a.completedOrdersCount || 0;
+          const bCompleted = b.completedOrdersCount || 0;
+          if (bCompleted !== aCompleted) return bCompleted - aCompleted;
+
+          const aSales = a.salesCount || a.orderCount || 0;
+          const bSales = b.salesCount || b.orderCount || 0;
+          if (bSales !== aSales) return bSales - aSales;
+
+          const aPri = a.priorityOrder || 0;
+          const bPri = b.priorityOrder || 0;
+          if (aPri !== bPri) return bPri - aPri;
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        });
     }
 
     if (featuredStoresRanked && featuredStoresRanked.length > 0) {
-      return featuredStoresRanked;
+      return featuredStoresRanked.filter((s) => matchLoc(s.localidade));
     }
 
-    const source = propTenants && propTenants.length > 0 ? propTenants : contextTenants;
-    return (source || [])
-      .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive")
+    return (contextTenants || [])
+      .filter((t) => Boolean(t.isFeatured) && t.status !== "inactive" && matchLoc(t.localidade))
       .sort((a, b) => {
         const aCompleted = a.completedOrdersCount || 0;
         const bCompleted = b.completedOrdersCount || 0;
@@ -46,7 +75,7 @@ export function FeaturedStoresCarousel({
         if (aPri !== bPri) return bPri - aPri;
         return (b.createdAt || 0) - (a.createdAt || 0);
       });
-  }, [propStores, featuredStoresRanked, propTenants, contextTenants]);
+  }, [propStores, featuredStoresRanked, propTenants, contextTenants, selectedLocality]);
 
   if (!featuredStores || featuredStores.length === 0) return null;
 

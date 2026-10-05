@@ -84,14 +84,20 @@ export async function verifyAuthSessionApi(
   }
 }
 
-export async function fetchTenantsApi(): Promise<{ success: boolean; tenants: (Tenant & { productCount: number; orderCount: number; revenue: number })[]; error?: string }> {
+export async function fetchTenantsApi(location?: string): Promise<{
+  success: boolean;
+  tenants: (Tenant & { productCount: number; orderCount: number; revenue: number })[];
+  error?: string;
+}> {
   try {
     const timestamp = Date.now();
-    const res = await fetch(`${BASE_URL}/tenants?_t=${timestamp}`, {
+    const locQuery =
+      location && location.trim() ? `&location=${encodeURIComponent(location.trim())}` : "";
+    const res = await fetch(`${BASE_URL}/tenants?_t=${timestamp}${locQuery}`, {
       cache: "no-store",
       headers: {
         "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
+        Pragma: "no-cache",
       },
     });
     return await res.json();
@@ -116,12 +122,30 @@ export async function fetchTenantDetailsApi(slugOrId: string): Promise<{ success
   }
 }
 
-export async function fetchLocalitiesApi(): Promise<{ success: boolean; localities: string[]; error?: string }> {
+export async function fetchLocalitiesApi(): Promise<{
+  success: boolean;
+  localities: string[];
+  locations?: string[];
+  error?: string;
+}> {
   try {
-    const res = await fetch(`${BASE_URL}/localities`);
+    const res = await fetch(`${BASE_URL}/locations?_t=${Date.now()}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
     const data = await res.json();
-    if (data.success && Array.isArray(data.localities)) {
-      return { success: true, localities: data.localities };
+    if (data.success && (Array.isArray(data.localities) || Array.isArray(data.locations))) {
+      const rawList: string[] = Array.isArray(data.localities)
+        ? data.localities
+        : (data.locations || []).filter((l: string) => l !== "Todas as Localidades");
+      return {
+        success: true,
+        localities: rawList,
+        locations: data.locations || ["Todas as Localidades", ...rawList],
+      };
     }
     return { success: false, localities: [], error: data.error };
   } catch (err: any) {
@@ -699,13 +723,15 @@ export async function fetchTenantFinancialReportApi(
   }
 }
 
-export async function fetchEstablishmentCategoriesApi(): Promise<{
+export async function fetchEstablishmentCategoriesApi(location?: string): Promise<{
   success: boolean;
   categories?: EstablishmentCategory[];
   error?: string;
 }> {
   try {
-    const res = await fetch(`${BASE_URL}/establishment-categories`);
+    const locQuery =
+      location && location.trim() ? `?location=${encodeURIComponent(location.trim())}` : "";
+    const res = await fetch(`${BASE_URL}/establishment-categories${locQuery}`);
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -823,14 +849,16 @@ export async function updateTenantFeaturedApi(
   }
 }
 
-export async function fetchFeaturedStoresRankedApi(): Promise<{
+export async function fetchFeaturedStoresRankedApi(location?: string): Promise<{
   success: boolean;
   stores?: FeaturedStoreRanked[];
   error?: string;
 }> {
   try {
     const timestamp = Date.now();
-    const res = await fetch(`${BASE_URL}/featured-stores?_t=${timestamp}`, {
+    const locQuery =
+      location && location.trim() ? `&location=${encodeURIComponent(location.trim())}` : "";
+    const res = await fetch(`${BASE_URL}/featured-stores?_t=${timestamp}${locQuery}`, {
       cache: "no-store",
       headers: {
         "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -845,7 +873,8 @@ export async function fetchFeaturedStoresRankedApi(): Promise<{
 
 export async function fetchTopSellingProductsApi(
   limit: number = 10,
-  days: number = 30
+  days: number = 30,
+  location?: string
 ): Promise<{
   success: boolean;
   products?: TopSellingProduct[];
@@ -853,8 +882,10 @@ export async function fetchTopSellingProductsApi(
 }> {
   try {
     const timestamp = Date.now();
+    const locQuery =
+      location && location.trim() ? `&location=${encodeURIComponent(location.trim())}` : "";
     const res = await fetch(
-      `${BASE_URL}/top-selling-products?limit=${limit}&days=${days}&_t=${timestamp}`,
+      `${BASE_URL}/top-selling-products?limit=${limit}&days=${days}&_t=${timestamp}${locQuery}`,
       {
         cache: "no-store",
         headers: {
