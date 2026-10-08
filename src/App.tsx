@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { StoreProvider, useStore } from "@/context/StoreContext";
+import { StoreProvider, useStore, applyThemeColors, applyPortalDefaultTheme } from "@/context/StoreContext";
 import { Header } from "@/components/customer/Header";
 import { CategoryNav } from "@/components/customer/CategoryNav";
 import { MenuList } from "@/components/customer/MenuList";
@@ -38,7 +38,19 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
     isLoadingStore,
     storeNotFound,
     cartCount,
+    platformSettings,
   } = useStore();
+
+  // Gerenciamento de tema da Loja (/loja/[slug]) com cleanup determinístico ao desmontar a tela
+  useEffect(() => {
+    if (config) {
+      applyThemeColors(config);
+    }
+    return () => {
+      // Restaura as variáveis globais para as cores originais do TopFood ao sair/desmontar a loja
+      applyPortalDefaultTheme(platformSettings?.primaryColor);
+    };
+  }, [config, platformSettings?.primaryColor]);
   const getInitialCustomerState = (): {
     view: "menu" | "checkout" | "tracking";
     cartOpen: boolean;
@@ -451,6 +463,7 @@ function AppContent() {
     isSuperAdmin,
     isAdminAuthed,
     selectTenant,
+    resetToPortalTheme,
     currentTenant,
     config,
     tenants,
@@ -511,6 +524,7 @@ function AppContent() {
             window.history.pushState({ view: "admin" }, "", "/painel");
           } else if (targetView === "portal") {
             window.history.pushState({ view: "portal" }, "", "/");
+            resetToPortalTheme();
           } else {
             const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
             window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
@@ -521,7 +535,7 @@ function AppContent() {
       }
       setView(targetView);
     },
-    [currentTenant?.slug, config.slug]
+    [currentTenant?.slug, config.slug, resetToPortalTheme]
   );
 
   // Transição direta e unificada do Super Admin para gerenciamento da loja (1 único clique)
@@ -574,6 +588,7 @@ function AppContent() {
             selectTenant(qSlug);
             setView("menu");
           } else {
+            resetToPortalTheme();
             setView("portal");
           }
         } else {
@@ -601,7 +616,7 @@ function AppContent() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [selectTenant]);
+  }, [selectTenant, resetToPortalTheme]);
 
   const renderMainView = () => {
     // 0. TOP FOOD PORTAL VIEW (Marketplace Homepage)

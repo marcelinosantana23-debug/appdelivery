@@ -39,9 +39,20 @@ export function TopFoodPortal({
     selectedLocality,
     isLoadingTenants,
     isLoadingPortal,
+    resetToPortalTheme,
+    platformSettings,
   } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // 1. RESET DE TEMA NO PORTAL PRINCIPAL (HOME):
+  // Ao montar a página do Portal TopFood, restaura obrigatoriamente as cores primárias padrão do aplicativo (vermelho/tema original do TopFood)
+  useEffect(() => {
+    resetToPortalTheme();
+    if (typeof document !== "undefined") {
+      document.title = platformSettings?.heroTitle || "Top Food - O Portal do Delivery";
+    }
+  }, [resetToPortalTheme, platformSettings?.heroTitle]);
 
   const isAllLocations = useMemo(() => {
     if (!selectedLocality) return true;

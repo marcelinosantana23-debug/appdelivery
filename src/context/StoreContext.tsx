@@ -96,6 +96,7 @@ interface StoreContextValue {
   isStoreActive: boolean;
   currentSlug: string;
   selectTenant: (slugOrId: string, preloadedTenant?: Tenant) => Promise<void>;
+  resetToPortalTheme: () => void;
   refreshTenants: () => Promise<void>;
   refreshCurrentStore: () => Promise<void>;
   isLoadingStore: boolean;
@@ -251,8 +252,40 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-function applyThemeColors(config: StoreConfig) {
+export const PORTAL_DEFAULT_THEME = {
+  primaryColor: "#E63946",
+  primaryDark: "#C1121F",
+  primaryLight: "#F77F00",
+  accentColor: "#FCBF49",
+  secondaryColor: "#1E293B",
+};
+
+export function applyPortalDefaultTheme(customPortalPrimary?: string) {
   if (typeof document === "undefined") return;
+  const primary = customPortalPrimary?.trim() || PORTAL_DEFAULT_THEME.primaryColor;
+  document.documentElement.style.setProperty("--color-primary", primary);
+  document.documentElement.style.setProperty("--color-primary-dark", PORTAL_DEFAULT_THEME.primaryDark);
+  document.documentElement.style.setProperty("--color-primary-light", PORTAL_DEFAULT_THEME.primaryLight);
+  document.documentElement.style.setProperty("--color-accent", PORTAL_DEFAULT_THEME.accentColor);
+  document.documentElement.style.setProperty("--color-secondary", PORTAL_DEFAULT_THEME.secondaryColor);
+  document.documentElement.style.setProperty("--portal-primary", primary);
+  document.documentElement.classList.remove("dark");
+}
+
+function isPortalRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname.replace(/\/+$/, "").toLowerCase();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("loja") || params.get("store") || params.get("tenant")) return false;
+  return path === "" || path === "/" || path === "/topfood" || path === "/portal";
+}
+
+export function applyThemeColors(config: StoreConfig) {
+  if (typeof document === "undefined") return;
+  if (isPortalRoute()) {
+    applyPortalDefaultTheme();
+    return;
+  }
   document.documentElement.style.setProperty("--color-primary", config.primaryColor || "#E63946");
   document.documentElement.style.setProperty("--color-primary-dark", config.primaryDark || "#C1121F");
   document.documentElement.style.setProperty("--color-primary-light", config.primaryLight || "#F77F00");
@@ -470,8 +503,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const initialSlug = getInitialUrlSlug();
   const initialStoreCache = initialSlug ? loadCachedStoreData(initialSlug) : null;
   
-  // Hydrate currentTenant synchronously from `cache_store_[storeSlug]` or sessionStorage / localStorage
+  // Hydrate currentTenant synchronously from `cache_store_[storeSlug]` or sessionStorage / localStorage ONLY when on a store/admin route
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
+    if (!initialSlug) {
+      return null;
+    }
     if (initialStoreCache?.tenant) {
       return initialStoreCache.tenant;
     }
@@ -485,29 +521,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           parsed &&
           (parsed.slug === initialSlug ||
             parsed.id === initialSlug ||
-            !initialSlug ||
             (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
             (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
         ) {
           return parsed;
         }
       }
-      if (initialSlug) {
-        const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
-          (t) =>
-            t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
-            t.id?.toLowerCase() === initialSlug.toLowerCase()
-        );
-        if (fromList) return fromList;
-      }
+      const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
+        (t) =>
+          t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
+          t.id?.toLowerCase() === initialSlug.toLowerCase()
+      );
+      if (fromList) return fromList;
       return null;
     } catch {
       return null;
     }
   });
 
-  // Hydrate store configuration synchronously from `cache_store_[storeSlug]` (0ms load)
+  // Hydrate store configuration synchronously from `cache_store_[storeSlug]` (0ms load) ONLY when on a store/admin route
   const [config, setConfig] = useState<StoreConfig>(() => {
+    if (!initialSlug) {
+      return defaultStoreConfig;
+    }
     if (initialStoreCache?.config) {
       return initialStoreCache.config;
     }
@@ -525,21 +561,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           typeof parsed === "object" &&
           (parsed.slug === initialSlug ||
             parsed.id === initialSlug ||
-            !initialSlug ||
             (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
             (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
         ) {
           return tenantToStoreConfig(parsed);
         }
       }
-      if (initialSlug) {
-        const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
-          (t) =>
-            t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
-            t.id?.toLowerCase() === initialSlug.toLowerCase()
-        );
-        if (fromList) return tenantToStoreConfig(fromList);
-      }
+      const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
+        (t) =>
+          t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
+          t.id?.toLowerCase() === initialSlug.toLowerCase()
+      );
+      if (fromList) return tenantToStoreConfig(fromList);
     } catch {
       // ignore
     }
@@ -1266,13 +1299,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Sincroniza cor primária dinâmica da vitrine quando nenhum estabelecimento com tema próprio estiver selecionado
   useEffect(() => {
-    if (platformSettings.primaryColor) {
-      document.documentElement.style.setProperty("--portal-primary", platformSettings.primaryColor);
-      if (!currentTenant) {
-        document.documentElement.style.setProperty("--color-primary", platformSettings.primaryColor);
-      }
+    const portalPrimary = platformSettings.primaryColor?.trim() || PORTAL_DEFAULT_THEME.primaryColor;
+    document.documentElement.style.setProperty("--portal-primary", portalPrimary);
+    if (!currentSlug || !currentTenant || isPortalRoute()) {
+      applyPortalDefaultTheme(portalPrimary);
     }
-  }, [platformSettings.primaryColor, currentTenant]);
+  }, [platformSettings.primaryColor, currentTenant, currentSlug]);
+
+  const resetToPortalTheme = useCallback(() => {
+    const portalPrimary = platformSettings?.primaryColor?.trim() || PORTAL_DEFAULT_THEME.primaryColor;
+    applyPortalDefaultTheme(portalPrimary);
+    setCurrentSlug("");
+    setCurrentTenant(null);
+    setConfig((prev) =>
+      prev.primaryColor === portalPrimary && prev.themeMode === "light"
+        ? prev
+        : {
+            ...defaultStoreConfig,
+            primaryColor: portalPrimary,
+            primaryDark: PORTAL_DEFAULT_THEME.primaryDark,
+            primaryLight: PORTAL_DEFAULT_THEME.primaryLight,
+            accentColor: PORTAL_DEFAULT_THEME.accentColor,
+            secondaryColor: PORTAL_DEFAULT_THEME.secondaryColor,
+            themeMode: "light",
+          }
+    );
+  }, [platformSettings?.primaryColor]);
 
   // Handle browser back/forward navigation
   useEffect(() => {
@@ -1283,11 +1335,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         loadStoreBySlug(slug);
       } else {
         setIsLoadingStore(false);
+        resetToPortalTheme();
       }
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [loadStoreBySlug]);
+  }, [loadStoreBySlug, resetToPortalTheme]);
 
   // Sincroniza continuamente o carrinho do cliente com o localStorage e sessionStorage
   useEffect(() => {
@@ -3147,6 +3200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         isStoreActive,
         currentSlug,
         selectTenant,
+        resetToPortalTheme,
         refreshTenants,
         refreshCurrentStore,
         isLoadingStore,
