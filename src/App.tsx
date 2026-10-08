@@ -35,6 +35,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
     isStoreOpen,
     isStoreActive,
     config,
+    currentTenant,
     isLoadingStore,
     storeNotFound,
     cartCount,
@@ -296,7 +297,14 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
     }
   };
 
-  if (isLoadingStore) {
+  // Stale-While-Revalidate (0ms):
+  // Exibe tela de carregamento apenas no primeiro acesso quando não há cache local da loja.
+  // Se houver dados em cache (currentTenant, config.name ou products), renderiza a loja instantaneamente em 0ms enquanto revalida em segundo plano.
+  const hasCachedStoreReady = Boolean(
+    products.length > 0 || (currentTenant && currentTenant.slug)
+  );
+
+  if (isLoadingStore && !hasCachedStoreReady) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
         <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-sm border border-gray-100 max-w-sm w-full">

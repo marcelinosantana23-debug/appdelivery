@@ -3,6 +3,10 @@ import type { CartItem, Product, ProductOption, Category, EstablishmentCategory,
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
 import {
+  loadCachedHomeData,
+  saveCachedHomeData,
+  loadCachedStoreData,
+  saveCachedStoreData,
   loadCachedTenants,
   saveCachedTenants,
   loadCachedFeaturedStores,
@@ -13,6 +17,7 @@ import {
   saveCachedCategories,
   haveTenantsChanged,
   haveStoresRankedChanged,
+  haveProductsChanged,
   preloadStoreImages,
   removeCachedTenant,
 } from "@/utils/storeCache";
@@ -460,11 +465,16 @@ function getInitialUrlSlug(): string {
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [tenants, setTenants] = useState<Tenant[]>(loadCachedTenants);
+  const initialHomeCache = loadCachedHomeData();
+  const [tenants, setTenants] = useState<Tenant[]>(() => initialHomeCache?.tenants?.length ? initialHomeCache.tenants : loadCachedTenants());
   const initialSlug = getInitialUrlSlug();
+  const initialStoreCache = initialSlug ? loadCachedStoreData(initialSlug) : null;
   
-  // Hydrate currentTenant from sessionStorage / localStorage session
+  // Hydrate currentTenant synchronously from `cache_store_[storeSlug]` or sessionStorage / localStorage
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
+    if (initialStoreCache?.tenant) {
+      return initialStoreCache.tenant;
+    }
     try {
       const saved =
         sessionStorage.getItem("topfood_tenant_session") ||
@@ -482,14 +492,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return parsed;
         }
       }
+      if (initialSlug) {
+        const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
+          (t) =>
+            t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
+            t.id?.toLowerCase() === initialSlug.toLowerCase()
+        );
+        if (fromList) return fromList;
+      }
       return null;
     } catch {
       return null;
     }
   });
 
-  // Hydrate store configuration safely
+  // Hydrate store configuration synchronously from `cache_store_[storeSlug]` (0ms load)
   const [config, setConfig] = useState<StoreConfig>(() => {
+    if (initialStoreCache?.config) {
+      return initialStoreCache.config;
+    }
+    if (initialStoreCache?.tenant) {
+      return tenantToStoreConfig(initialStoreCache.tenant);
+    }
     try {
       const savedTenant =
         sessionStorage.getItem("topfood_tenant_session") ||
@@ -508,15 +532,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return tenantToStoreConfig(parsed);
         }
       }
+      if (initialSlug) {
+        const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
+          (t) =>
+            t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
+            t.id?.toLowerCase() === initialSlug.toLowerCase()
+        );
+        if (fromList) return tenantToStoreConfig(fromList);
+      }
     } catch {
       // ignore
     }
     return defaultStoreConfig;
   });
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [storeCategories, setStoreCategories] = useState<Category[]>(defaultMockCategories);
-  const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
+  // Hydrate products, categories and addonGroups synchronously from `cache_store_[storeSlug]`
+  const [products, setProducts] = useState<Product[]>(() => initialStoreCache?.products || []);
+  const [storeCategories, setStoreCategories] = useState<Category[]>(
+    () => (initialStoreCache?.categories && initialStoreCache.categories.length > 0 ? initialStoreCache.categories : defaultMockCategories)
+  );
+  const [addonGroups, setAddonGroups] = useState<AddonGroup[]>(() => initialStoreCache?.addonGroups || []);
   const [orders, setOrders] = useState<Order[]>([]);
   // Inicializa o carrinho com os itens salvos para esta loja/sessão
   const [cart, setCart] = useState<CartItem[]>(() => loadSavedCart(initialSlug));
@@ -592,7 +627,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [currentSlug, setCurrentSlug] = useState<string>(initialSlug);
-  const [isLoadingStore, setIsLoadingStore] = useState<boolean>(true);
+  // Se já existe cache local para a loja (ou não há slug inicial), isLoadingStore inicia como false (0ms de carregamento)
+  const [isLoadingStore, setIsLoadingStore] = useState<boolean>(() => {
+    if (!initialSlug) return false;
+    if (initialStoreCache?.tenant) return false;
+    const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
+      (t) =>
+        t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
+        t.id?.toLowerCase() === initialSlug.toLowerCase()
+    );
+    return !fromList;
+  });
   const [storeNotFound, setStoreNotFound] = useState<boolean>(false);
 
   // Sistema de notificações toast para feedback imediato e erros de rede
@@ -615,16 +660,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applyThemeColors(config);
   }, [config]);
 
-  // Load tenants list and ranked carousels with Stale-While-Revalidate local cache
-  const [featuredStoresRanked, setFeaturedStoresRanked] = useState<FeaturedStoreRanked[]>(loadCachedFeaturedStores);
-  const [topSellingProducts, setTopSellingProducts] = useState<TopSellingProduct[]>(loadCachedTopProducts);
-  const [isLoadingTenants, setIsLoadingTenants] = useState<boolean>(() => loadCachedTenants().length === 0);
-  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(() => loadCachedCategories().length === 0);
+  // Load tenants list and ranked carousels with Stale-While-Revalidate local cache (`cache_home_data`)
+  const [featuredStoresRanked, setFeaturedStoresRanked] = useState<FeaturedStoreRanked[]>(
+    () => (initialHomeCache?.featuredStoresRanked?.length ? initialHomeCache.featuredStoresRanked : loadCachedFeaturedStores())
+  );
+  const [topSellingProducts, setTopSellingProducts] = useState<TopSellingProduct[]>(
+    () => (initialHomeCache?.topSellingProducts?.length ? initialHomeCache.topSellingProducts : loadCachedTopProducts())
+  );
+  const [isLoadingTenants, setIsLoadingTenants] = useState<boolean>(
+    () => (initialHomeCache?.tenants?.length || loadCachedTenants().length) === 0
+  );
+  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(
+    () => (initialHomeCache?.establishmentCategories?.length || loadCachedCategories().length) === 0
+  );
   const [isRevalidatingTenants, setIsRevalidatingTenants] = useState<boolean>(false);
   const isLoadingPortal = isLoadingTenants || isLoadingCategories;
 
   // Localidades dinâmicas registradas no Cloudflare D1
   const [localities, setLocalities] = useState<string[]>(() => {
+    if (initialHomeCache?.localities && initialHomeCache.localities.length > 0) {
+      return initialHomeCache.localities;
+    }
     if (typeof window !== "undefined") {
       try {
         const cached = localStorage.getItem("topfood_cached_localities");
@@ -871,6 +927,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (typeof window !== "undefined") {
           try {
             localStorage.setItem("topfood_cached_localities", JSON.stringify(res.localities));
+            saveCachedHomeData({ localities: res.localities });
           } catch {
             // ignore
           }
@@ -914,25 +971,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return [];
   }, []);
 
-  // Platform Settings (Vitrine e Marketing)
-  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
-    logoUrl: "",
-    bannerUrl: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1400&q=80",
-    heroTitle: "Top Food - O Portal do Delivery",
-    heroSubtitle: "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
-    primaryColor: "#E63946",
-    partnerWhatsapp: "5511999999999",
+  // Platform Settings (Vitrine e Marketing) com hidratação imediata do cache_home_data
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => ({
+    logoUrl: initialHomeCache?.platformSettings?.logoUrl || "",
+    bannerUrl:
+      initialHomeCache?.platformSettings?.bannerUrl ||
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1400&q=80",
+    heroTitle: initialHomeCache?.platformSettings?.heroTitle || "Top Food - O Portal do Delivery",
+    heroSubtitle:
+      initialHomeCache?.platformSettings?.heroSubtitle ||
+      "O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes.",
+    primaryColor: initialHomeCache?.platformSettings?.primaryColor || "#E63946",
+    partnerWhatsapp: initialHomeCache?.platformSettings?.partnerWhatsapp || "5511999999999",
     geminiApiKey: typeof window !== "undefined" ? localStorage.getItem("topfood_gemini_api_key") || "" : "",
-  });
+  }));
 
   const refreshPlatformSettings = useCallback(async () => {
     try {
       const res = await getPlatformSettingsApi();
       if (res.success && res.settings) {
-        setPlatformSettings((prev) => ({
-          ...prev,
-          ...res.settings,
-        }));
+        setPlatformSettings((prev) => {
+          const next = {
+            ...prev,
+            ...res.settings,
+          };
+          saveCachedHomeData({ platformSettings: next });
+          return next;
+        });
         if (typeof window !== "undefined" && res.settings.geminiApiKey) {
           try {
             localStorage.setItem("topfood_gemini_api_key", res.settings.geminiApiKey);
@@ -965,10 +1030,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : undefined;
         const res = await updatePlatformSettingsApi(partial, extraAuth);
         if (res.success && res.settings) {
-          setPlatformSettings((prev) => ({
-            ...prev,
-            ...res.settings,
-          }));
+          setPlatformSettings((prev) => {
+            const next = {
+              ...prev,
+              ...res.settings,
+            };
+            saveCachedHomeData({ platformSettings: next });
+            return next;
+          });
           return { success: true, message: res.message || "Configurações salvas com sucesso!", settings: res.settings };
         }
         return { success: false, error: res.error || "Erro ao salvar configurações da vitrine." };
@@ -999,7 +1068,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [tenants, refreshTenants]
   );
 
-  // Load current store data with strict isolation
+  // Load current store data with Stale-While-Revalidate (`cache_store_[storeSlug]`) and strict tenant isolation
   const loadStoreBySlug = useCallback(
     async (slug: string) => {
       if (!slug || slug.trim() === "") {
@@ -1008,69 +1077,137 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setIsLoadingStore(true);
+      const normalizedSlug = slug.trim().toLowerCase();
       setStoreNotFound(false);
-
-      // Total isolation: clear products and orders immediately so no previous store data remains
-      setProducts([]);
       // Restaura itens salvos no carrinho para este estabelecimento sem esvaziá-lo na recarga
-      setCart(loadSavedCart(slug));
-      setOrders([]);
+      setCart(loadSavedCart(normalizedSlug));
 
-      const tenantRes = await fetchTenantDetailsApi(slug);
-      if (tenantRes.success && tenantRes.tenant) {
-        const t = tenantRes.tenant;
-        setCurrentTenant(t);
-        try {
-          localStorage.setItem("delivery_tenant_session", JSON.stringify(t));
-        } catch {
-          // ignore
+      // 1. STALE (0ms): Verifica primeiro o cache local (`cache_store_[storeSlug]`)
+      const cachedStore = loadCachedStoreData(normalizedSlug);
+      const fallbackTenantFromList = !cachedStore
+        ? loadCachedTenants().find(
+            (t) =>
+              t.slug?.toLowerCase() === normalizedSlug ||
+              t.id?.toLowerCase() === normalizedSlug
+          )
+        : null;
+
+      const hasInstantCache = Boolean(cachedStore?.tenant || fallbackTenantFromList);
+
+      if (cachedStore?.tenant) {
+        // Hidrata imediatamente (0ms) todos os dados da loja em cache sem qualquer spinner bloqueante
+        setCurrentTenant(cachedStore.tenant);
+        const cachedCfg = cachedStore.config || tenantToStoreConfig(cachedStore.tenant);
+        setConfig(cachedCfg);
+        applyThemeColors(cachedCfg);
+        setProducts(cachedStore.products || []);
+        if (cachedStore.categories && cachedStore.categories.length > 0) {
+          setStoreCategories(cachedStore.categories);
         }
-        const storeCfg = tenantToStoreConfig(t);
+        if (Array.isArray(cachedStore.addonGroups)) {
+          setAddonGroups(cachedStore.addonGroups);
+        }
+        setIsLoadingStore(false);
+      } else if (fallbackTenantFromList) {
+        // Temos os metadados da loja no cache da Home: exibe cabeçalho da loja imediatamente (0ms)
+        setCurrentTenant(fallbackTenantFromList);
+        const storeCfg = tenantToStoreConfig(fallbackTenantFromList);
         setConfig(storeCfg);
         applyThemeColors(storeCfg);
-
-        // Fetch ONLY this tenant's products, orders, categories, and addon groups from database
-        const [pRes, oRes, cRes, agRes] = await Promise.all([
-          fetchTenantProductsApi(t.id),
-          fetchTenantOrdersApi(t.id),
-          fetchTenantCategoriesApi(t.id),
-          fetchTenantAddonGroupsApi(t.id),
-        ]);
-
-        if (cRes.success && cRes.categories && cRes.categories.length > 0) {
-          setStoreCategories(cRes.categories);
-        }
-
-        if (agRes.success && Array.isArray(agRes.addonGroups)) {
-          setAddonGroups(agRes.addonGroups);
-        }
-
-        let loadedProducts = (pRes.success && pRes.products) ? pRes.products : [];
-        if (loadedProducts.length === 0 && t.slug && t.slug !== t.id) {
-          const fallbackRes = await fetchTenantProductsApi(t.slug);
-          if (fallbackRes.success && fallbackRes.products && fallbackRes.products.length > 0) {
-            loadedProducts = fallbackRes.products;
-          }
-        }
-
-        if (loadedProducts.length > 0) {
-          setProducts(loadedProducts);
-        } else {
-          setProducts([]);
-        }
-
-        if (oRes.success && oRes.orders) {
-          setOrders(oRes.orders);
-        } else {
-          setOrders([]);
-        }
-
+        setProducts([]);
         setIsLoadingStore(false);
       } else {
-        setStoreNotFound(true);
-        setCurrentTenant(null);
-        setIsLoadingStore(false);
+        // Primeiro acesso absoluto sem cache prévio
+        setIsLoadingStore(true);
+        setProducts([]);
+        setOrders([]);
+      }
+
+      // 2. REVALIDATE (Segundo Plano): Busca silenciosamente os dados mais recentes na API/Cloudflare D1
+      try {
+        const tenantRes = await fetchTenantDetailsApi(normalizedSlug);
+        if (tenantRes.success && tenantRes.tenant) {
+          const t = tenantRes.tenant;
+          setCurrentTenant(t);
+          try {
+            localStorage.setItem("delivery_tenant_session", JSON.stringify(t));
+          } catch {
+            // ignore
+          }
+          const storeCfg = tenantToStoreConfig(t);
+          setConfig(storeCfg);
+          applyThemeColors(storeCfg);
+
+          // Desbloqueia a tela assim que os metadados da loja chegarem (mesmo no 1º acesso)
+          setIsLoadingStore(false);
+
+          // Fetch ONLY this tenant's products, orders, categories, and addon groups from database
+          const [pRes, oRes, cRes, agRes] = await Promise.all([
+            fetchTenantProductsApi(t.id),
+            fetchTenantOrdersApi(t.id),
+            fetchTenantCategoriesApi(t.id),
+            fetchTenantAddonGroupsApi(t.id),
+          ]);
+
+          const freshCategories =
+            cRes.success && cRes.categories && cRes.categories.length > 0
+              ? cRes.categories
+              : cachedStore?.categories || defaultMockCategories;
+
+          if (cRes.success && cRes.categories && cRes.categories.length > 0) {
+            setStoreCategories(cRes.categories);
+          }
+
+          const freshAddonGroups =
+            agRes.success && Array.isArray(agRes.addonGroups)
+              ? agRes.addonGroups
+              : cachedStore?.addonGroups || [];
+
+          if (agRes.success && Array.isArray(agRes.addonGroups)) {
+            setAddonGroups(agRes.addonGroups);
+          }
+
+          let loadedProducts = pRes.success && pRes.products ? pRes.products : [];
+          if (loadedProducts.length === 0 && t.slug && t.slug !== t.id) {
+            const fallbackRes = await fetchTenantProductsApi(t.slug);
+            if (fallbackRes.success && fallbackRes.products && fallbackRes.products.length > 0) {
+              loadedProducts = fallbackRes.products;
+            }
+          }
+
+          setProducts((prev) => {
+            if (haveProductsChanged(prev, loadedProducts)) {
+              return loadedProducts;
+            }
+            return prev;
+          });
+
+          if (oRes.success && oRes.orders) {
+            setOrders(oRes.orders);
+          } else {
+            setOrders([]);
+          }
+
+          // 3. Atualiza silenciosamente o LocalStorage (`cache_store_[storeSlug]`)
+          saveCachedStoreData(normalizedSlug, {
+            tenant: t,
+            config: storeCfg,
+            products: loadedProducts,
+            categories: freshCategories,
+            addonGroups: freshAddonGroups,
+          });
+
+          setIsLoadingStore(false);
+        } else if (!hasInstantCache) {
+          setStoreNotFound(true);
+          setCurrentTenant(null);
+          setIsLoadingStore(false);
+        }
+      } catch (err) {
+        console.warn(`[StoreContext] Background revalidation failed for store "${normalizedSlug}", keeping cache:`, err);
+        if (!hasInstantCache) {
+          setIsLoadingStore(false);
+        }
       }
     },
     []
@@ -1178,13 +1315,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setCart(loadSavedCart(slugOrId));
 
-      // Sincronização imediata e síncrona do contexto da loja sem depender de ciclos assíncronos
-      const targetTenant = preloadedTenant || tenants.find((t) => t.slug === slugOrId || t.id === slugOrId);
+      // 1. Verifica primeiro se existe `cache_store_[storeSlug]` para hidratação imediata (0ms)
+      const cachedStore = loadCachedStoreData(slugOrId);
+      const targetTenant =
+        preloadedTenant ||
+        cachedStore?.tenant ||
+        tenants.find((t) => t.slug === slugOrId || t.id === slugOrId);
+
       if (targetTenant) {
         setCurrentTenant(targetTenant);
-        const storeCfg = tenantToStoreConfig(targetTenant);
+        const storeCfg = cachedStore?.config || tenantToStoreConfig(targetTenant);
         setConfig(storeCfg);
         applyThemeColors(storeCfg);
+        if (cachedStore?.products) {
+          setProducts(cachedStore.products);
+        } else {
+          setProducts([]);
+        }
+        if (cachedStore?.categories && cachedStore.categories.length > 0) {
+          setStoreCategories(cachedStore.categories);
+        }
+        if (cachedStore?.addonGroups) {
+          setAddonGroups(cachedStore.addonGroups);
+        }
+        setIsLoadingStore(false);
+        setStoreNotFound(false);
         try {
           localStorage.setItem("delivery_tenant_session", JSON.stringify(targetTenant));
         } catch {
@@ -2782,7 +2937,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ==========================================
   // STORIES DA LOJA (ESTADO GLOBAL E MODAL)
   // ==========================================
-  const [activeStoriesMap, setActiveStoriesMap] = useState<Record<string, StoreStory[]>>({});
+  const [activeStoriesMap, setActiveStoriesMap] = useState<Record<string, StoreStory[]>>(
+    () => initialHomeCache?.activeStoriesMap || {}
+  );
   const [storiesModal, setStoriesModal] = useState<{
     isOpen: boolean;
     tenant: Partial<Tenant> | null;
@@ -2798,6 +2955,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const res = await fetchAllActiveStoriesApi();
       if (res.success && res.storiesByTenant) {
         setActiveStoriesMap(res.storiesByTenant);
+        saveCachedHomeData({ activeStoriesMap: res.storiesByTenant });
       }
     } catch (err) {
       console.warn("Erro ao buscar stories ativos:", err);
@@ -2807,6 +2965,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshActiveStories();
   }, [refreshActiveStories]);
+
+  // Mantém o cache da loja ativa (cache_store_[storeSlug]) sincronizado em segundo plano sempre que produtos, categorias, adicionais ou config mudarem
+  useEffect(() => {
+    const activeSlug = currentTenant?.slug || config?.slug || currentSlug;
+    if (!activeSlug || !currentTenant) return;
+    if (products.length > 0 || storeCategories.length > 0) {
+      saveCachedStoreData(activeSlug, {
+        tenant: currentTenant,
+        config,
+        products,
+        categories: storeCategories,
+        addonGroups,
+      });
+    }
+  }, [currentTenant, config, products, storeCategories, addonGroups, currentSlug]);
 
   const getStoreActiveStories = useCallback(
     (tenantIdOrSlug: string): StoreStory[] => {
