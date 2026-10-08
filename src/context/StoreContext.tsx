@@ -237,6 +237,11 @@ interface StoreContextValue {
     tenant: Partial<Tenant> | null;
     stories: StoreStory[];
   };
+
+  // Favorite Stores (persisted in localStorage)
+  favoriteStoreIds: string[];
+  toggleFavoriteStore: (tenantOrKey: Partial<Tenant> | string) => void;
+  isFavoriteStore: (tenantOrKey: Partial<Tenant> | string) => boolean;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -2843,6 +2848,82 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setStoriesModal((prev) => ({ ...prev, isOpen: false }));
   }, []);
 
+  // Favorite Stores persisted in localStorage
+  const FAVORITE_STORES_STORAGE_KEY = "topfood_favorite_stores";
+  const [favoriteStoreIds, setFavoriteStoreIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(FAVORITE_STORES_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(FAVORITE_STORES_STORAGE_KEY, JSON.stringify(favoriteStoreIds));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [favoriteStoreIds]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === FAVORITE_STORES_STORAGE_KEY) {
+        try {
+          const parsed = e.newValue ? JSON.parse(e.newValue) : [];
+          if (Array.isArray(parsed)) {
+            setFavoriteStoreIds(parsed.filter((item): item is string => typeof item === "string"));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  const isFavoriteStore = useCallback(
+    (tenantOrKey: Partial<Tenant> | string): boolean => {
+      if (!tenantOrKey) return false;
+      if (typeof tenantOrKey === "string") {
+        const key = tenantOrKey.trim();
+        return favoriteStoreIds.includes(key);
+      }
+      const id = tenantOrKey.id?.trim();
+      const slug = tenantOrKey.slug?.trim();
+      return Boolean((id && favoriteStoreIds.includes(id)) || (slug && favoriteStoreIds.includes(slug)));
+    },
+    [favoriteStoreIds]
+  );
+
+  const toggleFavoriteStore = useCallback(
+    (tenantOrKey: Partial<Tenant> | string) => {
+      if (!tenantOrKey) return;
+      const id = typeof tenantOrKey === "string" ? tenantOrKey.trim() : tenantOrKey.id?.trim();
+      const slug = typeof tenantOrKey === "string" ? tenantOrKey.trim() : tenantOrKey.slug?.trim();
+      const primaryKey = slug || id;
+      if (!primaryKey) return;
+
+      setFavoriteStoreIds((prev) => {
+        const exists = prev.some((k) => (id && k === id) || (slug && k === slug) || k === primaryKey);
+        if (exists) {
+          return prev.filter((k) => k !== id && k !== slug && k !== primaryKey);
+        }
+        return [primaryKey, ...prev];
+      });
+    },
+    []
+  );
+
   return (
     <StoreContext.Provider
       value={{
@@ -2936,6 +3017,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         openStoreStoriesModal,
         closeStoreStoriesModal,
         storiesModal,
+        favoriteStoreIds,
+        toggleFavoriteStore,
+        isFavoriteStore,
       }}
     >
       {storiesModal.isOpen && (

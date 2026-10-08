@@ -1,4 +1,4 @@
-import { Star, Clock, Bike, ArrowRight, Sparkles, MapPin } from "lucide-react";
+import { Star, Clock, Bike, ArrowRight, Sparkles, MapPin, Heart } from "lucide-react";
 import type { Tenant } from "@/types";
 import { useStore } from "@/context/StoreContext";
 import { StoreLogo } from "@/components/common/StoreLogo";
@@ -18,7 +18,14 @@ export function StoreCard({
   variant = "grid",
   rank,
 }: StoreCardProps) {
-  const { establishmentCategories, getStoreActiveStories, openStoreStoriesModal } = useStore();
+  const {
+    establishmentCategories,
+    getStoreActiveStories,
+    openStoreStoriesModal,
+    isFavoriteStore,
+    toggleFavoriteStore,
+  } = useStore();
+  const isFavorite = isFavoriteStore(tenant);
   const allCategories = establishmentCategories && establishmentCategories.length > 0
     ? establishmentCategories
     : DEFAULT_ESTABLISHMENT_CATEGORIES;
@@ -97,8 +104,8 @@ export function StoreCard({
             )}
           </div>
 
-          {/* Status Badge */}
-          <div className="absolute top-1.5 right-2">
+          {/* Status Badge + Botão Favoritar */}
+          <div className="absolute top-1.5 right-2 flex items-center gap-1 z-10">
             <span
               className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold backdrop-blur-md ${
                 isOpen ? "bg-emerald-500/90 text-white" : "bg-gray-800/85 text-gray-200"
@@ -107,6 +114,22 @@ export function StoreCard({
               <span className={`h-1.5 w-1.5 rounded-full ${isOpen ? "bg-white animate-pulse" : "bg-gray-400"}`} />
               {isOpen ? "Aberto" : "Fechado"}
             </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavoriteStore(tenant);
+              }}
+              aria-label={isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+              title={isFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
+              className={`flex h-6 w-6 items-center justify-center rounded-full backdrop-blur-md transition active:scale-90 cursor-pointer shadow-xs ${
+                isFavorite
+                  ? "bg-white/95 text-rose-500 ring-1 ring-rose-500/30"
+                  : "bg-black/45 text-white hover:bg-black/65"
+              }`}
+            >
+              <Heart className={`h-3.5 w-3.5 transition-transform ${isFavorite ? "fill-rose-500 text-rose-500 scale-110" : ""}`} />
+            </button>
           </div>
 
           {/* Logo da Loja sobreposta (com preview da foto do story recente se houver stories ativos) */}
@@ -297,11 +320,29 @@ export function StoreCard({
               )}
             </div>
 
-            {/* Avaliação */}
-            <div className="flex items-center gap-1 text-xs font-bold text-amber-500 dark:text-amber-400 shrink-0">
-              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-              <span>{rating.toFixed(1)}</span>
-              <span className="text-[10px] font-normal text-gray-400">({ratingCount})</span>
+            {/* Avaliação + Botão Favoritar */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 text-xs font-bold text-amber-500 dark:text-amber-400">
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                <span>{rating.toFixed(1)}</span>
+                <span className="text-[10px] font-normal text-gray-400">({ratingCount})</span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavoriteStore(tenant);
+                }}
+                aria-label={isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                title={isFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                className={`flex h-7 w-7 items-center justify-center rounded-full border transition active:scale-90 cursor-pointer ${
+                  isFavorite
+                    ? "border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/15 text-rose-500"
+                    : "border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-400 hover:text-rose-500 hover:border-rose-200 dark:hover:border-rose-500/30"
+                }`}
+              >
+                <Heart className={`h-3.5 w-3.5 transition-transform ${isFavorite ? "fill-rose-500 text-rose-500 scale-110" : ""}`} />
+              </button>
             </div>
           </div>
 

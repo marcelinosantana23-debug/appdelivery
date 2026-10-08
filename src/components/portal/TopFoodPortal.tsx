@@ -10,6 +10,7 @@ import {
   doesCategoryMatch,
 } from "./portalUtils";
 import { FeaturedStoresCarousel } from "./FeaturedStoresCarousel";
+import { FavoriteStoresCarousel } from "./FavoriteStoresCarousel";
 import { TopSellingProductsCarousel } from "./TopSellingProductsCarousel";
 import { CategoryStoreSection } from "./CategoryStoreSection";
 import { StoreCard } from "./StoreCard";
@@ -306,6 +307,14 @@ export function TopFoodPortal({
 
       {/* Conteúdo Principal do Marketplace */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 pt-4 sm:pt-6 pb-12">
+        {/* Seção de Lojas Favoritas no Topo do Portal */}
+        {!searchQuery && !isFirstLoad && (
+          <FavoriteStoresCarousel
+            tenants={activeTenants}
+            onSelectStore={onSelectStore}
+          />
+        )}
+
         {/* Barra de Stories das Lojas (Ao Vivo / 24 Horas) */}
         {!searchQuery && (
           <PortalStoriesBar tenants={activeTenants} />
