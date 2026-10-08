@@ -19,6 +19,7 @@ import { PortalCarouselSkeleton, PortalStoreListSkeleton } from "./PortalSkeleto
 import type { EstablishmentCategory, Tenant } from "@/types";
 import { Store, SearchX, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
+import { PullToRefresh } from "@/components/common/PullToRefresh";
 
 interface TopFoodPortalProps {
   onSelectStore: (slug: string) => void;
@@ -41,9 +42,24 @@ export function TopFoodPortal({
     isLoadingPortal,
     resetToPortalTheme,
     platformSettings,
+    refreshTenants,
+    refreshEstablishmentCategories,
+    refreshLocalities,
+    refreshPlatformSettings,
+    refreshActiveStories,
   } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const handlePortalPullRefresh = async () => {
+    await Promise.all([
+      refreshTenants(),
+      refreshEstablishmentCategories(),
+      refreshLocalities(),
+      refreshPlatformSettings(),
+      refreshActiveStories(),
+    ]);
+  };
 
   // 1. RESET DE TEMA NO PORTAL PRINCIPAL (HOME):
   // Ao montar a página do Portal TopFood, restaura obrigatoriamente as cores primárias padrão do aplicativo (vermelho/tema original do TopFood)
@@ -295,9 +311,10 @@ export function TopFoodPortal({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 flex flex-col transition-colors">
-      {/* Header Oficial do Portal Top Food */}
-      <PortalHeader
+    <PullToRefresh onRefresh={handlePortalPullRefresh}>
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 flex flex-col transition-colors">
+        {/* Header Oficial do Portal Top Food */}
+        <PortalHeader
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onStoreAdminClick={onStoreAdminClick}
@@ -658,6 +675,7 @@ export function TopFoodPortal({
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </PullToRefresh>
   );
 }

@@ -1450,10 +1450,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshCurrentStore = useCallback(async () => {
-    if (currentTenant?.slug) {
-      await loadStoreBySlug(currentTenant.slug);
+    const slug = currentTenant?.slug || currentSlug || config?.slug;
+    if (slug) {
+      await loadStoreBySlug(slug);
     }
-  }, [currentTenant?.slug, loadStoreBySlug]);
+  }, [currentTenant?.slug, currentSlug, config?.slug, loadStoreBySlug]);
 
   // ---------------- AUTH ----------------
   const login = useCallback(

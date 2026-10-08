@@ -16,6 +16,7 @@ import { StoreAdminLogin } from "@/components/admin/StoreAdminLogin";
 import { ToastContainer } from "@/components/common/Toast";
 import { OfflineIndicator } from "@/components/common/OfflineIndicator";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
+import { PullToRefresh } from "@/components/common/PullToRefresh";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
 import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
@@ -39,7 +40,13 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
     storeNotFound,
     cartCount,
     platformSettings,
+    refreshCurrentStore,
+    refreshActiveStories,
   } = useStore();
+
+  const handleStorePullRefresh = useCallback(async () => {
+    await Promise.all([refreshCurrentStore(), refreshActiveStories()]);
+  }, [refreshCurrentStore, refreshActiveStories]);
 
   // Gerenciamento de tema da Loja (/loja/[slug]) com cleanup determinístico ao desmontar a tela
   useEffect(() => {
@@ -378,12 +385,16 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 pb-32 sm:pb-36 transition-colors">
-      <Header
-        onStoreAdminClick={onStoreAdminClick}
-        onSuperAdminClick={onSuperAdminClick}
-        onBackToPortal={onBackToPortal}
-      />
+    <PullToRefresh
+      onRefresh={handleStorePullRefresh}
+      disabled={Boolean(selectedProduct) || cartOpen}
+    >
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100 pb-32 sm:pb-36 transition-colors">
+        <Header
+          onStoreAdminClick={onStoreAdminClick}
+          onSuperAdminClick={onSuperAdminClick}
+          onBackToPortal={onBackToPortal}
+        />
       <CategoryNav
         activeCategory={activeCategory}
         onCategoryClick={handleCategoryClick}
@@ -454,7 +465,8 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </PullToRefresh>
   );
 }
 
