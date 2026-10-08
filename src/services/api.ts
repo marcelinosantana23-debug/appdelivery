@@ -288,25 +288,47 @@ export async function deleteTenantApi(slugOrId: string): Promise<{ success: bool
 
 export async function fetchTenantProductsApi(slugOrId: string): Promise<{ success: boolean; products: Product[]; error?: string }> {
   try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products`);
+    const timestamp = Date.now();
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/products?_t=${timestamp}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    if (!res.ok) {
+      return { success: false, products: [], error: `HTTP ${res.status}` };
+    }
     const data = await res.json();
-    let prods: Product[] = data.products || data.produtos || [];
+    let prods: Product[] = Array.isArray(data.products)
+      ? data.products
+      : Array.isArray(data.produtos)
+      ? data.produtos
+      : [];
 
     // Fallback caso a rota retorne vazio: tenta a rota em português /lojas/:slug/produtos
     if ((!prods || prods.length === 0) && slugOrId) {
       try {
-        const altRes = await fetch(`${BASE_URL}/lojas/${encodeURIComponent(slugOrId)}/produtos`);
-        const altData = await altRes.json();
-        const altProds = altData.products || altData.produtos || [];
-        if (altProds && altProds.length > 0) {
-          prods = altProds;
+        const altRes = await fetch(`${BASE_URL}/lojas/${encodeURIComponent(slugOrId)}/produtos?_t=${timestamp}`, {
+          cache: "no-store",
+        });
+        if (altRes.ok) {
+          const altData = await altRes.json();
+          const altProds = Array.isArray(altData.products)
+            ? altData.products
+            : Array.isArray(altData.produtos)
+            ? altData.produtos
+            : [];
+          if (altProds && altProds.length > 0) {
+            prods = altProds;
+          }
         }
       } catch {
         // ignore
       }
     }
 
-    return { success: true, products: prods };
+    return { success: data.success !== false, products: prods };
   } catch (err: any) {
     return { success: false, products: [], error: err.message };
   }

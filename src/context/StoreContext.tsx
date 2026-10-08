@@ -627,16 +627,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [currentSlug, setCurrentSlug] = useState<string>(initialSlug);
-  // Se já existe cache local para a loja (ou não há slug inicial), isLoadingStore inicia como false (0ms de carregamento)
+  // Se já existe cache local VÁLIDO (com products.length > 0) para a loja, isLoadingStore inicia como false (0ms).
+  // Caso o cache local esteja vazio ou não exista, isLoadingStore inicia como true até a busca real da API concluir.
   const [isLoadingStore, setIsLoadingStore] = useState<boolean>(() => {
     if (!initialSlug) return false;
-    if (initialStoreCache?.tenant) return false;
-    const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
-      (t) =>
-        t.slug?.toLowerCase() === initialSlug.toLowerCase() ||
-        t.id?.toLowerCase() === initialSlug.toLowerCase()
-    );
-    return !fromList;
+    return !(initialStoreCache && Array.isArray(initialStoreCache.products) && initialStoreCache.products.length > 0);
   });
   const [storeNotFound, setStoreNotFound] = useState<boolean>(false);
 
@@ -1082,9 +1077,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Restaura itens salvos no carrinho para este estabelecimento sem esvaziá-lo na recarga
       setCart(loadSavedCart(normalizedSlug));
 
-      // 1. STALE (0ms): Verifica primeiro o cache local (`cache_store_[storeSlug]`)
+      // 1. STALE (0ms): Verifica se existe cache local VÁLIDO (`cache_store_[storeSlug]` com `products.length > 0`).
+      // Se o cache local tiver lista vazia ou inválida, `loadCachedStoreData` limpa a chave e retorna `null`.
       const cachedStore = loadCachedStoreData(normalizedSlug);
-      const fallbackTenantFromList = !cachedStore
+      const hasValidProductCache = Boolean(
+        cachedStore?.tenant &&
+          Array.isArray(cachedStore.products) &&
+          cachedStore.products.length > 0
+      );
+
+      const fallbackTenantFromList = !hasValidProductCache
         ? loadCachedTenants().find(
             (t) =>
               t.slug?.toLowerCase() === normalizedSlug ||
@@ -1092,15 +1094,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           )
         : null;
 
-      const hasInstantCache = Boolean(cachedStore?.tenant || fallbackTenantFromList);
-
-      if (cachedStore?.tenant) {
-        // Hidrata imediatamente (0ms) todos os dados da loja em cache sem qualquer spinner bloqueante
+      if (hasValidProductCache && cachedStore) {
+        // Hidrata imediatamente (0ms) todos os dados da loja em cache pois possui produtos válidos
         setCurrentTenant(cachedStore.tenant);
         const cachedCfg = cachedStore.config || tenantToStoreConfig(cachedStore.tenant);
         setConfig(cachedCfg);
         applyThemeColors(cachedCfg);
-        setProducts(cachedStore.products || []);
+        setProducts(cachedStore.products);
         if (cachedStore.categories && cachedStore.categories.length > 0) {
           setStoreCategories(cachedStore.categories);
         }
@@ -1109,21 +1109,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         setIsLoadingStore(false);
       } else if (fallbackTenantFromList) {
-        // Temos os metadados da loja no cache da Home: exibe cabeçalho da loja imediatamente (0ms)
+        // Temos metadados básicos da loja na lista do portal, mas sem cache de produtos válido:
+        // Aplica tema/cabeçalho e mantém `isLoadingStore = true` enquanto busca obrigatoriamente os produtos da API
         setCurrentTenant(fallbackTenantFromList);
         const storeCfg = tenantToStoreConfig(fallbackTenantFromList);
         setConfig(storeCfg);
         applyThemeColors(storeCfg);
         setProducts([]);
-        setIsLoadingStore(false);
+        setIsLoadingStore(true);
       } else {
-        // Primeiro acesso absoluto sem cache prévio
+        // Sem cache válido: busca obrigatoriamente da API
         setIsLoadingStore(true);
         setProducts([]);
         setOrders([]);
       }
 
-      // 2. REVALIDATE (Segundo Plano): Busca silenciosamente os dados mais recentes na API/Cloudflare D1
+      // 2. REVALIDATE / FETCH OBRIGATÓRIO DA API: Busca os dados atualizados do banco de dados (Cloudflare D1)
       try {
         const tenantRes = await fetchTenantDetailsApi(normalizedSlug);
         if (tenantRes.success && tenantRes.tenant) {
@@ -1138,10 +1139,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setConfig(storeCfg);
           applyThemeColors(storeCfg);
 
-          // Desbloqueia a tela assim que os metadados da loja chegarem (mesmo no 1º acesso)
-          setIsLoadingStore(false);
-
-          // Fetch ONLY this tenant's products, orders, categories, and addon groups from database
+          // Busca os produtos, pedidos, categorias e adicionais reais da loja no banco de dados
           const [pRes, oRes, cRes, agRes] = await Promise.all([
             fetchTenantProductsApi(t.id),
             fetchTenantOrdersApi(t.id),
@@ -1167,20 +1165,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setAddonGroups(agRes.addonGroups);
           }
 
-          let loadedProducts = pRes.success && pRes.products ? pRes.products : [];
+          let productFetchSucceeded = pRes.success;
+          let loadedProducts = pRes.success && Array.isArray(pRes.products) ? pRes.products : [];
+
+          // Fallback pelo slug oficial do tenant caso a busca por ID não tenha retornado itens
           if (loadedProducts.length === 0 && t.slug && t.slug !== t.id) {
             const fallbackRes = await fetchTenantProductsApi(t.slug);
-            if (fallbackRes.success && fallbackRes.products && fallbackRes.products.length > 0) {
-              loadedProducts = fallbackRes.products;
+            if (fallbackRes.success) {
+              productFetchSucceeded = true;
+              if (Array.isArray(fallbackRes.products) && fallbackRes.products.length > 0) {
+                loadedProducts = fallbackRes.products;
+              }
             }
           }
 
-          setProducts((prev) => {
-            if (haveProductsChanged(prev, loadedProducts)) {
-              return loadedProducts;
+          // Fallback adicional pelo slug da URL se for diferente de t.id e t.slug
+          if (
+            loadedProducts.length === 0 &&
+            normalizedSlug !== t.id.toLowerCase() &&
+            normalizedSlug !== (t.slug || "").toLowerCase()
+          ) {
+            const slugRes = await fetchTenantProductsApi(normalizedSlug);
+            if (slugRes.success && Array.isArray(slugRes.products) && slugRes.products.length > 0) {
+              productFetchSucceeded = true;
+              loadedProducts = slugRes.products;
             }
-            return prev;
-          });
+          }
+
+          // Atualiza o estado de produtos se a API retornou produtos ou se a requisição teve sucesso
+          if (loadedProducts.length > 0) {
+            setProducts(loadedProducts);
+          } else if (productFetchSucceeded && !hasValidProductCache) {
+            setProducts([]);
+          }
 
           if (oRes.success && oRes.orders) {
             setOrders(oRes.orders);
@@ -1188,26 +1205,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setOrders([]);
           }
 
-          // 3. Atualiza silenciosamente o LocalStorage (`cache_store_[storeSlug]`)
-          saveCachedStoreData(normalizedSlug, {
-            tenant: t,
-            config: storeCfg,
-            products: loadedProducts,
-            categories: freshCategories,
-            addonGroups: freshAddonGroups,
-          });
+          // 3. REGRA DE VALIDAÇÃO DE CACHE VAZIO:
+          // NUNCA salva no LocalStorage se a resposta da API de produtos retornar uma array vazia ou se houver erro de requisição.
+          // Só salva no LocalStorage se `loadedProducts.length > 0`.
+          if (productFetchSucceeded && loadedProducts.length > 0) {
+            saveCachedStoreData(normalizedSlug, {
+              tenant: t,
+              config: storeCfg,
+              products: loadedProducts,
+              categories: freshCategories,
+              addonGroups: freshAddonGroups,
+            });
+          }
 
           setIsLoadingStore(false);
-        } else if (!hasInstantCache) {
+        } else if (!hasValidProductCache && !fallbackTenantFromList) {
           setStoreNotFound(true);
           setCurrentTenant(null);
           setIsLoadingStore(false);
-        }
-      } catch (err) {
-        console.warn(`[StoreContext] Background revalidation failed for store "${normalizedSlug}", keeping cache:`, err);
-        if (!hasInstantCache) {
+        } else {
           setIsLoadingStore(false);
         }
+      } catch (err) {
+        console.warn(`[StoreContext] Background revalidation failed for store "${normalizedSlug}":`, err);
+        setIsLoadingStore(false);
       }
     },
     []
@@ -1315,8 +1336,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setCart(loadSavedCart(slugOrId));
 
-      // 1. Verifica primeiro se existe `cache_store_[storeSlug]` para hidratação imediata (0ms)
+      // 1. Verifica primeiro se existe `cache_store_[storeSlug]` VÁLIDO (com products.length > 0)
       const cachedStore = loadCachedStoreData(slugOrId);
+      const hasValidProducts = Boolean(
+        cachedStore && Array.isArray(cachedStore.products) && cachedStore.products.length > 0
+      );
+
       const targetTenant =
         preloadedTenant ||
         cachedStore?.tenant ||
@@ -1327,10 +1352,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const storeCfg = cachedStore?.config || tenantToStoreConfig(targetTenant);
         setConfig(storeCfg);
         applyThemeColors(storeCfg);
-        if (cachedStore?.products) {
+        if (hasValidProducts && cachedStore) {
           setProducts(cachedStore.products);
+          setIsLoadingStore(false);
         } else {
           setProducts([]);
+          setIsLoadingStore(true);
         }
         if (cachedStore?.categories && cachedStore.categories.length > 0) {
           setStoreCategories(cachedStore.categories);
@@ -1338,13 +1365,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (cachedStore?.addonGroups) {
           setAddonGroups(cachedStore.addonGroups);
         }
-        setIsLoadingStore(false);
         setStoreNotFound(false);
         try {
           localStorage.setItem("delivery_tenant_session", JSON.stringify(targetTenant));
         } catch {
           // ignore
         }
+      } else {
+        setProducts([]);
+        setIsLoadingStore(true);
       }
 
       // Update URL without reload ONLY if not currently on an admin or super-admin route
@@ -2966,11 +2995,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     refreshActiveStories();
   }, [refreshActiveStories]);
 
-  // Mantém o cache da loja ativa (cache_store_[storeSlug]) sincronizado em segundo plano sempre que produtos, categorias, adicionais ou config mudarem
+  // Mantém o cache da loja ativa (cache_store_[storeSlug]) sincronizado em segundo plano APENAS quando houver produtos válidos (`products.length > 0`)
   useEffect(() => {
     const activeSlug = currentTenant?.slug || config?.slug || currentSlug;
     if (!activeSlug || !currentTenant) return;
-    if (products.length > 0 || storeCategories.length > 0) {
+    if (Array.isArray(products) && products.length > 0) {
       saveCachedStoreData(activeSlug, {
         tenant: currentTenant,
         config,

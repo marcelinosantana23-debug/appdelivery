@@ -35,7 +35,6 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
     isStoreOpen,
     isStoreActive,
     config,
-    currentTenant,
     isLoadingStore,
     storeNotFound,
     cartCount,
@@ -298,11 +297,9 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
   };
 
   // Stale-While-Revalidate (0ms):
-  // Exibe tela de carregamento apenas no primeiro acesso quando não há cache local da loja.
-  // Se houver dados em cache (currentTenant, config.name ou products), renderiza a loja instantaneamente em 0ms enquanto revalida em segundo plano.
-  const hasCachedStoreReady = Boolean(
-    products.length > 0 || (currentTenant && currentTenant.slug)
-  );
+  // Renderiza o cardápio instantaneamente em 0ms somente quando já houver uma lista válida de produtos (`products.length > 0`).
+  // Se o cache local estava vazio ou não existia, aguarda a resposta real da API antes de exibir o estado vazio.
+  const hasCachedStoreReady = Boolean(Array.isArray(products) && products.length > 0);
 
   if (isLoadingStore && !hasCachedStoreReady) {
     return (

@@ -109,8 +109,9 @@ export function getStoreCacheKey(slugOrId: string): string {
 
 /**
  * Carrega instantaneamente (0ms) os dados em cache de uma loja específica (`cache_store_[storeSlug]`).
- * Caso a loja ainda não tenha um cache completo salvo mas exista na lista de lojas do portal (`cache_home_data`),
- * constrói um snapshot inicial da loja para evitar qualquer spinner bloqueante.
+ * REGRA ESTRITA DE VALIDAÇÃO DE CACHE:
+ * - Se o cache local contiver uma lista de produtos vazia (`!Array.isArray(parsed.products) || parsed.products.length === 0`) ou inválida,
+ *   o cache é considerado INVÁLIDO, é limpo do LocalStorage e a função retorna `null` para forçar a busca na API.
  */
 export function loadCachedStoreData(slugOrId: string): CachedStoreData | null {
   if (typeof window === "undefined" || !slugOrId) return null;
@@ -123,41 +124,63 @@ export function loadCachedStoreData(slugOrId: string): CachedStoreData | null {
 
   try {
     // 1. Busca direta por `cache_store_[storeSlug]`
-    const directRaw = localStorage.getItem(getStoreCacheKey(clean));
+    const directKey = getStoreCacheKey(clean);
+    const directRaw = localStorage.getItem(directKey);
     if (directRaw) {
       const parsed = JSON.parse(directRaw);
-      if (parsed && parsed.tenant) {
+      if (
+        parsed &&
+        parsed.tenant &&
+        Array.isArray(parsed.products) &&
+        parsed.products.length > 0
+      ) {
         return {
           tenant: parsed.tenant,
           config: parsed.config,
-          products: Array.isArray(parsed.products) ? parsed.products : [],
+          products: parsed.products,
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           addonGroups: Array.isArray(parsed.addonGroups) ? parsed.addonGroups : [],
           updatedAt: Number(parsed.updatedAt) || Date.now(),
         };
+      } else {
+        // Limpa imediatamente o cache inválido/vazio do LocalStorage
+        localStorage.removeItem(directKey);
       }
     }
 
     // 2. Alias marcelino <-> ms-preparacoes
     if (clean === "ms-preparacoes" || clean === "marcelino") {
       const altSlug = clean === "ms-preparacoes" ? "marcelino" : "ms-preparacoes";
-      const altRaw = localStorage.getItem(getStoreCacheKey(altSlug));
+      const altKey = getStoreCacheKey(altSlug);
+      const altRaw = localStorage.getItem(altKey);
       if (altRaw) {
         const parsed = JSON.parse(altRaw);
-        if (parsed && parsed.tenant) {
+        if (
+          parsed &&
+          parsed.tenant &&
+          Array.isArray(parsed.products) &&
+          parsed.products.length > 0
+        ) {
           return {
             tenant: parsed.tenant,
             config: parsed.config,
-            products: Array.isArray(parsed.products) ? parsed.products : [],
+            products: parsed.products,
             categories: Array.isArray(parsed.categories) ? parsed.categories : [],
             addonGroups: Array.isArray(parsed.addonGroups) ? parsed.addonGroups : [],
             updatedAt: Number(parsed.updatedAt) || Date.now(),
           };
+        } else {
+          localStorage.removeItem(altKey);
         }
       }
     }
   } catch {
-    // ignore JSON errors
+    // Caso o JSON esteja corrompido, limpa a chave inválida
+    try {
+      localStorage.removeItem(getStoreCacheKey(clean));
+    } catch {
+      // ignore
+    }
   }
 
   return null;
@@ -166,6 +189,10 @@ export function loadCachedStoreData(slugOrId: string): CachedStoreData | null {
 /**
  * Salva os dados completos da loja em `cache_store_[storeSlug]` (e também pelo ID caso aplicável)
  * para garantir carregamento instantâneo (0ms) no próximo acesso ou abertura de APK/PWA direto na loja.
+ *
+ * REGRA ESTRITA DE VALIDAÇÃO:
+ * - NUNCA salva no LocalStorage se `data.products` for vazio (`!Array.isArray(data.products) || data.products.length === 0`).
+ * - Só salva os produtos no LocalStorage se `data.products.length > 0`.
  */
 export function saveCachedStoreData(
   slugOrId: string,
@@ -178,6 +205,12 @@ export function saveCachedStoreData(
   }
 ): void {
   if (typeof window === "undefined" || !slugOrId || !data.tenant) return;
+
+  // Validação de cache vazio: NUNCA salvar no LocalStorage se products for vazio ou inválido
+  if (!Array.isArray(data.products) || data.products.length === 0) {
+    return;
+  }
+
   try {
     const existing = loadCachedStoreData(slugOrId);
     const payload: CachedStoreData = {

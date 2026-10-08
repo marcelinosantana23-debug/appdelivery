@@ -42,9 +42,29 @@ const defaultCategoryIcons: Record<string, string> = {
 };
 
 export function MenuList({ products, onProductClick }: MenuListProps) {
-  const { config } = useStore();
+  const { config, isLoadingStore } = useStore();
 
   if (!products || products.length === 0) {
+    if (isLoadingStore) {
+      return (
+        <div className="mx-auto max-w-2xl px-4 py-8 space-y-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs animate-pulse"
+            >
+              <div className="flex-1 space-y-2.5">
+                <div className="h-4 w-2/3 rounded-lg bg-gray-200 dark:bg-slate-800" />
+                <div className="h-3 w-full rounded-lg bg-gray-100 dark:bg-slate-800/70" />
+                <div className="h-4 w-20 rounded-lg bg-gray-200 dark:bg-slate-800 pt-1" />
+              </div>
+              <div className="h-20 w-20 shrink-0 rounded-xl bg-gray-200 dark:bg-slate-800" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     const cleanWhatsapp = config.whatsapp?.replace(/\D/g, "") || "";
     const whatsappUrl = `https://wa.me/${cleanWhatsapp}?text=${encodeURIComponent(
       `Olá! Acessei o link da ${config.name} e gostaria de informações sobre o cardápio.`
