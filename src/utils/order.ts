@@ -6,53 +6,120 @@ export function formatPrice(value: number, config: StoreConfig): string {
 }
 
 /**
- * Formatação inteligente de tempo relativo para histórico de pedidos:
- * - Menos de 1 hora: "agora mesmo" ou "há X min"
- * - Menos de 24 horas: "há 1 hora", "há X horas"
- * - De 1 a 6 dias: "há 1 dia", "há X dias"
- * - De 1 a 4 semanas (7 a 29 dias): "há 1 semana", "há X semanas"
- * - Acima de 1 mês (30+ dias): "há 1 mês", "há X meses"
+ * Normaliza qualquer formato de timestamp de pedido (ms, segundos UNIX, string ISO, string SQLite)
+ * para milissegundos válidos (epoch ms).
  */
-export function formatRelativeOrderTime(timestamp: number | string | undefined, nowMs: number = Date.now()): string {
-  if (!timestamp) return "agora";
-  const createdMs = typeof timestamp === "number" ? timestamp : new Date(timestamp).getTime();
-  if (isNaN(createdMs)) return "agora";
+export function normalizeOrderTimestamp(
+  input: number | string | undefined | null,
+  orderObj?: Partial<Order> & Record<string, any>
+): number {
+  const raw =
+    input !== undefined && input !== null && input !== ""
+      ? input
+      : orderObj?.createdAt ??
+        orderObj?.created_at ??
+        orderObj?.timestamp ??
+        orderObj?.date ??
+        orderObj?.statusHistory?.[0]?.timestamp;
 
-  const diffMs = Math.max(0, nowMs - createdMs);
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (raw === undefined || raw === null || raw === "") {
+    return 0;
+  }
 
-  if (diffMinutes < 1) {
-    return "agora mesmo";
+  if (typeof raw === "number") {
+    if (isNaN(raw) || raw <= 0) return 0;
+    // Se estiver em segundos UNIX (ex: 10 dígitos < 10_000_000_000), converte para milissegundos
+    return raw < 10_000_000_000 ? raw * 1000 : raw;
   }
-  if (diffMinutes < 60) {
-    return diffMinutes === 1 ? "há 1 min" : `há ${diffMinutes} min`;
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return 0;
+
+    // Se for string puramente numérica
+    if (/^\d+(\.\d+)?$/.test(trimmed)) {
+      const num = Number(trimmed);
+      if (!isNaN(num) && num > 0) {
+        return num < 10_000_000_000 ? num * 1000 : num;
+      }
+    }
+
+    // Tenta parse direto ou formato SQLite ("YYYY-MM-DD HH:MM:SS")
+    let parsed = Date.parse(trimmed);
+    if (isNaN(parsed)) {
+      parsed = Date.parse(trimmed.replace(" ", "T"));
+    }
+    return isNaN(parsed) ? 0 : parsed;
   }
-  if (diffHours < 24) {
-    return diffHours === 1 ? "há 1 hora" : `há ${diffHours} horas`;
-  }
-  if (diffDays <= 6) {
-    return diffDays === 1 ? "há 1 dia" : `há ${diffDays} dias`;
-  }
-  if (diffDays < 30) {
-    const weeks = Math.max(1, Math.min(4, Math.floor(diffDays / 7)));
-    return weeks === 1 ? "há 1 semana" : `há ${weeks} semanas`;
-  }
-  const months = Math.max(1, Math.floor(diffDays / 30));
-  if (months < 12) {
-    return months === 1 ? "há 1 mês" : `há ${months} meses`;
-  }
-  const years = Math.floor(months / 12);
-  return years === 1 ? "há 1 ano" : `há ${years} anos`;
+
+  return 0;
 }
 
 /**
- * Formata a data e hora exata do pedido para auditoria (ex: "09/10 às 14:30")
+ * Formatação inteligente de tempo relativo para histórico de pedidos:
+ * 1. Menos de 60 minutos: Exibir em minutos (Ex: "Há 45 min", "Agora mesmo")
+ * 2. De 1 hora até 23 horas: Exibir em horas (Ex: "Há 1 hora", "Há 3 horas", "Há 15 horas")
+ * 3. De 24 horas (1 dia) até 6 dias: Exibir em dias (Ex: "Há 1 dia", "Há 4 dias")
+ * 4. De 7 dias até 29 dias: Exibir em semanas (Ex: "Há 1 semana", "Há 3 semanas")
+ * 5. 30 dias ou mais (1 mês ou mais): Exibir em meses (Ex: "Há 1 mês", "Há 2 meses")
  */
-export function formatOrderExactDateTime(timestamp: number | string | undefined): string {
-  if (!timestamp) return "";
-  const d = new Date(timestamp);
+export function formatRelativeOrderTime(
+  timestamp: number | string | undefined,
+  nowMs: number = Date.now(),
+  orderObj?: Partial<Order> & Record<string, any>
+): string {
+  const createdMs = normalizeOrderTimestamp(timestamp, orderObj);
+  if (!createdMs) return "Agora";
+
+  const diffMs = Math.max(0, nowMs - createdMs);
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // 1. Menos de 60 minutos: Exibir em minutos
+  if (diffMinutes < 1) {
+    return "Agora";
+  }
+  if (diffMinutes < 60) {
+    return `Há ${diffMinutes} min`;
+  }
+
+  // 2. De 1 hora até 23 horas: Exibir em horas
+  if (diffHours < 24) {
+    return diffHours === 1 ? "Há 1 hora" : `Há ${diffHours} horas`;
+  }
+
+  // 3. De 24 horas (1 dia) até 6 dias: Exibir em dias
+  if (diffDays <= 6) {
+    return diffDays === 1 ? "Há 1 dia" : `Há ${diffDays} dias`;
+  }
+
+  // 4. De 7 dias até 29 dias: Exibir em semanas
+  if (diffDays <= 29) {
+    const weeks = Math.max(1, Math.floor(diffDays / 7));
+    return weeks === 1 ? "Há 1 semana" : `Há ${weeks} semanas`;
+  }
+
+  // 5. 30 dias ou mais (1 mês ou mais): Exibir em meses
+  const months = Math.max(1, Math.floor(diffDays / 30));
+  if (months < 12) {
+    return months === 1 ? "Há 1 mês" : `Há ${months} meses`;
+  }
+
+  const years = Math.floor(diffDays / 365);
+  return years <= 1 ? "Há 1 ano" : `Há ${years} anos`;
+}
+
+/**
+ * Formata a data e hora exata do pedido para auditoria (ex: "09/10/2026 às 14:30")
+ */
+export function formatOrderExactDateTime(
+  timestamp: number | string | undefined,
+  orderObj?: Partial<Order> & Record<string, any>
+): string {
+  const createdMs = normalizeOrderTimestamp(timestamp, orderObj);
+  if (!createdMs) return "";
+  const d = new Date(createdMs);
   if (isNaN(d.getTime())) return "";
   const datePart = d.toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -80,8 +147,8 @@ export interface OrderTimeGroup {
  */
 export function groupOrdersByTemporalBlock(orders: Order[], nowMs: number = Date.now()): OrderTimeGroup[] {
   const sorted = [...orders].sort((a, b) => {
-    const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt || 0).getTime();
-    const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt || 0).getTime();
+    const timeA = normalizeOrderTimestamp(a.createdAt, a as any);
+    const timeB = normalizeOrderTimestamp(b.createdAt, b as any);
     return timeB - timeA;
   });
 
@@ -147,7 +214,7 @@ export function groupOrdersByTemporalBlock(orders: Order[], nowMs: number = Date
   ];
 
   for (const order of sorted) {
-    const createdMs = typeof order.createdAt === "number" ? order.createdAt : new Date(order.createdAt || 0).getTime();
+    const createdMs = normalizeOrderTimestamp(order.createdAt, order as any);
 
     if (createdMs >= startOfToday) {
       buckets.today.orders.push(order);
@@ -160,7 +227,7 @@ export function groupOrdersByTemporalBlock(orders: Order[], nowMs: number = Date
     } else if (createdMs >= startOfCurrentMonth) {
       buckets.this_month.orders.push(order);
     } else {
-      const d = new Date(createdMs);
+      const d = new Date(createdMs || nowMs);
       const mIdx = isNaN(d.getMonth()) ? 0 : d.getMonth();
       const yr = isNaN(d.getFullYear()) ? now.getFullYear() : d.getFullYear();
       const key = `month_${yr}_${String(mIdx + 1).padStart(2, "0")}`;

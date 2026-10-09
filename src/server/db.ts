@@ -6064,6 +6064,29 @@ export class Database {
     };
   }
 
+  private parseOrderTimestamp(raw: any): number {
+    if (raw === undefined || raw === null || raw === "") return Date.now();
+    if (typeof raw === "number") {
+      if (isNaN(raw) || raw <= 0) return Date.now();
+      return raw < 10_000_000_000 ? raw * 1000 : raw;
+    }
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (/^\d+(\.\d+)?$/.test(trimmed)) {
+        const num = Number(trimmed);
+        if (!isNaN(num) && num > 0) {
+          return num < 10_000_000_000 ? num * 1000 : num;
+        }
+      }
+      let parsed = Date.parse(trimmed);
+      if (isNaN(parsed)) {
+        parsed = Date.parse(trimmed.replace(" ", "T"));
+      }
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return Date.now();
+  }
+
   private mapOrderRow(row: any): Order {
     return {
       id: row.id,
@@ -6086,7 +6109,7 @@ export class Database {
       status: row.status,
       items: this.safeJsonParse(row.items_json, []),
       statusHistory: this.safeJsonParse(row.status_history_json, []),
-      createdAt: Number(row.created_at),
+      createdAt: this.parseOrderTimestamp(row.created_at ?? row.createdAt),
     };
   }
 

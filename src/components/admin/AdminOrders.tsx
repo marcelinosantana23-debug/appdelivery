@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import {
   Check,
   X,
@@ -33,6 +33,7 @@ import {
   formatPrice,
   getMotoboyWhatsAppUrl,
   buildMotoboyWhatsAppMessage,
+  normalizeOrderTimestamp,
   formatRelativeOrderTime,
   formatOrderExactDateTime,
   groupOrdersByTemporalBlock,
@@ -58,7 +59,16 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [viewingReceiptOrder, setViewingReceiptOrder] = useState<Order | null>(null);
   const [motoboyModalOrder, setMotoboyModalOrder] = useState<Order | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
+
+  // Atualiza o relógio relativo a cada 60s para manter os rótulos ("Há X min", "Há X horas", etc.) sempre sincronizados
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Screen Wake Lock API: mantém a tela acesa continuamente exclusivamente nesta tela de pedidos
   const {
@@ -79,16 +89,16 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
         : orders;
 
     return [...base].sort((a, b) => {
-      const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt || 0).getTime();
-      const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt || 0).getTime();
+      const timeA = normalizeOrderTimestamp(a.createdAt, a as any);
+      const timeB = normalizeOrderTimestamp(b.createdAt, b as any);
       return timeB - timeA;
     });
   }, [orders, filter]);
 
   // Agrupamento em blocos temporais (Pedidos de Hoje, Ontem, Semana Passada, Meses Anteriores)
   const temporalGroups = useMemo(() => {
-    return groupOrdersByTemporalBlock(filtered);
-  }, [filtered]);
+    return groupOrdersByTemporalBlock(filtered, nowMs);
+  }, [filtered, nowMs]);
 
   const handleFilterChange = (newFilter: "active" | "all") => {
     setFilter(newFilter);
@@ -299,6 +309,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
                     <OrderCard
                       key={order.id}
                       order={order}
+                      nowMs={nowMs}
                       isNew={newOrderIds.includes(order.id)}
                       onView={() => clearNewOrderFlag(order.id)}
                       onAdvance={(id) => updateOrderStatus(id, nextStatusMap[order.status])}
@@ -316,6 +327,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
             <OrderCard
               key={order.id}
               order={order}
+              nowMs={nowMs}
               isNew={newOrderIds.includes(order.id)}
               onView={() => clearNewOrderFlag(order.id)}
               onAdvance={(id) => updateOrderStatus(id, nextStatusMap[order.status])}
@@ -348,6 +360,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
 
 function OrderCard({
   order,
+  nowMs,
   isNew,
   onView,
   onAdvance,
@@ -356,6 +369,7 @@ function OrderCard({
   onOpenMotoboy,
 }: {
   order: Order;
+  nowMs: number;
   isNew: boolean;
   onView: () => void;
   onAdvance: (id: string) => void;
@@ -401,8 +415,8 @@ function OrderCard({
     showToast(`Enviando pedido ${order.id} direto para ${motoboyDisplayName} no WhatsApp...`, "success");
   };
 
-  const relativeTimeLabel = formatRelativeOrderTime(order.createdAt);
-  const exactDateTimeLabel = formatOrderExactDateTime(order.createdAt);
+  const relativeTimeLabel = formatRelativeOrderTime(order.createdAt, nowMs, order as any);
+  const exactDateTimeLabel = formatOrderExactDateTime(order.createdAt, order as any);
 
   const getAdvanceButtonLabel = () => {
     if (order.status === "received") {

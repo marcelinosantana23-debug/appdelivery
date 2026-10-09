@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { fetchTenantFinancialReportApi } from "@/services/api";
+import { formatRelativeOrderTime, normalizeOrderTimestamp } from "@/utils/order";
 import type { Order, FinancialReportData, DailyRevenueItem, PaymentBreakdownItem } from "@/types";
 
 const MONTH_NAMES = [
@@ -48,9 +49,10 @@ function formatCurrency(val: number): string {
   });
 }
 
-function formatDateBr(timestamp: number): string {
-  if (!timestamp) return "-";
-  const d = new Date(timestamp);
+function formatDateBr(timestamp: number | string | undefined, orderObj?: Order): string {
+  const ms = normalizeOrderTimestamp(timestamp, orderObj as any);
+  if (!ms) return "-";
+  const d = new Date(ms);
   return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
@@ -1066,7 +1068,12 @@ export function AdminFinancialReport() {
                       </td>
 
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                        {formatDateBr(order.createdAt)}
+                        <div className="font-semibold text-slate-800">
+                          {formatRelativeOrderTime(order.createdAt, Date.now(), order as any)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          {formatDateBr(order.createdAt, order)}
+                        </div>
                       </td>
 
                       <td className="px-4 py-3">
