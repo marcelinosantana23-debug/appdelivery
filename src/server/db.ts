@@ -843,6 +843,21 @@ const initialProducts: Product[] = [
     ],
   },
   {
+    id: "bt-xtudo-artesanal",
+    tenantId: "tenant-burger-town",
+    name: "X-Tudo Artesanal Burger Town",
+    description: "Pão brioche selado na manteiga, hambúrguer angus 180g grelhado no fogo, queijo cheddar e prato derretidos, bacon crocante, ovo frito, presunto, alface, tomate e maionese da casa.",
+    price: 36.9,
+    image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
+    category: "lanches",
+    available: true,
+    addonGroupIds: ["addon-burger-extras", "addon-burger-molhos"],
+    options: [
+      { id: "bt-xtudo-bacon", name: "Bacon Crocante Extra", price: 5.0 },
+      { id: "bt-xtudo-cheddar", name: "Cheddar Cremoso Extra", price: 4.0 },
+    ],
+  },
+  {
     id: "bt-cheddar-melt",
     tenantId: "tenant-burger-town",
     name: "Burger Cheddar Melt Supremo",
@@ -1276,22 +1291,24 @@ const initialOrders: Order[] = [
       {
         id: "item-1",
         product: {
-          id: "p1",
-          name: "Classic Burger",
-          price: 22.0,
+          id: "bt-smash-bacon",
+          name: "Smash Monster Duplo Bacon",
+          price: 29.9,
+          image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
         },
-        quantity: 1,
+        quantity: 2,
         selectedOptions: [{ id: "extra-bacon", name: "Bacon extra", price: 4.0 }],
         notes: "Sem picles por favor",
       },
       {
         id: "item-2",
         product: {
-          id: "p2",
-          name: "Double Cheese Bacon",
-          price: 32.0,
+          id: "bt-xtudo-artesanal",
+          name: "X-Tudo Artesanal Burger Town",
+          price: 36.9,
+          image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
         },
-        quantity: 1,
+        quantity: 2,
         selectedOptions: [],
         notes: "",
       },
@@ -6610,6 +6627,189 @@ export class Database {
         rank: idx + 1,
       };
     });
+  }
+
+  /**
+   * Busca global de produtos de todas as lojas ativas com contagem de vendas (totalSold)
+   * Ordenados decrescentemente pelos mais vendidos ("Mais Pedidos" no topo).
+   */
+  async getAllMarketplaceProductsWithSales(location?: string): Promise<TopSellingProduct[]> {
+    await this.ensureTables();
+    const filterByLoc = !this.isAllLocationsFilter(location);
+    const cleanLoc = (location || "").trim();
+
+    // 1. Consulta D1 quando disponível
+    if (this.env?.DB) {
+      try {
+        const whereLocClause = filterByLoc ? " AND LOWER(TRIM(t.localidade)) = LOWER(TRIM(?))" : "";
+        const query = `
+          SELECT 
+            p.id as productId,
+            p.tenant_id as tenantId,
+            p.name as name,
+            p.price as price,
+            p.image as image,
+            p.description as description,
+            p.category as category,
+            p.available as available,
+            p.options_json as optionsJson,
+            t.name as tenantName,
+            t.slug as tenantSlug,
+            t.logo as tenantLogo,
+            t.primary_color as tenantPrimaryColor,
+            t.is_open as tenantIsOpen,
+            t.delivery_fee as tenantDeliveryFee,
+            t.estimated_time as tenantDeliveryTime,
+            COALESCE(NULLIF(t.localidade, ''), 'Gargaú') as location,
+            COALESCE(sales.total_sold, 0) as totalSold
+          FROM products p
+          JOIN tenants t ON (t.id = p.tenant_id OR t.slug = p.tenant_id)
+          LEFT JOIN (
+            SELECT 
+              oi.tenant_id,
+              oi.product_id,
+              SUM(oi.quantity) as total_sold
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE o.status != 'cancelled'
+            GROUP BY oi.tenant_id, oi.product_id
+          ) sales ON (sales.product_id = p.id AND (sales.tenant_id = t.id OR sales.tenant_id = t.slug))
+          WHERE t.status != 'inactive'${whereLocClause}
+          ORDER BY totalSold DESC, t.is_featured DESC, t.priority_order DESC, p.position ASC, p.name ASC
+        `;
+        const stmt = this.env.DB.prepare(query);
+        const res = filterByLoc ? await stmt.bind(cleanLoc).all<any>() : await stmt.all<any>();
+        if (res.results && res.results.length > 0) {
+          return res.results.map((r: any, idx: number) => {
+            const loc = (r.location || "Gargaú").trim() || "Gargaú";
+            const isAvail =
+              r.available !== undefined && r.available !== null
+                ? r.available === 1 || r.available === true || r.available === "1" || r.available === "true"
+                : true;
+            return {
+              id: `mp-${r.tenantId}-${r.productId}`,
+              productId: String(r.productId),
+              name: String(r.name || ""),
+              price: Number(r.price) || 0,
+              image: String(r.image || ""),
+              description: String(r.description || ""),
+              category: String(r.category || "lanches"),
+              available: isAvail,
+              options: this.safeJsonParse(r.optionsJson, []),
+              tenantId: String(r.tenantId),
+              tenantName: String(r.tenantName || "Lanchonete"),
+              tenantSlug: String(r.tenantSlug || r.tenantId),
+              tenantLogo: String(r.tenantLogo || "🍔"),
+              tenantPrimaryColor: String(r.tenantPrimaryColor || "#E63946"),
+              tenantIsOpen: Boolean(r.tenantIsOpen !== undefined ? r.tenantIsOpen : 1),
+              tenantDeliveryFee: Number(r.tenantDeliveryFee) || 0,
+              tenantDeliveryTime: String(r.tenantDeliveryTime || "30-45 min"),
+              location: loc,
+              localidade: loc,
+              totalSold: Number(r.totalSold) || 0,
+              rank: idx + 1,
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("D1 getAllMarketplaceProductsWithSales warning, falling back to memory:", e);
+      }
+    }
+
+    // 2. Fallback em memória consolidando globalStore.products e globalStore.orders
+    const activeTenants = globalStore.tenants.filter(
+      (t) =>
+        t.status !== "inactive" &&
+        !isTenantPermanentlyDeleted(t.id) &&
+        !isTenantPermanentlyDeleted(t.slug) &&
+        this.matchesLocationFilter(t.localidade, location)
+    );
+    const tenantByIdOrSlug = new Map<string, Tenant>();
+    for (const t of activeTenants) {
+      tenantByIdOrSlug.set(t.id, t);
+      tenantByIdOrSlug.set(t.slug, t);
+    }
+
+    // Calcula vendas reais por produto em pedidos não cancelados
+    const salesByProductKey = new Map<string, number>();
+    const validOrders = globalStore.orders.filter((o) => o.status !== "cancelled");
+    for (const order of validOrders) {
+      const t = tenantByIdOrSlug.get(order.tenantId);
+      if (!t) continue;
+      for (const item of order.items || []) {
+        const pId = item.product?.id;
+        const pNameNorm = (item.product?.name || "").trim().toLowerCase();
+        const qty = Number(item.quantity) || 1;
+        if (pId) {
+          const key = `${t.id}__${pId}`;
+          salesByProductKey.set(key, (salesByProductKey.get(key) || 0) + qty);
+        }
+        if (pNameNorm) {
+          const nameKey = `${t.id}__name__${pNameNorm}`;
+          salesByProductKey.set(nameKey, (salesByProductKey.get(nameKey) || 0) + qty);
+        }
+      }
+    }
+
+    const catalogResults: TopSellingProduct[] = [];
+    const seenProductKeys = new Set<string>();
+
+    for (const prod of globalStore.products) {
+      const tenant = prod.tenantId ? tenantByIdOrSlug.get(prod.tenantId) : undefined;
+      if (!tenant) continue;
+      const dedupKey = `${tenant.id}__${prod.id}`;
+      if (seenProductKeys.has(dedupKey)) continue;
+      seenProductKeys.add(dedupKey);
+
+      const directSold = salesByProductKey.get(dedupKey) || 0;
+      const byNameSold = salesByProductKey.get(`${tenant.id}__name__${(prod.name || "").trim().toLowerCase()}`) || 0;
+      const totalSold = Math.max(directSold, byNameSold);
+      const loc = (tenant.localidade || tenant.location || "Gargaú").trim() || "Gargaú";
+
+      catalogResults.push({
+        id: `mp-${tenant.id}-${prod.id}`,
+        productId: prod.id,
+        name: prod.name,
+        price: Number(prod.price) || 0,
+        image: prod.image || "",
+        description: prod.description || "",
+        category: prod.category || "lanches",
+        available: prod.available !== false,
+        options: prod.options || [],
+        addonGroupIds: prod.addonGroupIds || [],
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        tenantSlug: tenant.slug,
+        tenantLogo: tenant.logo || "🍔",
+        tenantPrimaryColor: tenant.primaryColor || "#E63946",
+        tenantIsOpen: tenant.isOpen !== false,
+        tenantDeliveryFee: Number(tenant.deliveryFee) || 0,
+        tenantDeliveryTime: tenant.deliveryTime || "30-45 min",
+        location: loc,
+        localidade: loc,
+        totalSold,
+      });
+    }
+
+    catalogResults.sort((a, b) => {
+      if (b.totalSold !== a.totalSold) {
+        return b.totalSold - a.totalSold;
+      }
+      const tA = tenantByIdOrSlug.get(a.tenantId);
+      const tB = tenantByIdOrSlug.get(b.tenantId);
+      const featA = tA?.isFeatured ? 1 : 0;
+      const featB = tB?.isFeatured ? 1 : 0;
+      if (featB !== featA) return featB - featA;
+      const priA = tA?.priorityOrder || 0;
+      const priB = tB?.priorityOrder || 0;
+      if (priB !== priA) return priB - priA;
+      return a.name.localeCompare(b.name, "pt-BR");
+    });
+
+    return catalogResults.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+    }));
   }
 
   // ==========================================

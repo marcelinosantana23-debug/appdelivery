@@ -5,6 +5,7 @@ import { EstablishmentCategories } from "./EstablishmentCategories";
 import {
   matchStoreCategory,
   matchStoreSearch,
+  scoreProductSearchMatch,
   extractDynamicCategories,
   slugifyCategory,
   doesCategoryMatch,
@@ -16,10 +17,11 @@ import { CategoryStoreSection } from "./CategoryStoreSection";
 import { StoreCard } from "./StoreCard";
 import { PortalStoriesBar } from "./PortalStoriesBar";
 import { PortalCarouselSkeleton, PortalStoreListSkeleton } from "./PortalSkeleton";
-import type { EstablishmentCategory, Tenant } from "@/types";
-import { Store, SearchX, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
+import type { EstablishmentCategory, Tenant, TopSellingProduct, Product } from "@/types";
+import { Store, SearchX, Search, X, ChevronLeft, ChevronRight, Flame, ShoppingBag, ArrowRight, UtensilsCrossed } from "lucide-react";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { PullToRefresh } from "@/components/common/PullToRefresh";
+import { getSafeDisplayName, getSafeSlug, isImageLogoUrl, formatCurrency } from "@/utils/storeFormat";
 
 interface TopFoodPortalProps {
   onSelectStore: (slug: string) => void;
@@ -36,6 +38,7 @@ export function TopFoodPortal({
     tenants,
     featuredStoresRanked,
     topSellingProducts,
+    marketplaceCatalog,
     establishmentCategories,
     selectedLocality,
     isLoadingTenants,
@@ -43,10 +46,13 @@ export function TopFoodPortal({
     resetToPortalTheme,
     platformSettings,
     refreshTenants,
+    refreshMarketplaceCatalog,
     refreshEstablishmentCategories,
     refreshLocalities,
     refreshPlatformSettings,
     refreshActiveStories,
+    addToCart,
+    showToast,
   } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -54,6 +60,7 @@ export function TopFoodPortal({
   const handlePortalPullRefresh = async () => {
     await Promise.all([
       refreshTenants(),
+      refreshMarketplaceCatalog(),
       refreshEstablishmentCategories(),
       refreshLocalities(),
       refreshPlatformSettings(),
@@ -142,6 +149,112 @@ export function TopFoodPortal({
     return extractDynamicCategories(lojas, establishmentCategories || []);
   }, [lojas, establishmentCategories]);
 
+  // Lojas filtradas pela categoria selecionada no topo
+  const categoryFilteredStores = useMemo(() => {
+    if (!selectedCategory || selectedCategory === "todos") {
+      return lojas;
+    }
+    return lojas.filter((tenant) => {
+      const matched = matchStoreCategory(tenant, dynamicCategories);
+      return doesCategoryMatch(matched, selectedCategory, tenant.businessType);
+    });
+  }, [lojas, selectedCategory, dynamicCategories]);
+
+  // Catálogo unificado de produtos de todas as lojas ativas (da API de catálogo + mais vendidos), filtrado por localidade e categoria
+  const unifiedCatalogProducts = useMemo<TopSellingProduct[]>(() => {
+    const activeTenantsById = new Map<string, Tenant>();
+    const activeTenantsBySlug = new Map<string, Tenant>();
+    categoryFilteredStores.forEach((t) => {
+      if (t.id) activeTenantsById.set(t.id, t);
+      if (t.slug) activeTenantsBySlug.set(t.slug.toLowerCase(), t);
+    });
+
+    const map = new Map<string, TopSellingProduct>();
+
+    const sourceList = [
+      ...(marketplaceCatalog || []),
+      ...(topSellingProducts || []),
+    ];
+
+    sourceList.forEach((item) => {
+      if (!item || item.available === false) return;
+      const store =
+        activeTenantsById.get(item.tenantId) ||
+        (item.tenantSlug ? activeTenantsBySlug.get(item.tenantSlug.toLowerCase()) : undefined);
+
+      if (!store) return;
+
+      const key = `${store.id || store.slug}_${item.productId || item.id || item.name.toLowerCase()}`;
+      const existing = map.get(key);
+      if (!existing || (item.totalSold || 0) > (existing.totalSold || 0)) {
+        map.set(key, {
+          ...item,
+          tenantId: store.id || item.tenantId,
+          tenantName: store.name || item.tenantName,
+          tenantSlug: store.slug || item.tenantSlug,
+          tenantLogo: store.logo || item.tenantLogo,
+          tenantPrimaryColor: store.primaryColor || item.tenantPrimaryColor,
+          tenantIsOpen: store.isOpen !== undefined ? store.isOpen : item.tenantIsOpen,
+          deliveryTime: store.deliveryTime || item.deliveryTime,
+          deliveryFee: store.deliveryFee !== undefined ? store.deliveryFee : item.deliveryFee,
+          location: store.location || store.localidade || item.location,
+          localidade: store.localidade || store.location || item.localidade,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [marketplaceCatalog, topSellingProducts, categoryFilteredStores]);
+
+  // 1. FILTRAGEM PRECISA DE ITENS E ORDENAÇÃO POR MAIS PEDIDOS:
+  // Varre o nome/categoria/descrição real dos produtos e ordena priorizando os itens mais vendidos (Mais Pedidos) no topo
+  const matchingProducts = useMemo<TopSellingProduct[]>(() => {
+    const q = searchQuery.trim();
+    if (!q) return [];
+
+    const scored: { product: TopSellingProduct; matchScore: number }[] = [];
+
+    unifiedCatalogProducts.forEach((prod) => {
+      const score = scoreProductSearchMatch(prod, q);
+      if (score > 0) {
+        scored.push({ product: prod, matchScore: score });
+      }
+    });
+
+    scored.sort((a, b) => {
+      // Prioriza correspondência no nome do produto (ex: "X Tudo" no nome antes de apenas na descrição)
+      const aNameMatch = a.matchScore >= 650 ? 1 : 0;
+      const bNameMatch = b.matchScore >= 650 ? 1 : 0;
+      if (aNameMatch !== bNameMatch) return bNameMatch - aNameMatch;
+
+      // Ordena de forma decrescente pelos Mais Pedidos (totalSold / vendas reais)
+      const aSold = a.product.totalSold || 0;
+      const bSold = b.product.totalSold || 0;
+      if (bSold !== aSold) return bSold - aSold;
+
+      // Em seguida, itens marcados como populares no cardápio
+      const aPop = a.product.popular ? 1 : 0;
+      const bPop = b.product.popular ? 1 : 0;
+      if (bPop !== aPop) return bPop - aPop;
+
+      // Por fim, maior score de precisão textual
+      return b.matchScore - a.matchScore;
+    });
+
+    return scored.map((s) => s.product);
+  }, [unifiedCatalogProducts, searchQuery]);
+
+  // Conjunto de lojas que possuem itens correspondentes ao termo pesquisado
+  const storeIdsWithMatchingProducts = useMemo(() => {
+    const ids = new Set<string>();
+    const slugs = new Set<string>();
+    matchingProducts.forEach((p) => {
+      if (p.tenantId) ids.add(p.tenantId);
+      if (p.tenantSlug) slugs.add(p.tenantSlug.toLowerCase());
+    });
+    return { ids, slugs };
+  }, [matchingProducts]);
+
   // 2. Agrupamento completo de todas as categorias e todas as 20 lojas (sem ocultar nenhuma loja)
   const groupedTenants = useMemo(() => {
     const groupsMap = new Map<string, { category: EstablishmentCategory; stores: Tenant[] }>();
@@ -153,7 +266,11 @@ export function TopFoodPortal({
 
     // Mapeia e agrupa CADA UMA das 20 lojas na sua respectiva categoria
     lojas.forEach((tenant) => {
-      if (searchQuery.trim() && !matchStoreSearch(tenant, searchQuery, dynamicCategories)) {
+      const hasProd =
+        storeIdsWithMatchingProducts.ids.has(tenant.id) ||
+        (tenant.slug ? storeIdsWithMatchingProducts.slugs.has(tenant.slug.toLowerCase()) : false);
+
+      if (searchQuery.trim() && !matchStoreSearch(tenant, searchQuery, dynamicCategories, hasProd)) {
         return;
       }
 
@@ -178,18 +295,7 @@ export function TopFoodPortal({
     });
 
     return Array.from(groupsMap.values()).filter((g) => g.stores.length > 0);
-  }, [dynamicCategories, lojas, searchQuery]);
-
-  // Lojas filtradas pela categoria selecionada no topo
-  const categoryFilteredStores = useMemo(() => {
-    if (!selectedCategory || selectedCategory === "todos") {
-      return lojas;
-    }
-    return lojas.filter((tenant) => {
-      const matched = matchStoreCategory(tenant, dynamicCategories);
-      return doesCategoryMatch(matched, selectedCategory, tenant.businessType);
-    });
-  }, [lojas, selectedCategory, dynamicCategories]);
+  }, [dynamicCategories, lojas, searchQuery, storeIdsWithMatchingProducts]);
 
   // Se a categoria selecionada ficar vazia (0 lojas) após uma alteração de categoria no SuperAdmin,
   // volta automaticamente para "todos" para nunca exibir uma categoria vazia.
@@ -204,13 +310,105 @@ export function TopFoodPortal({
     }
   }, [selectedCategory, lojas.length, categoryFilteredStores.length]);
 
-  // Lojas filtradas pela busca global (nome, categoria ou culinária) e pela categoria selecionada
+  // Lojas filtradas pela busca global: exibe APENAS estabelecimentos que vendem o item pesquisado
+  // ou cujo próprio nome/categoria corresponda exatamente ao termo pesquisado (evitando cafeterias sem o item),
+  // ordenadas pela popularidade/vendas dos produtos encontrados
   const matchingStores = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    return categoryFilteredStores.filter((tenant) =>
-      matchStoreSearch(tenant, searchQuery, dynamicCategories)
-    );
-  }, [categoryFilteredStores, searchQuery, dynamicCategories]);
+
+    // Mapa do maior volume de vendas do item pesquisado por loja para ordenar as lojas mais relevantes no topo
+    const storeBestSales = new Map<string, number>();
+    matchingProducts.forEach((p) => {
+      const key = p.tenantId || p.tenantSlug;
+      const currentBest = storeBestSales.get(key) || 0;
+      if ((p.totalSold || 0) >= currentBest) {
+        storeBestSales.set(key, p.totalSold || 0);
+      }
+    });
+
+    return categoryFilteredStores
+      .filter((tenant) => {
+        const hasProd =
+          storeIdsWithMatchingProducts.ids.has(tenant.id) ||
+          (tenant.slug ? storeIdsWithMatchingProducts.slugs.has(tenant.slug.toLowerCase()) : false);
+        return matchStoreSearch(tenant, searchQuery, dynamicCategories, hasProd);
+      })
+      .sort((a, b) => {
+        const aHasProd =
+          storeIdsWithMatchingProducts.ids.has(a.id) ||
+          (a.slug ? storeIdsWithMatchingProducts.slugs.has(a.slug.toLowerCase()) : false)
+            ? 1
+            : 0;
+        const bHasProd =
+          storeIdsWithMatchingProducts.ids.has(b.id) ||
+          (b.slug ? storeIdsWithMatchingProducts.slugs.has(b.slug.toLowerCase()) : false)
+            ? 1
+            : 0;
+        if (bHasProd !== aHasProd) return bHasProd - aHasProd;
+
+        const aSales = storeBestSales.get(a.id) ?? storeBestSales.get(a.slug) ?? 0;
+        const bSales = storeBestSales.get(b.id) ?? storeBestSales.get(b.slug) ?? 0;
+        if (bSales !== aSales) return bSales - aSales;
+
+        return (b.completedOrdersCount || 0) - (a.completedOrdersCount || 0);
+      });
+  }, [categoryFilteredStores, searchQuery, dynamicCategories, storeIdsWithMatchingProducts, matchingProducts]);
+
+  // Handler para clicar em "Pedir / Adicionar" ou abrir o item direto na lanchonete
+  const handleSelectSearchResultProduct = (item: TopSellingProduct, addDirectly: boolean = false) => {
+    const slug = getSafeSlug(item.tenantSlug, item.tenantId);
+    if (!slug) return;
+
+    if (addDirectly) {
+      const productToAdd: Product = {
+        id: item.productId || item.id,
+        tenantId: item.tenantId,
+        name: item.name,
+        description: item.description || "",
+        price: item.price,
+        image: item.image || "",
+        category: item.category || "lanches",
+        available: true,
+        popular: item.popular,
+        options: item.options || [],
+        addonGroupIds: item.addonGroupIds || [],
+      };
+
+      // Salva no carrinho da loja de destino antes de navegar para que o item já esteja no carrinho ao abrir a loja
+      try {
+        const cartKey = `topfood_cart_${slug.toLowerCase()}`;
+        const existingRaw = localStorage.getItem(cartKey);
+        const existingCart = existingRaw ? JSON.parse(existingRaw) : [];
+        const safeCart = Array.isArray(existingCart) ? existingCart : [];
+        const existingIdx = safeCart.findIndex(
+          (ci: any) => ci?.product?.id === productToAdd.id && (!ci.selectedOptions || ci.selectedOptions.length === 0)
+        );
+        if (existingIdx >= 0) {
+          safeCart[existingIdx].quantity = (safeCart[existingIdx].quantity || 1) + 1;
+        } else {
+          safeCart.push({
+            id: `${productToAdd.id}-${Date.now()}`,
+            product: productToAdd,
+            quantity: 1,
+            selectedOptions: [],
+            notes: "",
+          });
+        }
+        const serialized = JSON.stringify(safeCart);
+        localStorage.setItem(cartKey, serialized);
+        sessionStorage.setItem(cartKey, serialized);
+        localStorage.setItem("topfood_cart_items", serialized);
+        sessionStorage.setItem("topfood_cart_items", serialized);
+      } catch {
+        // fallback
+        addToCart(productToAdd, 1, [], "");
+      }
+
+      showToast(`"${item.name}" adicionado ao carrinho de ${getSafeDisplayName(item.tenantName, "Lanchonete")}!`, "success");
+    }
+
+    onSelectStore(slug);
+  };
 
   // Filtra as seções exibidas caso o usuário tenha clicado em uma categoria específica no topo
   const displayedGroups = useMemo(() => {
@@ -376,9 +574,9 @@ export function TopFoodPortal({
 
         {/* MODO 1: RESULTADOS DA BUSCA GLOBAL ATIVA */}
         {searchQuery.trim() ? (
-          <div className="mt-4 sm:mt-6">
+          <div className="mt-4 sm:mt-6 space-y-8">
             {/* Banner Informativo de Status da Busca */}
-            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 dark:bg-amber-500/5 p-4 sm:p-5 mb-6 shadow-xs">
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 dark:bg-amber-500/5 p-4 sm:p-5 shadow-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
@@ -386,12 +584,14 @@ export function TopFoodPortal({
                   </div>
                   <div>
                     <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
-                      <span>Resultados da busca:</span>
+                      <span>Resultados para:</span>
                       <span className="text-amber-600 dark:text-amber-400 font-extrabold">&ldquo;{searchQuery}&rdquo;</span>
                     </h2>
                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                      {matchingStores.length}{" "}
-                      {matchingStores.length === 1 ? "loja encontrada" : "lojas encontradas"} por nome, categoria ou tipo de culinária
+                      {matchingProducts.length}{" "}
+                      {matchingProducts.length === 1 ? "item encontrado no cardápio" : "itens encontrados nos cardápios"}{" "}
+                      • {matchingStores.length}{" "}
+                      {matchingStores.length === 1 ? "estabelecimento" : "estabelecimentos"}
                       {selectedCategory !== "todos" && ` na categoria "${activeCategoryObj?.name || selectedCategory}"`}
                     </p>
                   </div>
@@ -413,37 +613,233 @@ export function TopFoodPortal({
               </div>
             </div>
 
-            {/* Grid de Lojas Correspondentes */}
-            {matchingStores.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {matchingStores.map((tenant) => (
-                  <StoreCard
-                    key={tenant.id || tenant.slug}
-                    tenant={tenant}
-                    variant="grid"
-                    onSelectStore={onSelectStore}
-                  />
-                ))}
-              </div>
+            {matchingProducts.length > 0 || matchingStores.length > 0 ? (
+              <>
+                {/* SEÇÃO 1: PRODUTOS / LANCHES ENCONTRADOS (ORDENADOS PELOS MAIS PEDIDOS) */}
+                {matchingProducts.length > 0 && (
+                  <section>
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/10 dark:bg-orange-500/20 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-orange-600 dark:text-orange-400 border border-orange-500/20">
+                            <Flame className="h-3 w-3 fill-orange-500 text-orange-500" />
+                            Ordenado por Mais Pedidos
+                          </span>
+                          <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-1.5">
+                            <UtensilsCrossed className="h-4 w-4 text-primary" />
+                            <span>Itens encontrados nos cardápios ({matchingProducts.length})</span>
+                          </h3>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          Clique no item para abrir a lanchonete ou adicione direto ao carrinho
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {matchingProducts.map((item, idx) => {
+                        const storeName = getSafeDisplayName(item.tenantName, "Lanchonete");
+                        const logoIsImg = isImageLogoUrl(item.tenantLogo);
+                        const isTopSeller = (item.totalSold || 0) > 0 || item.popular;
+                        const isOpen = item.tenantIsOpen !== false;
+
+                        return (
+                          <div
+                            key={`${item.id}-${idx}`}
+                            onClick={() => handleSelectSearchResultProduct(item, false)}
+                            className="group relative flex flex-col justify-between rounded-2xl border border-gray-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 shadow-xs hover:shadow-md hover:border-primary/40 dark:hover:border-primary/40 transition-all cursor-pointer overflow-hidden"
+                          >
+                            {/* Linha Superior: Dados do Produto + Imagem */}
+                            <div className="flex items-start gap-3.5">
+                              {/* Foto do Produto */}
+                              <div className="relative h-24 w-24 shrink-0 rounded-xl overflow-hidden bg-gray-100 dark:bg-slate-800 border border-gray-100 dark:border-slate-800">
+                                {item.image ? (
+                                  <img
+                                    src={item.image}
+                                    alt={item.name}
+                                    loading="lazy"
+                                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-2xl">
+                                    🍔
+                                  </div>
+                                )}
+
+                                {/* Badge Ranking / Mais Pedido */}
+                                {idx < 3 && isTopSeller && (
+                                  <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-0.5 rounded-md bg-gradient-to-r from-orange-600 to-amber-500 px-1.5 py-0.5 text-[10px] font-black text-white shadow-xs">
+                                    🔥 #{idx + 1}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Detalhes do Produto */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <h4 className="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white group-hover:text-primary transition-colors line-clamp-1">
+                                    {item.name}
+                                  </h4>
+                                </div>
+
+                                {item.description && (
+                                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
+                                    {item.description}
+                                  </p>
+                                )}
+
+                                {/* Badges de Popularidade e Preço */}
+                                <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+                                  <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                                    {formatCurrency(item.price)}
+                                  </span>
+
+                                  <div className="flex items-center gap-1.5">
+                                    {(item.totalSold || 0) > 0 ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/10 dark:bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-600 dark:text-orange-400 border border-orange-500/20">
+                                        <Flame className="h-3 w-3 fill-orange-500 text-orange-500" />
+                                        {item.totalSold} {item.totalSold === 1 ? "pedido" : "pedidos"}
+                                      </span>
+                                    ) : item.popular ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 dark:bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                        ⭐ Mais Pedido
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Rodapé do Card: Lanchonete onde é vendido + Botões de Ação */}
+                            <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                              {/* Identificação da Lanchonete */}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-xs"
+                                  style={
+                                    item.tenantPrimaryColor
+                                      ? { borderColor: `${item.tenantPrimaryColor}40` }
+                                      : undefined
+                                  }
+                                >
+                                  {logoIsImg ? (
+                                    <img
+                                      src={item.tenantLogo}
+                                      alt={storeName}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <span>{item.tenantLogo || "🏪"}</span>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                                      {storeName}
+                                    </span>
+                                    <span
+                                      className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+                                        isOpen ? "bg-emerald-500" : "bg-red-500"
+                                      }`}
+                                      title={isOpen ? "Aberta agora" : "Fechada"}
+                                    />
+                                  </div>
+                                  <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                                    {item.deliveryTime || "30-45 min"} •{" "}
+                                    {item.deliveryFee === 0
+                                      ? "Entrega grátis"
+                                      : item.deliveryFee
+                                      ? `Entrega ${formatCurrency(item.deliveryFee)}`
+                                      : "Ver loja"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Botões: Adicionar ao Carrinho ou Ir para Loja */}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectSearchResultProduct(item, true);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-xl bg-primary hover:bg-primary-dark px-2.5 py-1.5 text-[11px] font-bold text-white shadow-2xs transition cursor-pointer"
+                                  title={`Adicionar ${item.name} ao carrinho e abrir ${storeName}`}
+                                >
+                                  <ShoppingBag className="h-3.5 w-3.5" />
+                                  <span>Adicionar</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectSearchResultProduct(item, false);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 dark:text-gray-200 transition cursor-pointer"
+                                  title={`Abrir cardápio de ${storeName}`}
+                                >
+                                  <span>Ver loja</span>
+                                  <ArrowRight className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {/* SEÇÃO 2: ESTABELECIMENTOS QUE POSSUEM O ITEM OU CORRESPONDEM À BUSCA */}
+                {matchingStores.length > 0 && (
+                  <section>
+                    <div className="flex items-center justify-between gap-2 mb-3.5">
+                      <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <Store className="h-5 w-5 text-primary shrink-0" />
+                        <span>
+                          Estabelecimentos com &ldquo;{searchQuery}&rdquo; ({matchingStores.length})
+                        </span>
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {matchingStores.map((tenant) => (
+                        <StoreCard
+                          key={tenant.id || tenant.slug}
+                          tenant={tenant}
+                          variant="grid"
+                          onSelectStore={onSelectStore}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
             ) : (
               <div className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 sm:p-10 text-center shadow-xs">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500 mb-3.5 border border-amber-500/20">
                   <SearchX className="h-7 w-7" />
                 </div>
                 <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                  Nenhuma loja encontrada para &ldquo;{searchQuery}&rdquo;
+                  Nenhum produto ou loja encontrado para &ldquo;{searchQuery}&rdquo;
                 </h3>
                 <p className="mt-1.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto leading-relaxed">
-                  Não encontramos estabelecimentos correspondentes a essa pesquisa. Tente buscar por outro nome, categoria ou culinária como <strong className="text-gray-700 dark:text-gray-300">&ldquo;burger&rdquo;</strong>, <strong className="text-gray-700 dark:text-gray-300">&ldquo;pizza&rdquo;</strong>, <strong className="text-gray-700 dark:text-gray-300">&ldquo;açaí&rdquo;</strong> ou <strong className="text-gray-700 dark:text-gray-300">&ldquo;japonesa&rdquo;</strong>.
+                  Não encontramos lanches ou estabelecimentos com esse termo nos cardápios. Tente pesquisar por <strong className="text-gray-700 dark:text-gray-300">&ldquo;X-Tudo&rdquo;</strong>, <strong className="text-gray-700 dark:text-gray-300">&ldquo;Smash&rdquo;</strong>, <strong className="text-gray-700 dark:text-gray-300">&ldquo;Pizza&rdquo;</strong> ou <strong className="text-gray-700 dark:text-gray-300">&ldquo;Açaí&rdquo;</strong>.
                 </p>
 
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setSearchQuery("Burger")}
+                    onClick={() => setSearchQuery("X-Tudo")}
                     className="rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition cursor-pointer"
                   >
-                    🍔 Hambúrgueres
+                    🍔 X-Tudo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("Smash")}
+                    className="rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    🥓 Smash Burger
                   </button>
                   <button
                     type="button"

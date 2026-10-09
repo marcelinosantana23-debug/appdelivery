@@ -2052,6 +2052,31 @@ api.get("/api/mais-pedidos", handleGetPopularProducts);
 api.get("/products/popular", handleGetPopularProducts);
 api.get("/api/products/popular", handleGetPopularProducts);
 
+// Endpoint de Catálogo Global de Produtos com Vendas (para Busca Global de Lanches e Estabelecimentos)
+const handleGetAllMarketplaceProducts = async (c: any) => {
+  try {
+    c.header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    const db = getDb(c);
+    const locationParam = c.req.query("location") || c.req.query("localidade") || undefined;
+    const rawProducts = await db.getAllMarketplaceProductsWithSales(locationParam);
+    const products = rawProducts.map((p) => {
+      const loc = (p.location || p.localidade || "Gargaú").trim() || "Gargaú";
+      return { ...p, location: loc, localidade: loc };
+    });
+    return c.json({ success: true, products }, 200);
+  } catch (err: any) {
+    return c.json(
+      { success: false, products: [], error: err.message || "Erro ao consultar catálogo global de produtos" },
+      500
+    );
+  }
+};
+
+api.get("/products/catalog", handleGetAllMarketplaceProducts);
+api.get("/api/products/catalog", handleGetAllMarketplaceProducts);
+api.get("/products/search", handleGetAllMarketplaceProducts);
+api.get("/api/products/search", handleGetAllMarketplaceProducts);
+
 api.get("/tenants/:slugOrId/credentials", async (c) => {
   try {
     const db = getDb(c);

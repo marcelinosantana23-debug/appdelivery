@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import {
   Check,
   X,
@@ -7,6 +7,7 @@ import {
   Package,
   CheckCircle2,
   Clock,
+  Calendar,
   Phone,
   MapPin,
   ShoppingBag,
@@ -28,7 +29,14 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
-import { formatPrice, getMotoboyWhatsAppUrl, buildMotoboyWhatsAppMessage } from "@/utils/order";
+import {
+  formatPrice,
+  getMotoboyWhatsAppUrl,
+  buildMotoboyWhatsAppMessage,
+  formatRelativeOrderTime,
+  formatOrderExactDateTime,
+  groupOrdersByTemporalBlock,
+} from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
 
 const statusFlow: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }>; color: string }[] = [
@@ -63,9 +71,24 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const pendingOrdersCount = orders.filter((o) => o.status === "received").length;
   const allOrdersCount = orders.length;
 
-  const filtered = filter === "active"
-    ? orders.filter((o) => o.status !== "done" && o.status !== "cancelled")
-    : orders;
+  // Ordenação determinística do pedido mais recente para o mais antigo
+  const filtered = useMemo(() => {
+    const base =
+      filter === "active"
+        ? orders.filter((o) => o.status !== "done" && o.status !== "cancelled")
+        : orders;
+
+    return [...base].sort((a, b) => {
+      const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt || 0).getTime();
+      const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [orders, filter]);
+
+  // Agrupamento em blocos temporais (Pedidos de Hoje, Ontem, Semana Passada, Meses Anteriores)
+  const temporalGroups = useMemo(() => {
+    return groupOrdersByTemporalBlock(filtered);
+  }, [filtered]);
 
   const handleFilterChange = (newFilter: "active" | "all") => {
     setFilter(newFilter);
@@ -244,6 +267,50 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
                 : "O histórico completo de pedidos aparecerá aqui"}
             </p>
           </div>
+        ) : filter === "all" ? (
+          <div className="space-y-6">
+            {temporalGroups.map((group) => (
+              <section key={group.id} className="space-y-3">
+                {/* Cabeçalho do Bloco Temporal */}
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 shadow-2xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700 border border-slate-200/80">
+                      <Calendar className="h-4 w-4 text-slate-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate">
+                        {group.title}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {group.subtitle}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-extrabold ${group.badgeColor}`}
+                  >
+                    {group.orders.length} {group.orders.length === 1 ? "pedido" : "pedidos"}
+                  </span>
+                </div>
+
+                {/* Lista de Pedidos do Bloco */}
+                <div className="space-y-3">
+                  {group.orders.map((order) => (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      isNew={newOrderIds.includes(order.id)}
+                      onView={() => clearNewOrderFlag(order.id)}
+                      onAdvance={(id) => updateOrderStatus(id, nextStatusMap[order.status])}
+                      onCancel={(id) => updateOrderStatus(id, "cancelled")}
+                      onViewReceipt={(order) => setViewingReceiptOrder(order)}
+                      onOpenMotoboy={(order) => setMotoboyModalOrder(order)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         ) : (
           filtered.map((order) => (
             <OrderCard
@@ -334,7 +401,8 @@ function OrderCard({
     showToast(`Enviando pedido ${order.id} direto para ${motoboyDisplayName} no WhatsApp...`, "success");
   };
 
-  const timeAgo = Math.floor((Date.now() - order.createdAt) / 60000);
+  const relativeTimeLabel = formatRelativeOrderTime(order.createdAt);
+  const exactDateTimeLabel = formatOrderExactDateTime(order.createdAt);
 
   const getAdvanceButtonLabel = () => {
     if (order.status === "received") {
@@ -359,17 +427,25 @@ function OrderCard({
       }`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <span className="font-bold text-gray-800">{order.id}</span>
           {isNew && (
             <span className="animate-pulse rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
               NOVO
             </span>
           )}
-          <span className="flex items-center gap-1 text-xs text-gray-400">
-            <Clock className="h-3 w-3" />
-            {timeAgo === 0 ? "Agora" : `Há ${timeAgo} min`}
+          <span
+            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
+            title={exactDateTimeLabel ? `Criado em ${exactDateTimeLabel}` : undefined}
+          >
+            <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+            <span>{relativeTimeLabel}</span>
+            {exactDateTimeLabel && (
+              <span className="hidden sm:inline text-[11px] text-slate-400 font-normal">
+                • {exactDateTimeLabel}
+              </span>
+            )}
           </span>
         </div>
         {statusInfo && (

@@ -5,6 +5,7 @@ import { LocalitySelector } from "@/components/portal/LocalitySelector";
 import { useStore } from "@/context/StoreContext";
 
 const POPULAR_SEARCH_CHIPS = [
+  { label: "X-Tudo", icon: "🍔", term: "X-Tudo", categoryId: "" },
   { label: "Hambúrgueres", icon: "🍔", term: "Hambúrguer", categoryId: "hamburgueres" },
   { label: "Pizzarias", icon: "🍕", term: "Pizza", categoryId: "pizzarias" },
   { label: "Açaí", icon: "🍧", term: "Açaí", categoryId: "acaiterias" },
@@ -236,7 +237,7 @@ export function PortalHeader({
                     onSearchChange("");
                   }
                 }}
-                placeholder="Buscar lojas ou pratos..."
+                placeholder="Buscar lanches (ex: X-Tudo) ou lojas..."
                 className="sm:hidden w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/90 pl-9 pr-8 py-2 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all shadow-sm focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/20"
               />
               {/* Input Desktop/Tablet com placeholder completo */}
@@ -250,7 +251,7 @@ export function PortalHeader({
                     onSearchChange("");
                   }
                 }}
-                placeholder="Buscar lojas por nome, categoria ou culinária (ex: burger, pizza, açaí, japonesa)..."
+                placeholder="Busque por lanche (ex: X-Tudo, Smash), pizza, açaí ou nome da loja..."
                 className="hidden sm:block w-full rounded-2xl border border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/90 pl-10 pr-10 py-2.5 sm:py-3 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all shadow-sm focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/20"
               />
               {searchQuery && (
@@ -286,14 +287,16 @@ export function PortalHeader({
             <div className="flex items-center gap-1.5 shrink-0">
               {POPULAR_SEARCH_CHIPS.map((chip) => {
                 const isSelected =
-                  (onSelectCategory && selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) ||
+                  (Boolean(chip.categoryId) &&
+                    onSelectCategory &&
+                    selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) ||
                   searchQuery.toLowerCase().trim() === chip.term.toLowerCase();
                 return (
                   <button
                     key={chip.term}
                     type="button"
                     onClick={() => {
-                      if (onSelectCategory) {
+                      if (chip.categoryId && onSelectCategory) {
                         onSearchChange("");
                         if (selectedCategory.toLowerCase() === chip.categoryId.toLowerCase()) {
                           onSelectCategory("todos");
@@ -303,6 +306,7 @@ export function PortalHeader({
                       } else if (isSelected) {
                         onSearchChange("");
                       } else {
+                        if (onSelectCategory) onSelectCategory("todos");
                         onSearchChange(chip.term);
                       }
                     }}

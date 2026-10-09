@@ -256,7 +256,7 @@ export function matchStoreCategory(
 }
 
 /**
- * Normaliza textos para busca flexível, ignorando acentos, maiúsculas e pontuações
+ * Normaliza textos para busca flexível, ignorando acentos, maiúsculas, hifens e pontuações
  */
 export function normalizeSearchText(text?: string): string {
   if (!text) return "";
@@ -264,19 +264,111 @@ export function normalizeSearchText(text?: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[-_/.,()]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 /**
- * Filtra estabelecimentos por nome da loja, categoria ou tipo de culinária
+ * Verifica se um produto do cardápio corresponde exatamente aos termos pesquisados
+ * (varrendo o nome do produto/lanche, categoria do item ou descrição).
+ * Retorna um score de relevância (0 = não corresponde, > 0 = corresponde, maior = mais relevante).
+ */
+export function scoreProductSearchMatch(
+  product: {
+    name?: string;
+    description?: string;
+    category?: string;
+    popular?: boolean;
+    totalSold?: number;
+  },
+  rawQuery: string
+): number {
+  const query = normalizeSearchText(rawQuery);
+  if (!query) return 0;
+
+  const prodName = normalizeSearchText(product.name);
+  const prodCategory = normalizeSearchText(product.category);
+  const prodDesc = normalizeSearchText(product.description);
+
+  // Versão compacta sem espaços (ex: "xtudo" == "x tudo")
+  const compactQuery = query.replace(/\s+/g, "");
+  const compactName = prodName.replace(/\s+/g, "");
+
+  // 1. Correspondência exata ou frase exata no NOME do produto
+  if (prodName === query || (compactQuery.length >= 3 && compactName === compactQuery)) {
+    return 1000;
+  }
+  if (prodName.includes(query) || (compactQuery.length >= 3 && compactName.includes(compactQuery))) {
+    return 800;
+  }
+
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return 0;
+
+  // 2. Todos os termos presentes no NOME do produto
+  const allTokensInName = tokens.every((token) => {
+    if (token.length === 1) {
+      // Para letras isoladas como "x" em "x tudo", exige palavra isolada ou início de termo no nome
+      const words = prodName.split(/\s+/);
+      return words.includes(token) || words.some((w) => w.startsWith(token));
+    }
+    return prodName.includes(token);
+  });
+
+  if (allTokensInName) {
+    return 650;
+  }
+
+  // 3. Termos presentes na combinação Nome + Categoria do produto
+  const nameAndCat = `${prodName} ${prodCategory}`;
+  const allTokensInNameOrCat = tokens.every((token) => {
+    if (token.length === 1) {
+      const words = nameAndCat.split(/\s+/);
+      return words.includes(token);
+    }
+    return nameAndCat.includes(token);
+  });
+
+  if (allTokensInNameOrCat) {
+    return 400;
+  }
+
+  // 4. Termos presentes na combinação Nome + Descrição (apenas para termos com 3+ caracteres)
+  if (query.length >= 3) {
+    const fullProdPool = `${prodName} ${prodCategory} ${prodDesc}`;
+    const allTokensInPool = tokens.every((token) => {
+      if (token.length <= 2) {
+        const words = prodName.split(/\s+/);
+        return words.includes(token);
+      }
+      return fullProdPool.includes(token);
+    });
+    if (allTokensInPool) {
+      return 200;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Filtra estabelecimentos quando o usuário busca diretamente pelo nome da loja ou categoria,
+ * ou quando a loja possui produtos no cardápio que correspondem ao termo pesquisado.
+ * Evita que lojas sem o item (ex: cafeterias ao buscar "X Tudo") apareçam nos resultados.
  */
 export function matchStoreSearch(
   tenant: Tenant,
   rawQuery: string,
-  categories: EstablishmentCategory[] = DEFAULT_ESTABLISHMENT_CATEGORIES
+  categories: EstablishmentCategory[] = DEFAULT_ESTABLISHMENT_CATEGORIES,
+  storeHasMatchingProduct: boolean = false
 ): boolean {
   const query = normalizeSearchText(rawQuery);
   if (!query) return true;
+
+  if (storeHasMatchingProduct) {
+    return true;
+  }
 
   const matchedCat = matchStoreCategory(tenant, categories);
   const catName = normalizeSearchText(matchedCat?.name);
@@ -284,50 +376,23 @@ export function matchStoreSearch(
 
   const name = normalizeSearchText(tenant.name);
   const bType = normalizeSearchText(tenant.businessType);
-  const tagline = normalizeSearchText(tenant.tagline);
-  const announcement = normalizeSearchText(tenant.announcement);
-  const address = normalizeSearchText(tenant.address);
-  const localidade = normalizeSearchText(tenant.localidade);
   const slug = normalizeSearchText(tenant.slug);
 
-  // Palavras-chave semânticas por tipo de culinária
-  let cuisineKeywords = "";
-  const combined = `${bType} ${name} ${tagline} ${catName} ${catId}`;
+  // Busca direta apenas em Nome da Loja, Slug ou Categoria Oficial da Loja
+  // (Sem injetar palavras-chave genéricas como "x-tudo" em todas as lanchonetes/cafeterias)
+  const storeDirectPool = `${name} ${catName} ${catId} ${bType} ${slug}`;
+  const compactPool = storeDirectPool.replace(/\s+/g, "");
+  const compactQuery = query.replace(/\s+/g, "");
 
-  if (combined.includes("burger") || combined.includes("lanche") || combined.includes("hamburg")) {
-    cuisineKeywords += " hamburguer lanches artesanal burger smash batata frita combo americano x-tudo";
-  }
-  if (combined.includes("pizza")) {
-    cuisineKeywords += " pizzaria pizzas calzone forno a lenha italiana massa brotinho fatia";
-  }
-  if (combined.includes("acai")) {
-    cuisineKeywords += " acaiteria bowls tigela cupuacu sorvete frutas granola leite ninho smoothie vitamina";
-  }
-  if (combined.includes("japones") || combined.includes("sushi")) {
-    cuisineKeywords += " japonesa oriental sushi sashimi temaki yakisoba hot roll niguiri uramaki salmao";
-  }
-  if (combined.includes("sorvet") || combined.includes("gelat")) {
-    cuisineKeywords += " sorveteria gelato picole sundae milkshake sobremesas acai sobremesa cone taca";
-  }
-  if (combined.includes("churrasc") || combined.includes("carne")) {
-    cuisineKeywords += " churrascaria churrasco carnes espetinho picanha costela grelhados brasa maminha almoço";
-  }
-  if (combined.includes("marmit") || combined.includes("caseir")) {
-    cuisineKeywords += " marmitaria marmitex almoço comida caseira refeicao feijoada executivo prato feito comercial";
-  }
-  if (combined.includes("doce") || combined.includes("bolo") || combined.includes("confeit")) {
-    cuisineKeywords += " doceria confeitaria doces bolos tortas brigadeiro sobremesas chocolate gourmet cafe";
-  }
-  if (combined.includes("salgado") || combined.includes("coxinha") || combined.includes("pastel")) {
-    cuisineKeywords += " salgados pastel salgaderia coxinha kibe empada esfirra lanche fritos assados";
-  }
-  if (combined.includes("bebid") || combined.includes("cervej") || combined.includes("adega")) {
-    cuisineKeywords += " bebidas distribuidora adega cerveja chopp refrigerante sucos agua vinho destilados gelo";
+  if (storeDirectPool.includes(query) || (compactQuery.length >= 3 && compactPool.includes(compactQuery))) {
+    return true;
   }
 
-  const searchPool = `${name} ${catName} ${catId} ${bType} ${tagline} ${announcement} ${address} ${localidade} ${slug} ${cuisineKeywords}`;
-
-  // Suporte a múltiplos termos digitados pelo usuário (ex: "pizza artesanal" ou "burger batata")
   const tokens = query.split(/\s+/).filter(Boolean);
-  return tokens.every((token) => searchPool.includes(token));
+  return tokens.every((token) => {
+    if (token.length === 1) {
+      return storeDirectPool.split(/\s+/).includes(token);
+    }
+    return storeDirectPool.includes(token);
+  });
 }

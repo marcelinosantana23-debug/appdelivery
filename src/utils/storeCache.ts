@@ -17,6 +17,7 @@ export const CACHE_STORE_PREFIX = "cache_store_";
 const CACHE_KEY_TENANTS = "topfood_cache_tenants_v3";
 const CACHE_KEY_FEATURED = "topfood_cache_featured_v3";
 const CACHE_KEY_TOP_PRODUCTS = "topfood_cache_top_products_v3";
+const CACHE_KEY_CATALOG_PRODUCTS = "topfood_cache_catalog_products_v1";
 const CACHE_KEY_CATEGORIES = "topfood_cache_categories_v3";
 const CACHE_TIMESTAMP_KEY = "topfood_cache_updated_at_v3";
 
@@ -24,6 +25,7 @@ export interface CachedHomeData {
   tenants: Tenant[];
   featuredStoresRanked: FeaturedStoreRanked[];
   topSellingProducts: TopSellingProduct[];
+  marketplaceCatalog?: TopSellingProduct[];
   establishmentCategories: EstablishmentCategory[];
   localities: string[];
   platformSettings?: PlatformSettings;
@@ -55,6 +57,7 @@ export function loadCachedHomeData(): CachedHomeData | null {
           tenants: Array.isArray(parsed.tenants) ? parsed.tenants : [],
           featuredStoresRanked: Array.isArray(parsed.featuredStoresRanked) ? parsed.featuredStoresRanked : [],
           topSellingProducts: Array.isArray(parsed.topSellingProducts) ? parsed.topSellingProducts : [],
+          marketplaceCatalog: Array.isArray(parsed.marketplaceCatalog) ? parsed.marketplaceCatalog : [],
           establishmentCategories: Array.isArray(parsed.establishmentCategories) ? parsed.establishmentCategories : [],
           localities: Array.isArray(parsed.localities) ? parsed.localities : [],
           platformSettings: parsed.platformSettings || undefined,
@@ -82,6 +85,8 @@ export function saveCachedHomeData(partial: Partial<CachedHomeData>): void {
         partial.featuredStoresRanked ?? existing?.featuredStoresRanked ?? loadCachedFeaturedStores(),
       topSellingProducts:
         partial.topSellingProducts ?? existing?.topSellingProducts ?? loadCachedTopSellingProducts(),
+      marketplaceCatalog:
+        partial.marketplaceCatalog ?? existing?.marketplaceCatalog ?? loadCachedMarketplaceCatalog(),
       establishmentCategories:
         partial.establishmentCategories ?? existing?.establishmentCategories ?? loadCachedCategories(),
       localities: partial.localities ?? existing?.localities ?? [],
@@ -361,6 +366,42 @@ export function saveCachedTopSellingProducts(products: TopSellingProduct[]): voi
 
 export const loadCachedTopProducts = loadCachedTopSellingProducts;
 export const saveCachedTopProducts = saveCachedTopSellingProducts;
+
+/**
+ * Carrega catálogo global de produtos do marketplace salvo no cache local
+ */
+export function loadCachedMarketplaceCatalog(): TopSellingProduct[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_CATALOG_PRODUCTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+    const home = localStorage.getItem(CACHE_KEY_HOME_DATA);
+    if (home) {
+      const parsedHome = JSON.parse(home);
+      if (Array.isArray(parsedHome?.marketplaceCatalog) && parsedHome.marketplaceCatalog.length > 0) {
+        return parsedHome.marketplaceCatalog;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export function saveCachedMarketplaceCatalog(products: TopSellingProduct[]): void {
+  if (typeof window === "undefined" || !Array.isArray(products) || products.length === 0) return;
+  try {
+    localStorage.setItem(CACHE_KEY_CATALOG_PRODUCTS, JSON.stringify(products));
+    saveCachedHomeData({ marketplaceCatalog: products });
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * Carrega categorias do portal salvas no cache

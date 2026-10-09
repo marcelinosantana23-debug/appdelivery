@@ -10,6 +10,16 @@ export function isImageString(val?: string | null): boolean {
   );
 }
 
+export const isImageLogoUrl = isImageString;
+
+export function formatCurrency(value: number): string {
+  const safeVal = typeof value === "number" && !isNaN(value) ? value : 0;
+  return safeVal.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
 export function getSafeDisplayName(name?: string | null, fallback = "Lanchonete"): string {
   if (!name || typeof name !== "string") return fallback;
   const trimmed = name.trim();

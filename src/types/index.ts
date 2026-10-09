@@ -294,11 +294,18 @@ export interface TopSellingProduct {
   price: number;
   image?: string;
   description?: string;
+  category?: string;
+  available?: boolean;
+  options?: ProductOption[];
+  addonGroupIds?: string[];
   tenantId: string;
   tenantName: string;
   tenantSlug: string;
   tenantLogo?: string;
   tenantPrimaryColor?: string;
+  tenantIsOpen?: boolean;
+  tenantDeliveryFee?: number;
+  tenantDeliveryTime?: string;
   location?: string;
   localidade?: string;
   totalSold: number;

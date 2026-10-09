@@ -922,6 +922,28 @@ export async function fetchTopSellingProductsApi(
   }
 }
 
+export async function fetchMarketplaceCatalogApi(location?: string): Promise<{
+  success: boolean;
+  products?: TopSellingProduct[];
+  error?: string;
+}> {
+  try {
+    const timestamp = Date.now();
+    const locQuery =
+      location && location.trim() ? `&location=${encodeURIComponent(location.trim())}` : "";
+    const res = await fetch(`${BASE_URL}/products/catalog?_t=${timestamp}${locQuery}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 // ==========================================
 // STORE STORIES API (APENAS FOTOS - EXPIRAÇÃO 24H)
 // ==========================================

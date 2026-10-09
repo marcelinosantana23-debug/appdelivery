@@ -13,6 +13,8 @@ import {
   saveCachedFeaturedStores,
   loadCachedTopProducts,
   saveCachedTopProducts,
+  loadCachedMarketplaceCatalog,
+  saveCachedMarketplaceCatalog,
   loadCachedCategories,
   saveCachedCategories,
   haveTenantsChanged,
@@ -57,6 +59,7 @@ import {
   updateTenantFeaturedApi,
   fetchFeaturedStoresRankedApi,
   fetchTopSellingProductsApi,
+  fetchMarketplaceCatalogApi,
   fetchAllActiveStoriesApi,
   activateTenantSubscriptionApi,
   confirmTenantPaymentApi,
@@ -84,8 +87,10 @@ interface StoreContextValue {
   tenants: Tenant[];
   featuredStoresRanked: FeaturedStoreRanked[];
   topSellingProducts: TopSellingProduct[];
+  marketplaceCatalog: TopSellingProduct[];
   refreshFeaturedStoresRanked: () => Promise<void>;
   refreshTopSellingProducts: () => Promise<void>;
+  refreshMarketplaceCatalog: () => Promise<void>;
   currentTenant: Tenant | null;
   config: StoreConfig;
   updateConfig: (partial: Partial<StoreConfig>) => Promise<void>;
@@ -695,6 +700,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [topSellingProducts, setTopSellingProducts] = useState<TopSellingProduct[]>(
     () => (initialHomeCache?.topSellingProducts?.length ? initialHomeCache.topSellingProducts : loadCachedTopProducts())
   );
+  const [marketplaceCatalog, setMarketplaceCatalog] = useState<TopSellingProduct[]>(
+    () => (initialHomeCache?.marketplaceCatalog?.length ? initialHomeCache.marketplaceCatalog : loadCachedMarketplaceCatalog())
+  );
   const [isLoadingTenants, setIsLoadingTenants] = useState<boolean>(
     () => (initialHomeCache?.tenants?.length || loadCachedTenants().length) === 0
   );
@@ -782,6 +790,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [selectedLocality]
   );
 
+  const refreshMarketplaceCatalog = useCallback(
+    async (locationOverride?: string) => {
+      try {
+        const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
+        const res = await fetchMarketplaceCatalogApi(loc);
+        if (res.success && Array.isArray(res.products) && res.products.length > 0) {
+          setMarketplaceCatalog(res.products);
+          saveCachedMarketplaceCatalog(res.products);
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [selectedLocality]
+  );
+
   const refreshTenants = useCallback(
     async (locationOverride?: string) => {
       const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
@@ -801,10 +825,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setIsRevalidatingTenants(true);
 
       try {
-        const [tRes, fRes, pRes] = await Promise.all([
+        const [tRes, fRes, pRes, cRes] = await Promise.all([
           fetchTenantsApi(),
           fetchFeaturedStoresRankedApi(loc),
           fetchTopSellingProductsApi(10, 30, loc),
+          fetchMarketplaceCatalogApi(loc),
         ]);
 
         if (tRes.success && tRes.tenants) {
@@ -844,6 +869,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return prev;
           });
           if (isAllLoc) saveCachedTopProducts(pRes.products);
+        }
+
+        if (cRes.success && Array.isArray(cRes.products) && cRes.products.length > 0) {
+          setMarketplaceCatalog(cRes.products);
+          if (isAllLoc) saveCachedMarketplaceCatalog(cRes.products);
         }
       } catch (err) {
         console.warn("[StoreContext] Background revalidation failed, keeping local cache:", err);
@@ -3189,8 +3219,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         tenants,
         featuredStoresRanked,
         topSellingProducts,
+        marketplaceCatalog,
         refreshFeaturedStoresRanked,
         refreshTopSellingProducts,
+        refreshMarketplaceCatalog,
         currentTenant,
         config,
         updateConfig,
