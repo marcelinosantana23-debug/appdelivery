@@ -82,12 +82,17 @@ export function usePullToRefresh({
       }
     }
 
-    const minDuration = new Promise((resolve) => setTimeout(resolve, 550));
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const safetyTimeout = new Promise<void>((resolve) => {
+      timeoutId = setTimeout(resolve, 1200);
+    });
+
     try {
-      await Promise.all([Promise.resolve(onRefreshRef.current()), minDuration]);
+      await Promise.race([Promise.resolve(onRefreshRef.current()), safetyTimeout]);
     } catch (err) {
       console.warn("[PullToRefresh] Erro ao atualizar dados:", err);
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       pullDistanceRef.current = 0;
       setPullDistance(0);
       setIsRefreshing(false);
@@ -258,7 +263,7 @@ export function PullToRefresh({
 
   return (
     <div className="relative w-full">
-      {/* Indicador visual flutuante no topo (estilo nativo iFood / Instagram) */}
+      {/* Indicador visual flutuante no topo (apenas ícone circular centralizado, sem texto) */}
       <div
         aria-live="polite"
         aria-busy={isRefreshing}
@@ -267,15 +272,11 @@ export function PullToRefresh({
           transform: `translate3d(0, ${indicatorTranslateY}px, 0)`,
           opacity: isRefreshing ? 1 : Math.min(1, progress * 1.25),
           transition: isPulling
-            ? "opacity 100ms linear"
-            : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease-out",
+            ? "opacity 80ms linear"
+            : "transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease-out",
         }}
       >
-        <div
-          className={`mt-2.5 flex items-center gap-2 rounded-full bg-white dark:bg-slate-900 border border-gray-200/90 dark:border-slate-700/90 shadow-lg shadow-black/15 dark:shadow-black/40 backdrop-blur-md ${
-            isRefreshing ? "px-3.5 py-2" : "h-10 w-10 justify-center"
-          } transition-all duration-200`}
-        >
+        <div className="mt-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white dark:bg-slate-900 border border-gray-200/90 dark:border-slate-700/90 shadow-lg shadow-black/15 dark:shadow-black/40 backdrop-blur-md">
           <RefreshCw
             className={`h-5 w-5 text-primary shrink-0 ${
               isRefreshing ? "animate-spin" : ""
@@ -286,16 +287,12 @@ export function PullToRefresh({
                     transform: `rotate(${Math.round(progress * 320)}deg) scale(${
                       0.75 + progress * 0.25
                     })`,
-                    transition: isPulling ? "none" : "transform 250ms ease-out",
+                    transition: isPulling ? "none" : "transform 200ms ease-out",
                   }
                 : undefined
             }
           />
-          {isRefreshing ? (
-            <span className="text-xs font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap pr-0.5">
-              Atualizando...
-            </span>
-          ) : isReadyToRefresh && pullDistance > threshold + 10 ? (
+          {isReadyToRefresh && pullDistance > threshold + 10 && !isRefreshing ? (
             <span className="sr-only">Solte para atualizar</span>
           ) : null}
         </div>
@@ -310,7 +307,7 @@ export function PullToRefresh({
               : "none",
           transition: isPulling
             ? "none"
-            : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+            : "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
         {children}
