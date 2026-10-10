@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef, ty
 import type { CartItem, Product, ProductOption, Category, EstablishmentCategory, Order, OrderStatus, Tenant, User, UserRole, TenantStatus, TenantCredential, PlatformSettings, TopSellingProduct, FeaturedStoreRanked, StoreStory, AddonGroup } from "@/types";
 import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
+import { extraTenants, extraProducts, extraAddonGroups } from "@/server/seedData";
 import {
   loadCachedHomeData,
   saveCachedHomeData,
@@ -1255,6 +1256,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
           }
 
+          // Fallback estático persistente para Lojas de Demonstração oficiais (ex: Central dos Lanches & Pizzaria)
+          if (loadedProducts.length === 0) {
+            const staticSeedProducts = extraProducts.filter(
+              (p) =>
+                p.tenantId === t.id ||
+                p.tenantId === normalizedSlug ||
+                (t.slug === "central-dos-lanches" && p.tenantId === "tenant-central-dos-lanches")
+            );
+            if (staticSeedProducts.length > 0) {
+              loadedProducts = staticSeedProducts;
+              productFetchSucceeded = true;
+            }
+          }
+
+          let resolvedAddonGroups = freshAddonGroups;
+          if (resolvedAddonGroups.length === 0) {
+            const staticSeedAddons = extraAddonGroups.filter(
+              (g) =>
+                g.tenantId === t.id ||
+                g.tenantId === normalizedSlug ||
+                (t.slug === "central-dos-lanches" && g.tenantId === "tenant-central-dos-lanches")
+            );
+            if (staticSeedAddons.length > 0) {
+              resolvedAddonGroups = staticSeedAddons;
+              setAddonGroups(staticSeedAddons);
+            }
+          }
+
           // Atualiza o estado de produtos se a API retornou produtos ou se a requisição teve sucesso
           if (loadedProducts.length > 0) {
             setProducts(loadedProducts);
@@ -1277,17 +1306,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               config: storeCfg,
               products: loadedProducts,
               categories: freshCategories,
-              addonGroups: freshAddonGroups,
+              addonGroups: resolvedAddonGroups,
             });
           }
 
           setIsLoadingStore(false);
-        } else if (!hasValidProductCache && !fallbackTenantFromList) {
-          setStoreNotFound(true);
-          setCurrentTenant(null);
-          setIsLoadingStore(false);
         } else {
-          setIsLoadingStore(false);
+          // Fallback estático caso a API esteja offline mas o usuário acesse uma loja de demonstração fixa (ex: central-dos-lanches)
+          const staticSeedTenant = extraTenants.find(
+            (st) =>
+              st.slug.toLowerCase() === normalizedSlug || st.id.toLowerCase() === normalizedSlug
+          );
+          if (staticSeedTenant) {
+            setCurrentTenant(staticSeedTenant);
+            const storeCfg = tenantToStoreConfig(staticSeedTenant);
+            setConfig(storeCfg);
+            applyThemeColors(storeCfg);
+            const staticProds = extraProducts.filter((p) => p.tenantId === staticSeedTenant.id);
+            const staticAddons = extraAddonGroups.filter((g) => g.tenantId === staticSeedTenant.id);
+            if (staticProds.length > 0) {
+              setProducts(staticProds);
+            }
+            if (staticAddons.length > 0) {
+              setAddonGroups(staticAddons);
+            }
+            setIsLoadingStore(false);
+          } else if (!hasValidProductCache && !fallbackTenantFromList) {
+            setStoreNotFound(true);
+            setCurrentTenant(null);
+            setIsLoadingStore(false);
+          } else {
+            setIsLoadingStore(false);
+          }
         }
       } catch (err) {
         console.warn(`[StoreContext] Background revalidation failed for store "${normalizedSlug}":`, err);

@@ -12,14 +12,15 @@ interface MenuListProps {
 }
 
 const defaultCategoryNames: Record<string, string> = {
-  lanches: "Lanches & Burgers",
+  lanches: "Lanches Tradicionais (Hambúrgueres)",
+  hotdogs: "Hot Dogs (Cachorros-Quentes Completos)",
+  pizzas: "Pizzas Artesanais",
+  acai: "Açaí e Sorvetes",
+  bebidas: "Bebidas Variadas",
   combos: "Combos Especiais",
   porcoes: "Porções & Aperitivos",
-  bebidas: "Bebidas Geladas",
   sobremesas: "Sobremesas & Doces",
-  pizzas: "Pizzas Artesanais",
   pasteis: "Pastéis Recheados",
-  acai: "Açaí & Tigelas",
   doces: "Doces & Bolos",
   salgados: "Salgados Fritos & Assados",
   pratos: "Pratos Feitos & Refeições",
@@ -28,13 +29,14 @@ const defaultCategoryNames: Record<string, string> = {
 
 const defaultCategoryIcons: Record<string, string> = {
   lanches: "🍔",
+  hotdogs: "🌭",
+  pizzas: "🍕",
+  acai: "🍧",
+  bebidas: "🥤",
   combos: "🍟",
   porcoes: "🍗",
-  bebidas: "🥤",
   sobremesas: "🍰",
-  pizzas: "🍕",
   pasteis: "🥟",
-  acai: "🍧",
   doces: "🍩",
   salgados: "🥐",
   pratos: "🍽️",

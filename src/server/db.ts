@@ -1622,6 +1622,121 @@ const initialOrders: Order[] = [
     statusHistory: [{ status: "cancelled", timestamp: Date.now() - 4 * 86400000 }],
     createdAt: Date.now() - 4 * 86400000,
   },
+  // Pedidos da Loja de Demonstração Definitiva (Central dos Lanches & Pizzaria)
+  {
+    id: "#5012",
+    tenantId: "tenant-central-dos-lanches",
+    customerName: "Lucas Ferreira",
+    customerPhone: "(11) 99812-3456",
+    orderType: "delivery",
+    paymentMethod: "pix",
+    address: {
+      street: "Av. Central",
+      number: "420",
+      district: "Centro",
+      complement: "Apto 12",
+      reference: "Perto da praça",
+    },
+    subtotal: 96.7,
+    deliveryFee: 5.0,
+    total: 101.7,
+    status: "done",
+    items: [
+      {
+        id: "item-cl-1",
+        product: {
+          id: "central-lanche-xtudo",
+          name: "X-Tudo",
+          price: 28.9,
+          image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
+        },
+        quantity: 2,
+        selectedOptions: [],
+        notes: "Capricha na batata palha",
+      },
+      {
+        id: "item-cl-2",
+        product: {
+          id: "central-hotdog-monstro",
+          name: "Hot Dog Prensado Monstro",
+          price: 26.9,
+          image: "https://images.unsplash.com/photo-1619740455993-9e612b1af08a?auto=format&fit=crop&w=600&q=80",
+        },
+        quantity: 1,
+        selectedOptions: [],
+        notes: "",
+      },
+      {
+        id: "item-cl-3",
+        product: {
+          id: "central-bebida-refri-2l",
+          name: "Refrigerante Garrafa 2 Litros",
+          price: 14.0,
+          image: "https://images.unsplash.com/photo-1554866585-cd94860890b7?auto=format&fit=crop&w=600&q=80",
+        },
+        quantity: 1,
+        selectedOptions: [{ id: "opt-cl-2l-coca", name: "Coca-Cola 2L", price: 0 }],
+        notes: "",
+      },
+    ],
+    statusHistory: [
+      { status: "received", timestamp: Date.now() - 45 * 60000 },
+      { status: "preparing", timestamp: Date.now() - 35 * 60000 },
+      { status: "delivering", timestamp: Date.now() - 20 * 60000 },
+      { status: "done", timestamp: Date.now() - 10 * 60000 },
+    ],
+    createdAt: Date.now() - 45 * 60000,
+  },
+  {
+    id: "#5011",
+    tenantId: "tenant-central-dos-lanches",
+    customerName: "Amanda Ribeiro",
+    customerPhone: "(11) 98744-1199",
+    orderType: "delivery",
+    paymentMethod: "card",
+    address: {
+      street: "Rua das Palmeiras",
+      number: "180",
+      district: "Centro",
+      complement: "Casa",
+      reference: "",
+    },
+    subtotal: 91.8,
+    deliveryFee: 5.0,
+    total: 96.8,
+    status: "done",
+    items: [
+      {
+        id: "item-cl-4",
+        product: {
+          id: "central-pizza-frango-catupiry",
+          name: "Pizza Frango com Catupiry",
+          price: 49.9,
+          image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=600&q=80",
+        },
+        quantity: 1,
+        selectedOptions: [],
+        notes: "",
+      },
+      {
+        id: "item-cl-5",
+        product: {
+          id: "central-acai-500",
+          name: "Açaí na Tigela ou Copo 500ml",
+          price: 21.0,
+          image: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80",
+        },
+        quantity: 2,
+        selectedOptions: [],
+        notes: "Com leite em pó, morango e leite condensado",
+      },
+    ],
+    statusHistory: [
+      { status: "received", timestamp: Date.now() - 3 * 3600000 },
+      { status: "done", timestamp: Date.now() - 2 * 3600000 },
+    ],
+    createdAt: Date.now() - 3 * 3600000,
+  },
 ];
 
 const initialCustomers: Customer[] = [
@@ -1672,17 +1787,18 @@ const initialCustomers: Customer[] = [
 
 export const defaultCategories: Category[] = [
   { id: "lanches", name: "Lanches", icon: "🍔", order: 1, order_index: 1 },
-  { id: "combos", name: "Combos", icon: "🍟", order: 2, order_index: 2 },
-  { id: "porcoes", name: "Porções", icon: "🍗", order: 3, order_index: 3 },
-  { id: "bebidas", name: "Bebidas", icon: "🥤", order: 4, order_index: 4 },
-  { id: "sobremesas", name: "Sobremesas", icon: "🍰", order: 5, order_index: 5 },
-  { id: "pizzas", name: "Pizzas", icon: "🍕", order: 6, order_index: 6 },
-  { id: "acai", name: "Açaí", icon: "🍧", order: 7, order_index: 7 },
-  { id: "japonesa", name: "Japonesa", icon: "🍣", order: 8, order_index: 8 },
-  { id: "salgados", name: "Salgados", icon: "🥟", order: 9, order_index: 9 },
-  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 10, order_index: 10 },
-  { id: "docerias", name: "Doces", icon: "🍰", order: 11, order_index: 11 },
-  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 12, order_index: 12 },
+  { id: "hotdogs", name: "Hot Dogs", icon: "🌭", order: 2, order_index: 2 },
+  { id: "pizzas", name: "Pizzas", icon: "🍕", order: 3, order_index: 3 },
+  { id: "acai", name: "Açaí e Sorvetes", icon: "🍧", order: 4, order_index: 4 },
+  { id: "bebidas", name: "Bebidas", icon: "🥤", order: 5, order_index: 5 },
+  { id: "combos", name: "Combos", icon: "🍟", order: 6, order_index: 6 },
+  { id: "porcoes", name: "Porções", icon: "🍗", order: 7, order_index: 7 },
+  { id: "sobremesas", name: "Sobremesas", icon: "🍰", order: 8, order_index: 8 },
+  { id: "japonesa", name: "Japonesa", icon: "🍣", order: 9, order_index: 9 },
+  { id: "salgados", name: "Salgados", icon: "🥟", order: 10, order_index: 10 },
+  { id: "marmitaria", name: "Marmitaria", icon: "🍱", order: 11, order_index: 11 },
+  { id: "docerias", name: "Doces", icon: "🍰", order: 12, order_index: 12 },
+  { id: "churrascaria", name: "Churrascaria", icon: "🥩", order: 13, order_index: 13 },
 ];
 
 export const defaultEstablishmentCategories: EstablishmentCategory[] = [
@@ -2893,10 +3009,12 @@ export class Database {
 
   private async insertProductRow(p: Product): Promise<void> {
     if (!this.env?.DB) return;
+    const createdAt = p.createdAt || Date.now();
+    const pos = typeof p.position === "number" ? p.position : 0;
     try {
       await this.env.DB.prepare(
-        `INSERT OR IGNORE INTO products (id, tenant_id, name, description, price, category, image, available, options_json, addon_group_ids, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR IGNORE INTO products (id, tenant_id, name, description, price, category, image, available, position, options_json, addon_group_ids, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           p.id,
@@ -2907,9 +3025,10 @@ export class Database {
           p.category,
           p.image || "",
           p.available ? 1 : 0,
+          pos,
           JSON.stringify(p.options || []),
           JSON.stringify(p.addonGroupIds || []),
-          p.createdAt
+          createdAt
         )
         .run();
     } catch {
@@ -2928,7 +3047,7 @@ export class Database {
             p.image || "",
             p.available ? 1 : 0,
             JSON.stringify(p.options || []),
-            p.createdAt
+            createdAt
           )
           .run();
       } catch {

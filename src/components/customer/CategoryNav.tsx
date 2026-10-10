@@ -9,13 +9,14 @@ interface CategoryNavProps {
 
 const categoryMeta: Record<string, { name: string; icon: string }> = {
   lanches: { name: "Lanches", icon: "🍔" },
+  hotdogs: { name: "Hot Dogs", icon: "🌭" },
+  pizzas: { name: "Pizzas", icon: "🍕" },
+  acai: { name: "Açaí & Sorvetes", icon: "🍧" },
+  bebidas: { name: "Bebidas", icon: "🥤" },
   combos: { name: "Combos", icon: "🍟" },
   porcoes: { name: "Porções", icon: "🍗" },
-  bebidas: { name: "Bebidas", icon: "🥤" },
   sobremesas: { name: "Sobremesas", icon: "🍰" },
-  pizzas: { name: "Pizzas", icon: "🍕" },
   pasteis: { name: "Pastéis", icon: "🥟" },
-  acai: { name: "Açaí", icon: "🍧" },
   doces: { name: "Doces", icon: "🍩" },
   salgados: { name: "Salgados", icon: "🥐" },
   pratos: { name: "Pratos", icon: "🍽️" },
