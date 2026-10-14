@@ -26,9 +26,11 @@ import {
   Send,
   Smartphone,
   BookmarkCheck,
+  Printer,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
+import { OrderThermalReceiptModal } from "./OrderThermalReceiptModal";
 import {
   formatPrice,
   getMotoboyWhatsAppUrl,
@@ -58,6 +60,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [filter, setFilter] = useState<"active" | "all">("active");
   const [viewingReceiptOrder, setViewingReceiptOrder] = useState<Order | null>(null);
   const [motoboyModalOrder, setMotoboyModalOrder] = useState<Order | null>(null);
+  const [thermalReceiptOrder, setThermalReceiptOrder] = useState<Order | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
@@ -316,6 +319,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
                       onCancel={(id) => updateOrderStatus(id, "cancelled")}
                       onViewReceipt={(order) => setViewingReceiptOrder(order)}
                       onOpenMotoboy={(order) => setMotoboyModalOrder(order)}
+                      onPrintThermalReceipt={(order) => setThermalReceiptOrder(order)}
                     />
                   ))}
                 </div>
@@ -334,6 +338,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
               onCancel={(id) => updateOrderStatus(id, "cancelled")}
               onViewReceipt={(order) => setViewingReceiptOrder(order)}
               onOpenMotoboy={(order) => setMotoboyModalOrder(order)}
+              onPrintThermalReceipt={(order) => setThermalReceiptOrder(order)}
             />
           ))
         )}
@@ -354,6 +359,14 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
           onClose={() => setMotoboyModalOrder(null)}
         />
       )}
+
+      {/* MODAL DE IMPRESSÃO DE COMPROVANTE TÉRMICO (BOBINA 58MM / 80MM / BLUETOOTH ESC-POS) */}
+      {thermalReceiptOrder && (
+        <OrderThermalReceiptModal
+          order={thermalReceiptOrder}
+          onClose={() => setThermalReceiptOrder(null)}
+        />
+      )}
     </div>
   );
 }
@@ -367,6 +380,7 @@ function OrderCard({
   onCancel,
   onViewReceipt,
   onOpenMotoboy,
+  onPrintThermalReceipt,
 }: {
   order: Order;
   nowMs: number;
@@ -376,6 +390,7 @@ function OrderCard({
   onCancel: (id: string) => void;
   onViewReceipt: (order: Order) => void;
   onOpenMotoboy: (order: Order) => void;
+  onPrintThermalReceipt: (order: Order) => void;
 }) {
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
   const defaultStatusInfo = statusFlow.find((s) => s.status === order.status);
@@ -462,19 +477,35 @@ function OrderCard({
             )}
           </span>
         </div>
-        {statusInfo && (
-          <span
-            className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-white ${statusInfo.color}`}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            id={`btn-header-print-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrintThermalReceipt(order);
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1 text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+            title="Imprimir Comprovante Térmico (58mm / 80mm / Bluetooth)"
           >
-            <statusInfo.icon className="h-3 w-3" />
-            {statusInfo.label}
-          </span>
-        )}
-        {isCancelled && (
-          <span className="rounded-full bg-gray-400 px-2.5 py-1 text-xs font-medium text-white">
-            Cancelado
-          </span>
-        )}
+            <Printer className="h-3.5 w-3.5 text-amber-400" />
+            <span className="hidden xs:inline">Imprimir</span>
+          </button>
+
+          {statusInfo && (
+            <span
+              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-white ${statusInfo.color}`}
+            >
+              <statusInfo.icon className="h-3 w-3" />
+              {statusInfo.label}
+            </span>
+          )}
+          {isCancelled && (
+            <span className="rounded-full bg-gray-400 px-2.5 py-1 text-xs font-medium text-white">
+              Cancelado
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Body */}
@@ -754,6 +785,21 @@ function OrderCard({
       {/* Actions */}
       {!isCancelled && !isDone && (
         <div className="flex flex-col sm:flex-row gap-2 border-t border-gray-100 px-4 py-3 w-full">
+          {/* Botão de Impressão do Comprovante Térmico */}
+          <button
+            type="button"
+            id={`btn-print-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrintThermalReceipt(order);
+            }}
+            className="flex items-center justify-center gap-2 rounded-lg border-2 border-slate-800 bg-slate-900 hover:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-black text-white transition shadow-sm cursor-pointer active:scale-95 shrink-0"
+            title="Imprimir Comprovante do Pedido para Cozinha / Entrega (Bobina 58mm/80mm ou Bluetooth)"
+          >
+            <Printer className="h-4 w-4 text-amber-400" />
+            <span>Imprimir Comprovante</span>
+          </button>
+
           {order.orderType === "delivery" && (
             hasFixedMotoboy ? (
               <div className="flex items-center gap-1.5 shrink-0">
@@ -825,6 +871,29 @@ function OrderCard({
           >
             <X className="h-4 w-4" />
             Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* Rodapé para Pedidos Concluídos com Botão de Reimprimir Comprovante */}
+      {isDone && (
+        <div className="flex items-center justify-between border-t border-gray-100 px-4 py-2.5 bg-slate-50/70 rounded-b-2xl">
+          <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            Pedido finalizado
+          </span>
+          <button
+            type="button"
+            id={`btn-reprint-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrintThermalReceipt(order);
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition cursor-pointer shadow-2xs active:scale-95"
+            title="Reimprimir comprovante térmico do pedido"
+          >
+            <Printer className="h-3.5 w-3.5 text-slate-600" />
+            <span>Reimprimir Comprovante</span>
           </button>
         </div>
       )}
