@@ -265,6 +265,19 @@ export function generateOrderId(): string {
   return `#${num}`;
 }
 
+/**
+ * Formata e padroniza a exibição do número da mesa para consumo no local.
+ * Garante que se o usuário digitou "Mesa 05" ou "05", a exibição seja sempre limpa e padronizada.
+ */
+export function formatTableDisplay(table?: string | null): string {
+  if (!table || !table.trim()) return "Mesa não informada";
+  const trimmed = table.trim();
+  if (/^mesa\b/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `Mesa ${trimmed}`;
+}
+
 export function buildWhatsAppMessage(order: Order, config: StoreConfig): string {
   const lines: string[] = [];
   lines.push(`*NOVO PEDIDO - ${config.name}*`);
@@ -300,7 +313,8 @@ export function buildWhatsAppMessage(order: Order, config: StoreConfig): string 
   const tableNum = order.tableNumber || order.table_number || (order as any).table || "";
 
   if (isDineIn) {
-    lines.push(`🍽️ *CONSUMIR AQUI - MESA ${tableNum || "S/N"}*`);
+    const formattedTable = formatTableDisplay(tableNum);
+    lines.push(`🍽️ *CONSUMIR AQUI - ${formattedTable.toUpperCase()}*`);
     lines.push("*Atendimento:* Servir na Mesa");
   } else if (order.orderType === "pickup") {
     lines.push("*RETIRADA NO BALCÃO*");

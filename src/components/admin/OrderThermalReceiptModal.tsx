@@ -15,6 +15,7 @@ import { useStore } from "@/context/StoreContext";
 import {
   formatPrice,
   formatOrderExactDateTime,
+  formatTableDisplay,
 } from "@/utils/order";
 import {
   generatePlainTextReceipt,
@@ -75,7 +76,7 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
           <div style="font-size: 0.85em; font-weight: bold; margin-top: 2px;">[ ${tag} ]</div>
           <div style="font-size: 0.85em; margin-top: 2px;">${exactTime}</div>
           <div style="font-size: 0.95em; font-weight: 900; margin-top: 3px; border: 2px solid #000; padding: 3px 6px; display: inline-block;">
-            ${isDineIn ? `CONSUMIR AQUI - MESA ${tableNum || "S/N"}` : isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO"}
+            ${isDineIn ? `CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()}` : isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO"}
           </div>
         </div>
 
@@ -91,7 +92,7 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
               ? `
             <div style="margin-top: 6px; padding: 6px; border: 2px dashed #000; text-align: center; background-color: #f8fafc;">
               <div style="font-weight: 900; font-size: 1.15em;">*** CONSUMIR AQUI ***</div>
-              <div style="font-weight: 900; font-size: 1.3em; margin-top: 2px;">MESA ${tableNum || "S/N"}</div>
+              <div style="font-weight: 900; font-size: 1.3em; margin-top: 2px;">${formatTableDisplay(tableNum).toUpperCase()}</div>
               <div style="font-size: 0.85em; margin-top: 2px;">ATENDIMENTO: SERVIR NA MESA</div>
             </div>
           `

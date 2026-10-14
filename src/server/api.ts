@@ -1434,7 +1434,8 @@ api.post("/pedidos", async (c) => {
 
     // 3. Normalização de valores e cálculos
     const tipoEntrega = body.tipoEntrega || body.orderType || "delivery";
-    const numeroMesa = body.tableNumber || body.table_number || body.numeroMesa || undefined;
+    const rawMesa = body.tableNumber || body.table_number || body.numeroMesa || body.table || undefined;
+    const cleanTableNumber = rawMesa && typeof rawMesa === "string" && rawMesa.trim() ? rawMesa.trim() : undefined;
     const formaPagamento = body.formaPagamento || body.paymentMethod || "pix";
     const endereco = body.endereco || body.address;
     const trocoPara = body.trocoPara || body.changeFor;
@@ -1466,8 +1467,8 @@ api.post("/pedidos", async (c) => {
       customerName: cliente.trim(),
       customerPhone: telefone.trim(),
       orderType: tipoEntrega,
-      tableNumber: numeroMesa,
-      table_number: numeroMesa,
+      tableNumber: cleanTableNumber,
+      table_number: cleanTableNumber,
       paymentMethod: formaPagamento,
       cardType: tipoCartao,
       paymentDetails: detalhesPgto,
@@ -1484,6 +1485,13 @@ api.post("/pedidos", async (c) => {
       items: itens as OrderItem[],
       statusHistory: [{ status: statusInicial, timestamp: Date.now() }],
     });
+
+    if (!novoPedido || !novoPedido.id) {
+      return c.json({
+        success: false,
+        error: "Falha na confirmação de gravação do pedido no banco de dados. O pedido não foi criado.",
+      }, 500);
+    }
 
     // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
     sendNewOrderPushNotification(loja.id, novoPedido, c.env, () => db).catch((pushErr) => {
@@ -2891,16 +2899,20 @@ api.delete("/tenants/:slugOrId/products/:productId", async (c) => {
 });
 
 api.get("/tenants/:slugOrId/orders", async (c) => {
-  const db = getDb(c);
-  const slugOrId = c.req.param("slugOrId");
-  const tenant = await db.getTenantByIdOrSlug(slugOrId);
+  try {
+    const db = getDb(c);
+    const slugOrId = c.req.param("slugOrId");
+    const tenant = await db.getTenantByIdOrSlug(slugOrId);
 
-  if (!tenant) {
-    return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+    if (!tenant) {
+      return c.json({ success: false, orders: [], error: "Lanchonete não encontrada" }, 404);
+    }
+
+    const orders = await db.getOrdersByTenant(tenant.id);
+    return c.json({ success: true, orders }, 200);
+  } catch (err: any) {
+    return c.json({ success: false, orders: [], error: err?.message || "Erro ao buscar pedidos da lanchonete" }, 500);
   }
-
-  const orders = await db.getOrdersByTenant(tenant.id);
-  return c.json({ success: true, orders }, 200);
 });
 
 // ===================== CLIENTES (CADASTRO E CONSULTA) =====================
@@ -3170,7 +3182,18 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
     }
 
     const body = await parseIncomingOrderPayload(c);
+    const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || undefined;
+    const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
+    body.tableNumber = cleanTable;
+    body.table_number = cleanTable;
+
     const order = await db.createOrder(tenant.id, body);
+    if (!order || !order.id) {
+      return c.json({
+        success: false,
+        error: "Falha na confirmação de gravação do pedido no banco de dados. O pedido não foi criado.",
+      }, 500);
+    }
 
     // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
     sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
@@ -3245,7 +3268,18 @@ api.post("/orders", async (c) => {
       );
     }
 
+    const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;
+    const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
+    body.tableNumber = cleanTable;
+    body.table_number = cleanTable;
+
     const order = await db.createOrder(tenant.id, body);
+    if (!order || !order.id) {
+      return c.json({
+        success: false,
+        error: "Falha na confirmação de gravação do pedido no banco de dados. O pedido não foi criado.",
+      }, 500);
+    }
 
     // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
     sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {

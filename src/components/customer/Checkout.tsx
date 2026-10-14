@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
-import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl } from "@/utils/order";
+import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl, formatTableDisplay } from "@/utils/order";
 import { broadcastNewOrder } from "@/utils/ordersChannel";
 import {
   saveActiveOrder,
@@ -313,9 +313,12 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     };
 
     try {
-      // 1. Enviar pedido diretamente via API para o sistema da cozinha sem abrir obrigatoriamente o WhatsApp
+      // 1. Enviar pedido diretamente via API para o sistema da cozinha e confirmar gravação no servidor
       const placedOrder = await addOrder(order);
-      const finalOrder = placedOrder || order;
+      if (!placedOrder || !placedOrder.id) {
+        throw new Error("Não foi possível confirmar a gravação do seu pedido no servidor.");
+      }
+      const finalOrder = placedOrder;
 
       // 2. Dispara notificação imediata para o painel do lojista (BroadcastChannel)
       broadcastNewOrder(finalOrder);
@@ -328,14 +331,24 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         orderType: finalOrder.orderType,
       });
 
-      // Limpa o carrinho e exibe a Tela de Sucesso
+      // Limpa erros anteriores de envio, limpa o carrinho e exibe a Tela de Sucesso
+      setErrors((prev) => {
+        const copy = { ...prev };
+        delete copy.submit;
+        return copy;
+      });
       clearCart();
       setSubmittedOrder(finalOrder);
     } catch (err: any) {
-      console.error("Erro ao enviar pedido:", err);
-      // Fallback local seguro
-      setSubmittedOrder(order);
-      clearCart();
+      console.error("Erro ao enviar pedido para o servidor:", err);
+      const msg =
+        err?.message ||
+        "Falha na comunicação com o servidor ao gravar o pedido. O pedido NÃO foi criado para evitar duplicidades. Por favor, tente novamente.";
+      setErrors((prev) => ({
+        ...prev,
+        submit: msg,
+      }));
+      showToast(msg, "error", 6000);
     } finally {
       setIsSubmitting(false);
     }
@@ -431,7 +444,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                     <span className="text-[10px] text-slate-400 font-semibold block">Modalidade</span>
                     <span className="font-bold text-slate-800">
                       {submittedOrder.orderType === "dine_in"
-                        ? `Consumir Aqui (Mesa ${submittedOrder.tableNumber || submittedOrder.table_number || "S/N"})`
+                        ? `Consumir Aqui (${formatTableDisplay(submittedOrder.tableNumber || submittedOrder.table_number)})`
                         : submittedOrder.orderType === "delivery"
                         ? "Entrega no Endereço"
                         : "Retirada no Balcão"}
@@ -448,7 +461,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   </div>
                   <div>
                     <p className="font-black text-purple-950 text-sm">
-                      CONSUMIR AQUI — MESA {submittedOrder.tableNumber || submittedOrder.table_number || "Não informada"}
+                      CONSUMIR AQUI — {formatTableDisplay(submittedOrder.tableNumber || submittedOrder.table_number).toUpperCase()}
                     </p>
                     <p className="text-[11px] text-purple-800 mt-0.5">
                       Seu pedido será entregue diretamente na sua mesa pela equipe da cozinha!
@@ -1362,6 +1375,20 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
             <p className="text-center text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl py-2 px-3">
               ⚠️ Anexe o comprovante do PIX acima para liberar o botão &quot;Finalizar Pedido&quot;.
             </p>
+          )}
+
+          {/* Erro de envio / gravação no banco */}
+          {errors.submit && (
+            <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-3.5 text-xs text-red-800 space-y-1.5 animate-fade-in">
+              <div className="flex items-center gap-1.5 font-bold text-red-900">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                <span>Não foi possível confirmar o pedido</span>
+              </div>
+              <p className="text-red-700 font-medium">{errors.submit}</p>
+              <p className="text-[11px] text-red-600">
+                Seus itens continuam salvos na sacola. Toque em &quot;Finalizar Pedido&quot; para tentar novamente.
+              </p>
+            </div>
           )}
 
           <div className="text-center text-[11px] text-gray-400">

@@ -1,6 +1,6 @@
 import type { Order } from "@/types";
 import type { StoreConfig } from "@/config/store";
-import { formatPrice, formatOrderExactDateTime } from "@/utils/order";
+import { formatPrice, formatOrderExactDateTime, formatTableDisplay } from "@/utils/order";
 
 export type ThermalPaperWidth = "58mm" | "80mm";
 
@@ -90,7 +90,7 @@ export function generatePlainTextReceipt(
   const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
 
   const tipoStr = isDineIn
-    ? `CONSUMIR AQUI - MESA ${tableNum || "S/N"}`
+    ? `CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()}`
     : isPickup
     ? "RETIRADA NO BALCAO"
     : "ENTREGA A DOMICILIO";
@@ -104,7 +104,7 @@ export function generatePlainTextReceipt(
 
   if (isDineIn) {
     lines.push(doubleDivider);
-    lines.push(formatCenteredLine(`*** CONSUMIR AQUI - MESA ${tableNum || "S/N"} ***`, cols));
+    lines.push(formatCenteredLine(`*** CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()} ***`, cols));
     lines.push(formatCenteredLine("ATENDIMENTO: SERVIR NA MESA", cols));
     lines.push(doubleDivider);
   } else if (!isPickup && order.address) {
@@ -312,7 +312,7 @@ export function generateEscPosBuffer(
 
   setBold(true);
   const tipoStr = isDineIn
-    ? `CONSUMIR AQUI - MESA ${tableNum || "S/N"}`
+    ? `CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()}`
     : isPickup
     ? "RETIRADA NO BALCAO"
     : "ENTREGA A DOMICILIO";
@@ -331,7 +331,7 @@ export function generateEscPosBuffer(
     appendLine(doubleDivider);
     setBold(true);
     setTextSize(false, true);
-    appendLine(formatCenteredLine(`*** CONSUMIR AQUI - MESA ${tableNum || "S/N"} ***`, cols));
+    appendLine(formatCenteredLine(`*** CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()} ***`, cols));
     setTextSize(false, false);
     appendLine(formatCenteredLine("ATENDIMENTO: SERVIR NA MESA", cols));
     setBold(false);

@@ -2084,13 +2084,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------------- ORDERS ----------------
   const addOrder = useCallback(
-    async (order: Order): Promise<Order | null> => {
+    async (order: Order): Promise<Order> => {
       const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
+      const rawTable = order.tableNumber || order.table_number || undefined;
+      const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
+
       const payload = {
         tenantId,
         customerName: order.customerName,
         customerPhone: order.customerPhone,
         orderType: order.orderType,
+        tableNumber: cleanTable,
+        table_number: cleanTable,
         paymentMethod: order.paymentMethod,
         cardType: order.cardType,
         paymentDetails: order.paymentDetails,
@@ -2108,45 +2113,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         statusHistory: order.statusHistory || [{ status: order.status, timestamp: Date.now() }],
       };
 
-      try {
-        // Persiste imediatamente no Cloudflare D1 via API
-        const res = await createTenantOrderApi(tenantId, payload);
-        const finalOrder: Order = res.success && res.order ? res.order : { ...order, tenantId };
-
-        // Atualização imediata dos estados globais do React
-        setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
-        setNewOrderIds((prev) => [finalOrder.id, ...prev]);
-
-        // Grava no localStorage para permitir rastreamento em tempo real
-        try {
-          localStorage.setItem("topfood_active_order_id", finalOrder.id);
-          localStorage.setItem("topfood_active_order_status", finalOrder.status);
-          localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("topfood-active-order-updated", {
-                detail: { orderId: finalOrder.id, status: finalOrder.status, order: finalOrder },
-              })
-            );
-          }
-        } catch {
-          // ignore storage issues
-        }
-
-        // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
-        broadcastNewOrder(finalOrder);
-
-        showToast("Pedido confirmado com sucesso!", "success");
-        return finalOrder;
-      } catch (err: any) {
-        console.warn("Erro ao registrar pedido no backend:", err);
-        // Fallback local seguro
-        setOrders((prev) => [order, ...prev]);
-        setNewOrderIds((prev) => [order.id, ...prev]);
-        broadcastNewOrder(order);
-        showToast("Pedido registrado localmente (sincronizando...)", "info");
-        return order;
+      // Persiste com confirmação obrigatória no Cloudflare D1 via API
+      const res = await createTenantOrderApi(tenantId, payload);
+      if (!res.success || !res.order) {
+        const errorMsg =
+          res.error || "Não foi possível confirmar a gravação do seu pedido no servidor. O pedido não foi criado.";
+        showToast(errorMsg, "error", 6000);
+        throw new Error(errorMsg);
       }
+
+      const finalOrder: Order = res.order;
+
+      // Atualização imediata dos estados globais do React
+      setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
+      setNewOrderIds((prev) => [finalOrder.id, ...prev]);
+
+      // Grava no localStorage para permitir rastreamento em tempo real
+      try {
+        localStorage.setItem("topfood_active_order_id", finalOrder.id);
+        localStorage.setItem("topfood_active_order_status", finalOrder.status);
+        localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("topfood-active-order-updated", {
+              detail: { orderId: finalOrder.id, status: finalOrder.status, order: finalOrder },
+            })
+          );
+        }
+      } catch {
+        // ignore storage issues
+      }
+
+      // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
+      broadcastNewOrder(finalOrder);
+
+      showToast("Pedido confirmado com sucesso!", "success");
+      return finalOrder;
     },
     [currentTenant, currentSlug, showToast]
   );
@@ -2448,6 +2450,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             console.warn("SSE orders parse error:", err);
           }
         });
+
+        // Recuperação imediata se a conexão SSE oscilar ou cair
+        eventSource.onerror = (err) => {
+          console.warn("Conexão SSE oscilou/reconectando. Acionando sincronização imediata:", err);
+          syncOrdersWithCloud();
+        };
       } catch (err) {
         console.warn("SSE not available:", err);
       }
@@ -2497,6 +2505,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // 5. SISTEMA HÍBRIDO DE FALLBACK DE SEGURANÇA:
+    // Polling secundário a cada 15 segundos caso a conexão do socket/SSE caia ou oscile na internet móvel do lojista
+    const fallbackPollingTimer = setInterval(() => {
+      if (isMounted) {
+        syncOrdersWithCloud();
+      }
+    }, 15000);
+
     const handleWindowFocus = () => {
       if (currentUser && document.visibilityState === "visible") {
         syncOrdersWithCloud();
@@ -2507,6 +2523,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
+      clearInterval(fallbackPollingTimer);
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
       unsubscribeBroadcast();
