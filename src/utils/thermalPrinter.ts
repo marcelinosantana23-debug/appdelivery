@@ -85,10 +85,16 @@ export function generatePlainTextReceipt(
   const exactTime = formatOrderExactDateTime(order.createdAt, order as any) || new Date().toLocaleString("pt-BR");
   lines.push(formatJustifiedLine("Data/Hora:", exactTime, cols));
 
+  const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
-  lines.push(
-    formatJustifiedLine("Tipo:", isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO", cols)
-  );
+  const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
+
+  const tipoStr = isDineIn
+    ? `CONSUMIR AQUI - MESA ${tableNum || "S/N"}`
+    : isPickup
+    ? "RETIRADA NO BALCAO"
+    : "ENTREGA A DOMICILIO";
+  lines.push(formatJustifiedLine("Tipo:", tipoStr, cols));
   lines.push(divider);
 
   // Dados do Cliente
@@ -96,7 +102,12 @@ export function generatePlainTextReceipt(
   lines.push(`Nome: ${removeDiacritics(order.customerName || "Cliente")}`);
   lines.push(`Tel/Whats: ${order.customerPhone || "Nao informado"}`);
 
-  if (!isPickup && order.address) {
+  if (isDineIn) {
+    lines.push(doubleDivider);
+    lines.push(formatCenteredLine(`*** CONSUMIR AQUI - MESA ${tableNum || "S/N"} ***`, cols));
+    lines.push(formatCenteredLine("ATENDIMENTO: SERVIR NA MESA", cols));
+    lines.push(doubleDivider);
+  } else if (!isPickup && order.address) {
     lines.push("ENDERECO DE ENTREGA:");
     lines.push(`${removeDiacritics(order.address.street || "")}, No ${order.address.number || "S/N"}`);
     if (order.address.district) {
@@ -158,12 +169,13 @@ export function generatePlainTextReceipt(
   lines.push(divider);
 
   // Resumo Financeiro
+  const isDelivery = !isPickup && !isDineIn;
   const subtotal = Number(order.subtotal) || calculatedSubtotal;
-  const deliveryFee = !isPickup ? Number(order.deliveryFee ?? config.deliveryFee ?? 0) : 0;
+  const deliveryFee = isDelivery ? Number(order.deliveryFee ?? config.deliveryFee ?? 0) : 0;
   const total = Number(order.total) || (subtotal + deliveryFee);
 
   lines.push(formatJustifiedLine("Subtotal dos Itens:", formatPrice(subtotal, config), cols));
-  if (!isPickup) {
+  if (isDelivery) {
     lines.push(formatJustifiedLine("Taxa de Entrega:", formatPrice(deliveryFee, config), cols));
   }
   lines.push(formatJustifiedLine("TOTAL DO PEDIDO:", formatPrice(total, config), cols));
@@ -293,9 +305,18 @@ export function generateEscPosBuffer(
   const exactTime = formatOrderExactDateTime(order.createdAt, order as any) || new Date().toLocaleString("pt-BR");
   appendLine(formatJustifiedLine("Data/Hora:", exactTime, cols));
 
+  const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
+  const isDelivery = !isPickup && !isDineIn;
+  const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
+
   setBold(true);
-  appendLine(formatJustifiedLine("Tipo:", isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO", cols));
+  const tipoStr = isDineIn
+    ? `CONSUMIR AQUI - MESA ${tableNum || "S/N"}`
+    : isPickup
+    ? "RETIRADA NO BALCAO"
+    : "ENTREGA A DOMICILIO";
+  appendLine(formatJustifiedLine("Tipo:", tipoStr, cols));
   setBold(false);
   appendLine(divider);
 
@@ -306,7 +327,16 @@ export function generateEscPosBuffer(
   appendLine(`Nome: ${removeDiacritics(order.customerName || "Cliente")}`);
   appendLine(`Tel/Whats: ${order.customerPhone || "Nao informado"}`);
 
-  if (!isPickup && order.address) {
+  if (isDineIn) {
+    appendLine(doubleDivider);
+    setBold(true);
+    setTextSize(false, true);
+    appendLine(formatCenteredLine(`*** CONSUMIR AQUI - MESA ${tableNum || "S/N"} ***`, cols));
+    setTextSize(false, false);
+    appendLine(formatCenteredLine("ATENDIMENTO: SERVIR NA MESA", cols));
+    setBold(false);
+    appendLine(doubleDivider);
+  } else if (!isPickup && order.address) {
     setBold(true);
     appendLine("ENDERECO DE ENTREGA:");
     setBold(false);
@@ -371,11 +401,11 @@ export function generateEscPosBuffer(
 
   // Financeiro
   const subtotal = Number(order.subtotal) || calculatedSubtotal;
-  const deliveryFee = !isPickup ? Number(order.deliveryFee ?? config.deliveryFee ?? 0) : 0;
+  const deliveryFee = isDelivery ? Number(order.deliveryFee ?? config.deliveryFee ?? 0) : 0;
   const total = Number(order.total) || (subtotal + deliveryFee);
 
   appendLine(formatJustifiedLine("Subtotal dos Itens:", formatPrice(subtotal, config), cols));
-  if (!isPickup) {
+  if (isDelivery) {
     appendLine(formatJustifiedLine("Taxa de Entrega:", formatPrice(deliveryFee, config), cols));
   }
 

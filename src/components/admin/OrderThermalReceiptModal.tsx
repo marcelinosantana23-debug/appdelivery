@@ -37,7 +37,10 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
   const [copiedText, setCopiedText] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
 
+  const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
+  const isDelivery = !isPickup && !isDineIn;
+  const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
   const exactTime = formatOrderExactDateTime(order.createdAt, order as any) || new Date().toLocaleString("pt-BR");
 
   // Itens e Totais
@@ -53,7 +56,7 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
   }, 0);
 
   const subtotal = Number(order.subtotal) || calculatedSubtotal;
-  const deliveryFee = !isPickup ? Number(order.deliveryFee ?? config.deliveryFee ?? 0) : 0;
+  const deliveryFee = isDelivery ? Number(order.deliveryFee ?? config.deliveryFee ?? 0) : 0;
   const total = Number(order.total) || (subtotal + deliveryFee);
 
   // Gera o HTML do cupom térmico para visualização e impressão nativa
@@ -71,8 +74,8 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
           <div style="font-size: 1.4em; font-weight: 900; letter-spacing: 1px;">PEDIDO ${order.id}</div>
           <div style="font-size: 0.85em; font-weight: bold; margin-top: 2px;">[ ${tag} ]</div>
           <div style="font-size: 0.85em; margin-top: 2px;">${exactTime}</div>
-          <div style="font-size: 0.95em; font-weight: 900; margin-top: 3px; border: 1px solid #000; padding: 2px 4px; display: inline-block;">
-            ${isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO"}
+          <div style="font-size: 0.95em; font-weight: 900; margin-top: 3px; border: 2px solid #000; padding: 3px 6px; display: inline-block;">
+            ${isDineIn ? `CONSUMIR AQUI - MESA ${tableNum || "S/N"}` : isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO"}
           </div>
         </div>
 
@@ -84,7 +87,15 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
           <div><strong>TEL/WHATS:</strong> ${order.customerPhone || "Nao informado"}</div>
           
           ${
-            !isPickup && order.address
+            isDineIn
+              ? `
+            <div style="margin-top: 6px; padding: 6px; border: 2px dashed #000; text-align: center; background-color: #f8fafc;">
+              <div style="font-weight: 900; font-size: 1.15em;">*** CONSUMIR AQUI ***</div>
+              <div style="font-weight: 900; font-size: 1.3em; margin-top: 2px;">MESA ${tableNum || "S/N"}</div>
+              <div style="font-size: 0.85em; margin-top: 2px;">ATENDIMENTO: SERVIR NA MESA</div>
+            </div>
+          `
+              : !isPickup && order.address
               ? `
             <div style="margin-top: 4px; font-weight: 900;">ENDERECO DE ENTREGA:</div>
             <div>${order.address.street}, No ${order.address.number || "S/N"}</div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, ShoppingBag, RefreshCw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, ShoppingBag, RefreshCw, UtensilsCrossed } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { formatPrice } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
@@ -34,16 +34,17 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
   statusRef.current = order?.status || "received";
 
   const isPickup = order?.orderType === "pickup" || (order as any)?.delivery_type === "pickup";
+  const isDineIn = order?.orderType === "dine_in" || (order as any)?.delivery_type === "dine_in";
 
   const statusSteps: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { status: "received", label: "Recebido", icon: Package },
     { status: "preparing", label: "Em produção", icon: ChefHat },
     {
       status: "delivering",
-      label: isPickup ? "Pronto p/ retirada" : "Saiu para entrega",
-      icon: isPickup ? ShoppingBag : Bike,
+      label: isDineIn ? "Servir na mesa" : isPickup ? "Pronto p/ retirada" : "Saiu para entrega",
+      icon: isDineIn ? UtensilsCrossed : isPickup ? ShoppingBag : Bike,
     },
-    { status: "done", label: isPickup ? "Retirado" : "Finalizado", icon: CheckCircle2 },
+    { status: "done", label: isDineIn ? "Servido" : isPickup ? "Retirado" : "Finalizado", icon: CheckCircle2 },
   ];
 
   // Desbloqueia automaticamente o áudio na primeira interação do cliente na tela de rastreio
@@ -444,12 +445,31 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
           </div>
         </div>
 
-        {/* Delivery info */}
+        {/* Delivery / Table info */}
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-bold text-gray-700">
-            {(order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") ? "Endereço de entrega" : "Retirada no balcão"}
+            {isDineIn ? (
+              <span className="flex items-center gap-1.5 text-purple-900 font-black">
+                <UtensilsCrossed className="h-4 w-4 text-purple-600" />
+                CONSUMIR AQUI — MESA {order?.tableNumber || (order as any)?.table_number || "S/N"}
+              </span>
+            ) : (order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") ? (
+              "Endereço de entrega"
+            ) : (
+              "Retirada no balcão"
+            )}
           </h2>
-          {(order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") && order?.address ? (
+          {isDineIn ? (
+            <div className="space-y-1.5 rounded-xl bg-purple-50/70 border border-purple-200 p-3 text-xs text-purple-950">
+              <p className="font-bold text-sm text-purple-900 flex items-center gap-1.5">
+                <span>Mesa:</span>
+                <span className="font-black text-base">{order?.tableNumber || (order as any)?.table_number || "Não informada"}</span>
+              </p>
+              <p className="text-purple-800 text-[11px]">
+                Seu pedido será levado e servido diretamente na sua mesa assim que estiver pronto!
+              </p>
+            </div>
+          ) : (order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") && order?.address ? (
             <div className="space-y-1 text-sm text-gray-600">
               <p>{order.address.street}, {order.address.number}</p>
               <p>Bairro: {order.address.district}</p>

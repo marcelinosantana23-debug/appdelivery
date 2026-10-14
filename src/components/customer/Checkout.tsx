@@ -23,6 +23,7 @@ import {
   Clock,
   ShoppingBag,
   ExternalLink,
+  UtensilsCrossed,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
@@ -55,6 +56,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config } = useStore();
 
   const [orderType, setOrderType] = useState<OrderType>("delivery");
+  const [tableNumber, setTableNumber] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [cardType, setCardType] = useState<CardType>("credit");
   const [customerName, setCustomerName] = useState("");
@@ -240,6 +242,8 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       if (!address.street.trim()) e.street = "Informe a rua";
       if (!address.number.trim()) e.number = "Informe o número";
       if (!address.district.trim()) e.district = "Informe o bairro";
+    } else if (orderType === "dine_in") {
+      if (!tableNumber.trim()) e.tableNumber = "Informe o número da mesa (ex: Mesa 02)";
     }
     if (paymentMethod === "cash" && needsChange && changeFor) {
       const val = parseFloat(changeFor);
@@ -278,7 +282,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       paymentMethod === "pix"
         ? "PIX (Comprovante Anexado)"
         : paymentMethod === "card"
-        ? `Cartão na Entrega (${cardType === "credit" ? "Crédito" : "Débito"})`
+        ? `Cartão ${orderType === "dine_in" ? "na Mesa" : orderType === "pickup" ? "no Balcão" : "na Entrega"} (${cardType === "credit" ? "Crédito" : "Débito"})`
         : needsChange && changeFor
         ? `Dinheiro (Troco para R$ ${changeFor})`
         : "Dinheiro (Sem troco)";
@@ -287,6 +291,8 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       id: generateOrderId(),
       items: cart,
       orderType,
+      tableNumber: orderType === "dine_in" ? tableNumber.trim() : undefined,
+      table_number: orderType === "dine_in" ? tableNumber.trim() : undefined,
       paymentMethod,
       cardType: paymentMethod === "card" ? cardType : undefined,
       paymentDetails,
@@ -406,8 +412,16 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                 </div>
 
                 <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 p-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-700 shrink-0">
-                    {submittedOrder.orderType === "delivery" ? (
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
+                    submittedOrder.orderType === "dine_in"
+                      ? "bg-purple-100 text-purple-700"
+                      : submittedOrder.orderType === "delivery"
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {submittedOrder.orderType === "dine_in" ? (
+                      <UtensilsCrossed className="h-4 w-4" />
+                    ) : submittedOrder.orderType === "delivery" ? (
                       <Bike className="h-4 w-4" />
                     ) : (
                       <Store className="h-4 w-4" />
@@ -416,11 +430,32 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   <div>
                     <span className="text-[10px] text-slate-400 font-semibold block">Modalidade</span>
                     <span className="font-bold text-slate-800">
-                      {submittedOrder.orderType === "delivery" ? "Entrega no Endereço" : "Retirada no Balcão"}
+                      {submittedOrder.orderType === "dine_in"
+                        ? `Consumir Aqui (Mesa ${submittedOrder.tableNumber || submittedOrder.table_number || "S/N"})`
+                        : submittedOrder.orderType === "delivery"
+                        ? "Entrega no Endereço"
+                        : "Retirada no Balcão"}
                     </span>
                   </div>
                 </div>
               </div>
+
+              {/* Destaque quando consumir no local / mesa */}
+              {submittedOrder.orderType === "dine_in" && (
+                <div className="rounded-xl bg-purple-50 border-2 border-purple-200 p-3 text-xs text-purple-900 flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-600 text-white shrink-0 shadow-xs">
+                    <UtensilsCrossed className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="font-black text-purple-950 text-sm">
+                      CONSUMIR AQUI — MESA {submittedOrder.tableNumber || submittedOrder.table_number || "Não informada"}
+                    </p>
+                    <p className="text-[11px] text-purple-800 mt-0.5">
+                      Seu pedido será entregue diretamente na sua mesa pela equipe da cozinha!
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Endereço de entrega caso seja delivery */}
               {submittedOrder.orderType === "delivery" && submittedOrder.address && (
@@ -592,23 +627,68 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
 
         {/* Order type */}
         <Section title="Como deseja receber?">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <TypeCard
-              icon={<Bike className="h-6 w-6" />}
+              icon={<Bike className="h-5 w-5 sm:h-6 sm:w-6" />}
               title="Entrega"
               subtitle={formatPrice(config.deliveryFee, config)}
               selected={orderType === "delivery"}
               onClick={() => setOrderType("delivery")}
             />
             <TypeCard
-              icon={<Store className="h-6 w-6" />}
+              icon={<Store className="h-5 w-5 sm:h-6 sm:w-6" />}
               title="Retirar no balcão"
               subtitle="Grátis"
               selected={orderType === "pickup"}
               onClick={() => setOrderType("pickup")}
             />
+            <TypeCard
+              icon={<UtensilsCrossed className="h-5 w-5 sm:h-6 sm:w-6" />}
+              title="Consumir aqui"
+              subtitle="Grátis"
+              selected={orderType === "dine_in"}
+              onClick={() => setOrderType("dine_in")}
+            />
           </div>
         </Section>
+
+        {/* Campo simples e obrigatório de Mesa quando 'Consumir aqui' */}
+        {orderType === "dine_in" && (
+          <Section title="Identificação da Mesa">
+            <div className="rounded-2xl border-2 border-purple-300 bg-purple-50/70 p-4 space-y-3 shadow-2xs animate-fade-in">
+              <div className="flex items-start gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-600 text-white shrink-0 shadow-xs">
+                  <UtensilsCrossed className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-purple-950">
+                    {config?.name?.trim() ? `Consumo no Local / ${config.name.trim()}` : "Consumo no Local"}
+                  </h3>
+                  <p className="text-[11px] text-purple-800 mt-0.5">
+                    Taxa de entrega zerada (R$ 0,00). Digite o número da sua mesa para levarmos o pedido pronto até você.
+                  </p>
+                </div>
+              </div>
+
+              <Input
+                label="Número da mesa *"
+                value={tableNumber}
+                onChange={(v) => {
+                  setTableNumber(v);
+                  if (errors.tableNumber) {
+                    setErrors((prev) => {
+                      const copy = { ...prev };
+                      delete copy.tableNumber;
+                      return copy;
+                    });
+                  }
+                }}
+                error={errors.tableNumber}
+                placeholder="Ex: Mesa 02, Mesa 05 ou Balcão"
+              />
+            </div>
+          </Section>
+        )}
 
         {/* Card Resumo dos Dados Salvos (Modo Checkout Rápido Compacto) */}
         {hasSavedProfile && !showAddressFields && (
@@ -1335,14 +1415,15 @@ function TypeCard({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 p-4 transition-all cursor-pointer ${
-        selected ? "border-primary bg-primary/5 shadow-sm" : "border-gray-200 hover:border-gray-300"
+      className={`flex flex-col items-center justify-center gap-1 sm:gap-1.5 rounded-2xl border-2 p-2.5 sm:p-3.5 transition-all cursor-pointer text-center ${
+        selected ? "border-primary bg-primary/5 shadow-sm" : "border-gray-200 hover:border-gray-300 bg-white"
       }`}
     >
       <div className={selected ? "text-primary" : "text-gray-400"}>{icon}</div>
-      <span className="text-sm font-bold text-gray-800">{title}</span>
-      <span className="text-xs text-gray-400">{subtitle}</span>
+      <span className="text-xs sm:text-sm font-bold text-gray-800 leading-tight">{title}</span>
+      <span className="text-[10px] sm:text-xs text-gray-400 font-medium">{subtitle}</span>
     </button>
   );
 }

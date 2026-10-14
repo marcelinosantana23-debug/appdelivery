@@ -296,15 +296,25 @@ export function buildWhatsAppMessage(order: Order, config: StoreConfig): string 
   }
   lines.push(`*TOTAL: ${formatPrice(order.total, config)}*`);
   lines.push("");
-  lines.push(order.orderType === "delivery" ? "*ENTREGA*" : "*RETIRADA NO BALCÃO*");
-  if (order.orderType === "delivery" && order.address) {
-    lines.push(`Rua: ${order.address.street}, ${order.address.number}`);
-    lines.push(`Bairro: ${order.address.district}`);
-    if (order.address.complement) lines.push(`Complemento: ${order.address.complement}`);
-    if (order.address.reference) lines.push(`Referência: ${order.address.reference}`);
-    const locUrl = order.location_url || order.locationUrl;
-    if (locUrl) {
-      lines.push(`📍 *Rota do GPS:* ${locUrl}`);
+  const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
+  const tableNum = order.tableNumber || order.table_number || (order as any).table || "";
+
+  if (isDineIn) {
+    lines.push(`🍽️ *CONSUMIR AQUI - MESA ${tableNum || "S/N"}*`);
+    lines.push("*Atendimento:* Servir na Mesa");
+  } else if (order.orderType === "pickup") {
+    lines.push("*RETIRADA NO BALCÃO*");
+  } else {
+    lines.push("*ENTREGA A DOMICÍLIO*");
+    if (order.address) {
+      lines.push(`Rua: ${order.address.street}, ${order.address.number}`);
+      lines.push(`Bairro: ${order.address.district}`);
+      if (order.address.complement) lines.push(`Complemento: ${order.address.complement}`);
+      if (order.address.reference) lines.push(`Referência: ${order.address.reference}`);
+      const locUrl = order.location_url || order.locationUrl;
+      if (locUrl) {
+        lines.push(`📍 *Rota do GPS:* ${locUrl}`);
+      }
     }
   }
   lines.push("");

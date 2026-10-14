@@ -25,8 +25,8 @@ import {
   Sun,
   Send,
   Smartphone,
-  BookmarkCheck,
   Printer,
+  UtensilsCrossed,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
@@ -393,17 +393,26 @@ function OrderCard({
   onPrintThermalReceipt: (order: Order) => void;
 }) {
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
+  const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
   const defaultStatusInfo = statusFlow.find((s) => s.status === order.status);
   
-  // Ajuste dinâmico de badge para retirada no balcão
-  const statusInfo = order.status === "delivering" && isPickup
-    ? {
-        status: "delivering" as OrderStatus,
-        label: "Pronto no Balcão",
-        icon: ShoppingBag,
-        color: "bg-emerald-600",
-      }
-    : defaultStatusInfo;
+  // Ajuste dinâmico de badge para retirada no balcão e consumo no local
+  const statusInfo =
+    order.status === "delivering" && isPickup
+      ? {
+          status: "delivering" as OrderStatus,
+          label: "Pronto no Balcão",
+          icon: ShoppingBag,
+          color: "bg-emerald-600",
+        }
+      : order.status === "delivering" && isDineIn
+      ? {
+          status: "delivering" as OrderStatus,
+          label: "Servir na Mesa",
+          icon: UtensilsCrossed,
+          color: "bg-purple-600",
+        }
+      : defaultStatusInfo;
 
   const isCancelled = order.status === "cancelled";
   const isDone = order.status === "done";
@@ -438,10 +447,18 @@ function OrderCard({
       return "Aceitar Pedido / Iniciar Preparo";
     }
     if (order.status === "preparing") {
-      return isPickup ? "Marcar como 'Pronto no Balcão'" : "Enviar para Entrega";
+      return isDineIn
+        ? "Marcar como 'Pronto / Servir na Mesa'"
+        : isPickup
+        ? "Marcar como 'Pronto no Balcão'"
+        : "Enviar para Entrega";
     }
     if (order.status === "delivering") {
-      return isPickup ? "Marcar como 'Retirado'" : "Marcar como 'Entregue'";
+      return isDineIn
+        ? "Marcar como 'Servido na Mesa'"
+        : isPickup
+        ? "Marcar como 'Retirado'"
+        : "Marcar como 'Entregue'";
     }
     return "Avançar Status";
   };
@@ -476,6 +493,13 @@ function OrderCard({
               </span>
             )}
           </span>
+
+          {order.orderType === "dine_in" && (
+            <span className="inline-flex items-center gap-1 rounded-lg bg-purple-100 border-2 border-purple-300 px-2.5 py-0.5 text-xs font-black text-purple-900 shadow-2xs">
+              <UtensilsCrossed className="h-3.5 w-3.5 text-purple-700" />
+              <span>CONSUMIR AQUI - MESA {order.tableNumber || order.table_number || "S/N"}</span>
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -646,6 +670,20 @@ function OrderCard({
                 )}
               </div>
             </div>
+          ) : order.orderType === "dine_in" ? (
+            <div className="mt-2.5 flex items-center gap-2.5 text-xs font-black text-purple-950 bg-purple-100/90 border-2 border-purple-300 rounded-xl p-3 shadow-2xs">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-600 text-white shrink-0 shadow-xs">
+                <UtensilsCrossed className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-purple-950 truncate uppercase tracking-wide flex items-center gap-1.5">
+                  <span>CONSUMIR AQUI — MESA {order.tableNumber || order.table_number || "Não informada"}</span>
+                </p>
+                <p className="text-[11px] text-purple-800 font-medium mt-0.5">
+                  Pedido para consumo imediato no local. Servir os itens na mesa indicada.
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50/80 border border-blue-200 rounded-lg px-2.5 py-1.5">
               <ShoppingBag className="h-4 w-4 text-blue-600" />
@@ -658,12 +696,18 @@ function OrderCard({
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span
             className={`rounded-lg px-2.5 py-1 font-bold ${
-              order.orderType === "delivery"
+              order.orderType === "dine_in"
+                ? "bg-purple-100 text-purple-950 border-2 border-purple-300 font-black shadow-2xs"
+                : order.orderType === "delivery"
                 ? "bg-orange-100 text-orange-800 border border-orange-200"
                 : "bg-blue-100 text-blue-800 border border-blue-200"
             }`}
           >
-            {order.orderType === "delivery" ? "🛵 Entrega a Domicílio" : "🏪 Retirada no Balcão"}
+            {order.orderType === "dine_in"
+              ? `🍽️ CONSUMIR AQUI - MESA ${order.tableNumber || order.table_number || "S/N"}`
+              : order.orderType === "delivery"
+              ? "🛵 Entrega a Domicílio"
+              : "🏪 Retirada no Balcão"}
           </span>
 
           {/* TAG "PAGAMENTO PIX" COM BOTÃO "VER COMPROVANTE" */}

@@ -183,7 +183,7 @@ export interface CartItem {
 
 export type OrderItem = CartItem;
 
-export type OrderType = "delivery" | "pickup";
+export type OrderType = "delivery" | "pickup" | "dine_in";
 export type PaymentMethod = "pix" | "card" | "cash";
 export type CardType = "credit" | "debit";
 export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "cancelled";
@@ -193,6 +193,8 @@ export interface Order {
   tenantId?: string;
   items: CartItem[];
   orderType: OrderType;
+  tableNumber?: string;
+  table_number?: string;
   paymentMethod: PaymentMethod;
   cardType?: CardType;
   paymentDetails?: string;

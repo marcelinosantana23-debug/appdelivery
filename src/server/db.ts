@@ -2749,6 +2749,7 @@ export class Database {
         "ALTER TABLE orders ADD COLUMN card_type TEXT",
         "ALTER TABLE orders ADD COLUMN payment_details TEXT",
         "ALTER TABLE orders ADD COLUMN location_url TEXT",
+        "ALTER TABLE orders ADD COLUMN table_number TEXT DEFAULT ''",
         "ALTER TABLE products ADD COLUMN addon_group_ids TEXT DEFAULT '[]'",
         "ALTER TABLE tenants ADD COLUMN localidade TEXT DEFAULT 'Gargaú'",
         "ALTER TABLE tenants ADD COLUMN motoboy_phone TEXT DEFAULT ''",
@@ -3129,36 +3130,70 @@ export class Database {
   private async insertOrderRow(o: Order): Promise<void> {
     if (!this.env?.DB) return;
     try {
-      await this.env.DB.prepare(
-        `INSERT OR IGNORE INTO orders (
-          id, tenant_id, customer_name, customer_phone, order_type, payment_method,
-          card_type, payment_details, pix_receipt_url, location_url,
-          address_json, change_for, subtotal, delivery_fee, total, status,
-          items_json, status_history_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
-          o.id,
-          o.tenantId,
-          o.customerName,
-          o.customerPhone,
-          o.orderType,
-          o.paymentMethod,
-          o.cardType || null,
-          o.paymentDetails || null,
-          o.pixReceiptUrl || o.pix_receipt_url || null,
-          o.location_url || o.locationUrl || null,
-          JSON.stringify(o.address || {}),
-          o.changeFor || "",
-          o.subtotal,
-          o.deliveryFee,
-          o.total,
-          o.status,
-          JSON.stringify(o.items || []),
-          JSON.stringify(o.statusHistory || []),
-          o.createdAt
+      try {
+        await this.env.DB.prepare(
+          `INSERT OR IGNORE INTO orders (
+            id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
+            card_type, payment_details, pix_receipt_url, location_url,
+            address_json, change_for, subtotal, delivery_fee, total, status,
+            items_json, status_history_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run();
+          .bind(
+            o.id,
+            o.tenantId,
+            o.customerName,
+            o.customerPhone,
+            o.orderType,
+            o.tableNumber || o.table_number || "",
+            o.paymentMethod,
+            o.cardType || null,
+            o.paymentDetails || null,
+            o.pixReceiptUrl || o.pix_receipt_url || null,
+            o.location_url || o.locationUrl || null,
+            JSON.stringify(o.address || {}),
+            o.changeFor || "",
+            o.subtotal,
+            o.deliveryFee,
+            o.total,
+            o.status,
+            JSON.stringify(o.items || []),
+            JSON.stringify(o.statusHistory || []),
+            o.createdAt
+          )
+          .run();
+      } catch {
+        await this.env.DB.prepare(
+          `INSERT OR IGNORE INTO orders (
+            id, tenant_id, customer_name, customer_phone, order_type, payment_method,
+            card_type, payment_details, pix_receipt_url, location_url,
+            address_json, change_for, subtotal, delivery_fee, total, status,
+            items_json, status_history_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            o.id,
+            o.tenantId,
+            o.customerName,
+            o.customerPhone,
+            o.orderType,
+            o.paymentMethod,
+            o.cardType || null,
+            o.paymentDetails || null,
+            o.pixReceiptUrl || o.pix_receipt_url || null,
+            o.location_url || o.locationUrl || null,
+            JSON.stringify(o.address || {}),
+            o.changeFor || "",
+            o.subtotal,
+            o.deliveryFee,
+            o.total,
+            o.status,
+            JSON.stringify(o.items || []),
+            JSON.stringify(o.statusHistory || []),
+            o.createdAt
+          )
+          .run();
+      }
 
       if (o.items && o.items.length > 0) {
         for (const it of o.items) {
@@ -5573,6 +5608,7 @@ export class Database {
     const rawPaymentDetails = (orderData as any).paymentDetails || (orderData as any).payment_details || undefined;
     const rawReceipt = (orderData as any).pixReceiptUrl || (orderData as any).pix_receipt_url || (orderData as any).receipt || undefined;
     const rawLocationUrl = (orderData as any).location_url || (orderData as any).locationUrl || undefined;
+    const rawTableNumber = (orderData as any).tableNumber || (orderData as any).table_number || (orderData as any).numeroMesa || undefined;
 
     const newOrder: Order = {
       ...orderData,
@@ -5584,6 +5620,8 @@ export class Database {
       pix_receipt_url: rawReceipt,
       location_url: rawLocationUrl,
       locationUrl: rawLocationUrl,
+      tableNumber: rawTableNumber,
+      table_number: rawTableNumber,
       createdAt: Date.now(),
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
@@ -5591,36 +5629,71 @@ export class Database {
     if (this.env?.DB) {
       try {
         await this.ensureTables();
-        await this.env.DB.prepare(
-          `INSERT INTO orders (
-            id, tenant_id, customer_name, customer_phone, order_type, payment_method,
-            card_type, payment_details, pix_receipt_url, location_url,
-            address_json, change_for, subtotal, delivery_fee, total, status,
-            items_json, status_history_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-          .bind(
-            newOrder.id,
-            newOrder.tenantId,
-            newOrder.customerName,
-            newOrder.customerPhone,
-            newOrder.orderType,
-            newOrder.paymentMethod,
-            newOrder.cardType || null,
-            newOrder.paymentDetails || null,
-            newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
-            newOrder.location_url || newOrder.locationUrl || null,
-            JSON.stringify(newOrder.address || {}),
-            newOrder.changeFor || "",
-            newOrder.subtotal,
-            newOrder.deliveryFee,
-            newOrder.total,
-            newOrder.status,
-            JSON.stringify(newOrder.items || []),
-            JSON.stringify(newOrder.statusHistory || []),
-            newOrder.createdAt
+        try {
+          await this.env.DB.prepare(
+            `INSERT INTO orders (
+              id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
+              card_type, payment_details, pix_receipt_url, location_url,
+              address_json, change_for, subtotal, delivery_fee, total, status,
+              items_json, status_history_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
-          .run();
+            .bind(
+              newOrder.id,
+              newOrder.tenantId,
+              newOrder.customerName,
+              newOrder.customerPhone,
+              newOrder.orderType,
+              newOrder.tableNumber || "",
+              newOrder.paymentMethod,
+              newOrder.cardType || null,
+              newOrder.paymentDetails || null,
+              newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
+              newOrder.location_url || newOrder.locationUrl || null,
+              JSON.stringify(newOrder.address || {}),
+              newOrder.changeFor || "",
+              newOrder.subtotal,
+              newOrder.deliveryFee,
+              newOrder.total,
+              newOrder.status,
+              JSON.stringify(newOrder.items || []),
+              JSON.stringify(newOrder.statusHistory || []),
+              newOrder.createdAt
+            )
+            .run();
+        } catch {
+          // Fallback se a coluna table_number não estiver criada
+          await this.env.DB.prepare(
+            `INSERT INTO orders (
+              id, tenant_id, customer_name, customer_phone, order_type, payment_method,
+              card_type, payment_details, pix_receipt_url, location_url,
+              address_json, change_for, subtotal, delivery_fee, total, status,
+              items_json, status_history_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+            .bind(
+              newOrder.id,
+              newOrder.tenantId,
+              newOrder.customerName,
+              newOrder.customerPhone,
+              newOrder.orderType,
+              newOrder.paymentMethod,
+              newOrder.cardType || null,
+              newOrder.paymentDetails || null,
+              newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
+              newOrder.location_url || newOrder.locationUrl || null,
+              JSON.stringify(newOrder.address || {}),
+              newOrder.changeFor || "",
+              newOrder.subtotal,
+              newOrder.deliveryFee,
+              newOrder.total,
+              newOrder.status,
+              JSON.stringify(newOrder.items || []),
+              JSON.stringify(newOrder.statusHistory || []),
+              newOrder.createdAt
+            )
+            .run();
+        }
 
         if (newOrder.items && newOrder.items.length > 0) {
           for (const item of newOrder.items) {
@@ -6213,6 +6286,8 @@ export class Database {
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       orderType: row.order_type,
+      tableNumber: row.table_number || row.tableNumber || undefined,
+      table_number: row.table_number || row.tableNumber || undefined,
       paymentMethod: row.payment_method,
       cardType: row.card_type || undefined,
       paymentDetails: row.payment_details || undefined,

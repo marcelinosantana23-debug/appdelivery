@@ -1434,6 +1434,7 @@ api.post("/pedidos", async (c) => {
 
     // 3. Normalização de valores e cálculos
     const tipoEntrega = body.tipoEntrega || body.orderType || "delivery";
+    const numeroMesa = body.tableNumber || body.table_number || body.numeroMesa || undefined;
     const formaPagamento = body.formaPagamento || body.paymentMethod || "pix";
     const endereco = body.endereco || body.address;
     const trocoPara = body.trocoPara || body.changeFor;
@@ -1465,6 +1466,8 @@ api.post("/pedidos", async (c) => {
       customerName: cliente.trim(),
       customerPhone: telefone.trim(),
       orderType: tipoEntrega,
+      tableNumber: numeroMesa,
+      table_number: numeroMesa,
       paymentMethod: formaPagamento,
       cardType: tipoCartao,
       paymentDetails: detalhesPgto,
