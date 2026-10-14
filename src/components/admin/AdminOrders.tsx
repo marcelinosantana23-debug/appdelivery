@@ -782,38 +782,29 @@ function OrderCard({
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Área de Ações e Logística do Pedido */}
       {!isCancelled && !isDone && (
-        <div className="flex flex-col sm:flex-row gap-2 border-t border-gray-100 px-4 py-3 w-full">
-          {/* Botão de Impressão do Comprovante Térmico */}
-          <button
-            type="button"
-            id={`btn-print-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onPrintThermalReceipt(order);
-            }}
-            className="flex items-center justify-center gap-2 rounded-lg border-2 border-slate-800 bg-slate-900 hover:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-black text-white transition shadow-sm cursor-pointer active:scale-95 shrink-0"
-            title="Imprimir Comprovante do Pedido para Cozinha / Entrega (Bobina 58mm/80mm ou Bluetooth)"
-          >
-            <Printer className="h-4 w-4 text-amber-400" />
-            <span>Imprimir Comprovante</span>
-          </button>
+        <div className="flex flex-col gap-2.5 border-t border-gray-100 bg-slate-50/50 p-3 sm:p-4 rounded-b-2xl">
+          {/* 1. LINHA SUPERIOR: Ações Secundárias e Utilitárias */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Botão 1: Imprimir Comprovante */}
+              <button
+                type="button"
+                id={`btn-print-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPrintThermalReceipt(order);
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 transition shadow-2xs cursor-pointer active:scale-95"
+                title="Imprimir Comprovante do Pedido para Cozinha / Entrega (Bobina 58mm/80mm ou Bluetooth)"
+              >
+                <Printer className="h-4 w-4 text-slate-700" />
+                <span>Imprimir Comprovante</span>
+              </button>
 
-          {order.orderType === "delivery" && (
-            hasFixedMotoboy ? (
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  id={`btn-motoboy-fixed-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
-                  onClick={handleSendDirectToFixed}
-                  className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-emerald-600 bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2.5 text-xs sm:text-sm font-black text-white transition shadow-xs cursor-pointer active:scale-95"
-                  title={`Enviar rota GPS e dados do pedido direto para ${motoboyDisplayName} no WhatsApp`}
-                >
-                  <Bike className="h-4 w-4" />
-                  <span>🚀 Enviar para o Motoboy</span>
-                </button>
-
+              {/* Botão 2: Substituto / Trocar Motoboy (quando pedido delivery e há motoboy fixo) */}
+              {order.orderType === "delivery" && hasFixedMotoboy && (
                 <button
                   type="button"
                   id={`btn-motoboy-sub-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
@@ -821,57 +812,106 @@ function OrderCard({
                     e.stopPropagation();
                     onOpenMotoboy(order);
                   }}
-                  className="flex items-center justify-center gap-1 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-2.5 py-2.5 text-xs font-bold text-amber-950 transition shadow-xs cursor-pointer active:scale-95"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-2 text-xs sm:text-sm font-bold text-amber-900 transition shadow-2xs cursor-pointer active:scale-95"
                   title="Trocar entregador ou enviar para motoboy sobressalente / quebra-galho"
                 >
                   <RefreshCw className="h-3.5 w-3.5 text-amber-700" />
-                  <span className="hidden sm:inline">Substituto</span>
+                  <span>Substituto / Trocar Motoboy</span>
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                id={`btn-motoboy-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenMotoboy(order);
-                }}
-                className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 px-3.5 py-2.5 text-xs sm:text-sm font-black text-amber-950 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
-                title="Cadastrar motoboy fixo ou enviar para entregador sobressalente/avulso"
-              >
-                <Bike className="h-4 w-4 text-amber-700" />
-                <span>🚀 Enviar para o Motoboy</span>
-              </button>
-            )
-          )}
-          {canAdvance && (
+              )}
+            </div>
+
+            {/* Ação secundária: Cancelar Pedido */}
             <button
-              id={`advance-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+              type="button"
+              id={`cancel-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
               onClick={(e) => {
                 e.stopPropagation();
-                onAdvance(order.id);
+                onCancel(order.id);
               }}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 cursor-pointer ${
-                order.status === "received"
-                  ? "bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400 font-black shadow-md animate-pulse"
-                  : "bg-green-500 hover:bg-green-600"
-              }`}
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white hover:bg-red-50 px-2.5 py-2 text-xs font-semibold text-red-500 transition active:scale-95 cursor-pointer ml-auto"
+              title="Cancelar este pedido"
             >
-              <Check className="h-4 w-4" />
-              {getAdvanceButtonLabel()}
+              <X className="h-3.5 w-3.5" />
+              <span>Cancelar</span>
             </button>
+          </div>
+
+          {/* 2. BLOCO DE SELEÇÃO DE LOGÍSTICA / MOTOBOY */}
+          {order.orderType === "delivery" && (
+            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shrink-0 shadow-2xs">
+                  <Bike className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-emerald-950 truncate">
+                    {hasFixedMotoboy ? (
+                      <>
+                        Entregador Atribuído: <span className="text-emerald-700 font-extrabold">{motoboyDisplayName}</span>
+                      </>
+                    ) : (
+                      <span className="text-amber-900">Entregador não atribuído</span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-emerald-800/80 truncate">
+                    {hasFixedMotoboy
+                      ? "Dados de entrega e rota no WhatsApp prontos"
+                      : "Selecione um motoboy para despachar a entrega"}
+                  </p>
+                </div>
+              </div>
+
+              {hasFixedMotoboy ? (
+                <button
+                  type="button"
+                  id={`btn-motoboy-fixed-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                  onClick={handleSendDirectToFixed}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 text-xs sm:text-sm font-black text-white transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+                  title={`Enviar rota GPS e dados do pedido direto para ${motoboyDisplayName} no WhatsApp`}
+                >
+                  <Bike className="h-4 w-4" />
+                  <span>🚀 Enviar para o Motoboy</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  id={`btn-motoboy-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenMotoboy(order);
+                  }}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-400 bg-amber-500 hover:bg-amber-600 px-3.5 py-2 text-xs sm:text-sm font-black text-white transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+                  title="Cadastrar motoboy fixo ou enviar para entregador sobressalente/avulso"
+                >
+                  <Bike className="h-4 w-4" />
+                  <span>🚀 Enviar para o Motoboy</span>
+                </button>
+              )}
+            </div>
           )}
-          <button
-            id={`cancel-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancel(order.id);
-            }}
-            className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-red-200 px-4 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-50 active:scale-95 cursor-pointer"
-          >
-            <X className="h-4 w-4" />
-            Cancelar
-          </button>
+
+          {/* 3. AÇÃO PRINCIPAL DE STATUS (BOTÃO DE DESTAQUE TOTAL) */}
+          {canAdvance && (
+            <div className="pt-0.5">
+              <button
+                type="button"
+                id={`advance-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdvance(order.id);
+                }}
+                className={`w-full flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm sm:text-base font-black text-white shadow-md transition-all active:scale-[0.99] cursor-pointer ${
+                  order.status === "received"
+                    ? "bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400 shadow-emerald-200 animate-pulse"
+                    : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100"
+                }`}
+              >
+                <Check className="h-5 w-5 stroke-[2.5]" />
+                <span>{getAdvanceButtonLabel()}</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
