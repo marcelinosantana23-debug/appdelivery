@@ -2086,7 +2086,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addOrder = useCallback(
     async (order: Order): Promise<Order> => {
       const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
-      const rawTable = order.tableNumber || order.table_number || undefined;
+      const rawTable = order.tableNumber || order.table_number || (order as any).mesa || (order as any).numeroMesa || undefined;
       const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
 
       const payload = {
@@ -2096,6 +2096,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         orderType: order.orderType,
         tableNumber: cleanTable,
         table_number: cleanTable,
+        mesa: cleanTable,
+        numeroMesa: cleanTable,
         paymentMethod: order.paymentMethod,
         cardType: order.cardType,
         paymentDetails: order.paymentDetails,
@@ -2122,7 +2124,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         throw new Error(errorMsg);
       }
 
-      const finalOrder: Order = res.order;
+      const finalOrder: Order = {
+        ...res.order,
+        tableNumber: res.order.tableNumber || res.order.table_number || (res.order as any).mesa || cleanTable,
+        table_number: res.order.table_number || res.order.tableNumber || (res.order as any).mesa || cleanTable,
+        mesa: (res.order as any).mesa || res.order.tableNumber || res.order.table_number || cleanTable,
+        numeroMesa: (res.order as any).numeroMesa || res.order.tableNumber || res.order.table_number || cleanTable,
+      };
 
       // Atualização imediata dos estados globais do React
       setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);

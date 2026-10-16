@@ -86,8 +86,13 @@ export function generatePlainTextReceipt(
   lines.push(formatJustifiedLine("Data/Hora:", exactTime, cols));
 
   const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
-  const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
-  const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
+  const tableNum =
+    order.tableNumber ||
+    order.table_number ||
+    (order as any).mesa ||
+    (order as any).numeroMesa ||
+    (order as any).table ||
+    "";
 
   const tipoStr = isDineIn
     ? `CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()}`
@@ -307,8 +312,13 @@ export function generateEscPosBuffer(
 
   const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
-  const isDelivery = !isPickup && !isDineIn;
-  const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
+  const tableNum =
+    order.tableNumber ||
+    order.table_number ||
+    (order as any).mesa ||
+    (order as any).numeroMesa ||
+    (order as any).table ||
+    "";
 
   setBold(true);
   const tipoStr = isDineIn

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, ShoppingBag, RefreshCw, UtensilsCrossed } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
-import { formatPrice, formatTableDisplay } from "@/utils/order";
+import { formatPrice, formatTableDisplay, getTableNumberOnly } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
@@ -451,7 +451,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
             {isDineIn ? (
               <span className="flex items-center gap-1.5 text-purple-900 font-black">
                 <UtensilsCrossed className="h-4 w-4 text-purple-600" />
-                CONSUMIR AQUI — {formatTableDisplay(order?.tableNumber || (order as any)?.table_number).toUpperCase()}
+                CONSUMIR AQUI — {formatTableDisplay(order?.tableNumber || (order as any)?.table_number || (order as any)?.mesa).toUpperCase()}
               </span>
             ) : (order?.orderType === "delivery" || (order as any)?.delivery_type === "delivery") ? (
               "Endereço de entrega"
@@ -463,7 +463,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
             <div className="space-y-1.5 rounded-xl bg-purple-50/70 border border-purple-200 p-3 text-xs text-purple-950">
               <p className="font-bold text-sm text-purple-900 flex items-center gap-1.5">
                 <span>Mesa:</span>
-                <span className="font-black text-base">{formatTableDisplay(order?.tableNumber || (order as any)?.table_number)}</span>
+                <span className="font-black text-base">{getTableNumberOnly(order?.tableNumber || (order as any)?.table_number || (order as any)?.mesa)}</span>
               </p>
               <p className="text-purple-800 text-[11px]">
                 Seu pedido será levado e servido diretamente na sua mesa assim que estiver pronto!

@@ -194,6 +194,8 @@ export interface Order {
   orderType: OrderType;
   tableNumber?: string;
   table_number?: string;
+  mesa?: string;
+  numeroMesa?: string;
   paymentMethod: PaymentMethod;
   cardType?: CardType;
   paymentDetails?: string;

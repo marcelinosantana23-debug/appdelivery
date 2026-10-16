@@ -41,6 +41,7 @@ import {
   formatOrderExactDateTime,
   groupOrdersByTemporalBlock,
   formatTableDisplay,
+  getTableNumberOnly,
 } from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
 
@@ -538,7 +539,7 @@ function OrderCard({
           {order.orderType === "dine_in" && (
             <span className="inline-flex items-center gap-1 rounded-lg bg-purple-100 border-2 border-purple-300 px-2.5 py-0.5 text-xs font-black text-purple-900 shadow-2xs">
               <UtensilsCrossed className="h-3.5 w-3.5 text-purple-700" />
-              <span>CONSUMIR AQUI — {formatTableDisplay(order.tableNumber || order.table_number).toUpperCase()}</span>
+              <span>CONSUMIR AQUI — {formatTableDisplay(order.tableNumber || order.table_number || (order as any).mesa).toUpperCase()}</span>
             </span>
           )}
         </div>
@@ -718,7 +719,10 @@ function OrderCard({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-black text-purple-950 truncate uppercase tracking-wide flex items-center gap-1.5">
-                  <span>CONSUMIR AQUI — {formatTableDisplay(order.tableNumber || order.table_number).toUpperCase()}</span>
+                  <span>CONSUMIR AQUI — {formatTableDisplay(order.tableNumber || order.table_number || (order as any).mesa).toUpperCase()}</span>
+                </p>
+                <p className="text-xs font-black text-purple-900 mt-0.5">
+                  Mesa: {getTableNumberOnly(order.tableNumber || order.table_number || (order as any).mesa)}
                 </p>
                 <p className="text-[11px] text-purple-800 font-medium mt-0.5">
                   Pedido para consumo imediato no local. Servir os itens na mesa indicada.
@@ -745,7 +749,7 @@ function OrderCard({
             }`}
           >
             {order.orderType === "dine_in"
-              ? `🍽️ CONSUMIR AQUI - ${formatTableDisplay(order.tableNumber || order.table_number).toUpperCase()}`
+              ? `🍽️ CONSUMIR AQUI - ${formatTableDisplay(order.tableNumber || order.table_number || (order as any).mesa).toUpperCase()}`
               : order.orderType === "delivery"
               ? "🛵 Entrega a Domicílio"
               : "🏪 Retirada no Balcão"}

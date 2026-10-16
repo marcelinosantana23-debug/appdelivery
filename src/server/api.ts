@@ -1434,7 +1434,7 @@ api.post("/pedidos", async (c) => {
 
     // 3. Normalização de valores e cálculos
     const tipoEntrega = body.tipoEntrega || body.orderType || "delivery";
-    const rawMesa = body.tableNumber || body.table_number || body.numeroMesa || body.table || undefined;
+    const rawMesa = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;
     const cleanTableNumber = rawMesa && typeof rawMesa === "string" && rawMesa.trim() ? rawMesa.trim() : undefined;
     const formaPagamento = body.formaPagamento || body.paymentMethod || "pix";
     const endereco = body.endereco || body.address;
@@ -1469,6 +1469,8 @@ api.post("/pedidos", async (c) => {
       orderType: tipoEntrega,
       tableNumber: cleanTableNumber,
       table_number: cleanTableNumber,
+      mesa: cleanTableNumber,
+      numeroMesa: cleanTableNumber,
       paymentMethod: formaPagamento,
       cardType: tipoCartao,
       paymentDetails: detalhesPgto,
@@ -3182,10 +3184,12 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
     }
 
     const body = await parseIncomingOrderPayload(c);
-    const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || undefined;
+    const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;
     const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
     body.tableNumber = cleanTable;
     body.table_number = cleanTable;
+    body.mesa = cleanTable;
+    body.numeroMesa = cleanTable;
 
     const order = await db.createOrder(tenant.id, body);
     if (!order || !order.id) {
@@ -3272,6 +3276,8 @@ api.post("/orders", async (c) => {
     const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
     body.tableNumber = cleanTable;
     body.table_number = cleanTable;
+    body.mesa = cleanTable;
+    body.numeroMesa = cleanTable;
 
     const order = await db.createOrder(tenant.id, body);
     if (!order || !order.id) {

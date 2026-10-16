@@ -41,7 +41,13 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
   const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
   const isDelivery = !isPickup && !isDineIn;
-  const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
+  const tableNum =
+    order.tableNumber ||
+    order.table_number ||
+    (order as any).mesa ||
+    (order as any).numeroMesa ||
+    (order as any).table ||
+    "";
   const exactTime = formatOrderExactDateTime(order.createdAt, order as any) || new Date().toLocaleString("pt-BR");
 
   // Itens e Totais

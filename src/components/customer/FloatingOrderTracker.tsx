@@ -13,11 +13,12 @@ import {
   CreditCard,
   Sparkles,
   RefreshCw,
+  UtensilsCrossed,
 } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { useStore } from "@/context/StoreContext";
-import { formatPrice } from "@/utils/order";
+import { formatPrice, formatTableDisplay, getTableNumberOnly } from "@/utils/order";
 import {
   getActiveOrderData,
   updateActiveOrderStatus,
@@ -49,12 +50,28 @@ export function FloatingOrderTracker({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshSuccess, setRefreshSuccess] = useState(false);
 
+  const [activeOrderData, setActiveOrderData] = useState<ReturnType<typeof getActiveOrderData>>(null);
+
   // Referência para controlar alterações reais de status e evitar alertas repetidos
   const statusRef = useRef<OrderStatus>(status);
   statusRef.current = status;
 
+  const isDineIn =
+    order?.orderType === "dine_in" ||
+    (order as any)?.delivery_type === "dine_in" ||
+    activeOrderData?.orderType === "dine_in";
+
+  const activeTableNumber =
+    order?.tableNumber ||
+    (order as any)?.table_number ||
+    (order as any)?.mesa ||
+    activeOrderData?.tableNumber ||
+    activeOrderData?.table_number ||
+    (activeOrderData as any)?.mesa ||
+    "";
+
   // Mapeamento das 4 etapas visuais simples exigidas:
-  // [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega ] ➔ [ Entregue ]
+  // [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega / Servir na Mesa ] ➔ [ Entregue / Servido ]
   const currentStepNumber = useMemo(() => {
     const s = normalizeOrderStatus(status);
     switch (s) {
@@ -90,19 +107,19 @@ export function FloatingOrderTracker({
       {
         step: 3,
         key: "delivering",
-        label: isPickup ? "Pronto no Balcão" : "Saiu para Entrega",
-        shortLabel: isPickup ? "Pronto" : "A Caminho",
-        icon: isPickup ? ShoppingBag : Bike,
+        label: isDineIn ? "Servir na Mesa" : isPickup ? "Pronto no Balcão" : "Saiu para Entrega",
+        shortLabel: isDineIn ? "Na Mesa" : isPickup ? "Pronto" : "A Caminho",
+        icon: isDineIn ? UtensilsCrossed : isPickup ? ShoppingBag : Bike,
       },
       {
         step: 4,
         key: "done",
-        label: isPickup ? "Retirado" : "Entregue",
-        shortLabel: isPickup ? "Retirado" : "Entregue",
+        label: isDineIn ? "Servido" : isPickup ? "Retirado" : "Entregue",
+        shortLabel: isDineIn ? "Servido" : isPickup ? "Retirado" : "Entregue",
         icon: CheckCircle2,
       },
     ],
-    [isPickup]
+    [isPickup, isDineIn]
   );
 
   // Link para WhatsApp da loja
@@ -124,10 +141,12 @@ export function FloatingOrderTracker({
       if (!isCompletedCelebration) {
         setOrderId(null);
         setOrder(null);
+        setActiveOrderData(null);
       }
       return;
     }
 
+    setActiveOrderData(data);
     const norm = normalizeOrderStatus(data.status);
     setOrderId(data.orderId);
     setStatus(norm);
@@ -439,6 +458,18 @@ export function FloatingOrderTracker({
       };
     }
     if (norm === "delivering") {
+      if (isDineIn) {
+        const tableNum = activeTableNumber;
+        return {
+          badge: "Servir na Mesa",
+          title: "Servir na Mesa! 🍽️",
+          description: `Seu pedido está pronto para consumo no local (${formatTableDisplay(tableNum)}). A equipe está servindo sua mesa.`,
+          accentColor: "text-purple-600 dark:text-purple-400",
+          badgeBg: "bg-purple-100 dark:bg-purple-950/60 border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300",
+          pulseColor: "bg-purple-500",
+          icon: UtensilsCrossed,
+        };
+      }
       if (isPickup) {
         return {
           badge: "Pronto no Balcão",
@@ -462,9 +493,9 @@ export function FloatingOrderTracker({
     }
     if (norm === "done") {
       return {
-        badge: isPickup ? "Retirado" : "Entregue",
-        title: isPickup ? "Pedido Retirado! 🎉" : "Pedido Entregue! 🎉",
-        description: "Seu pedido foi entregue com sucesso. Bom apetite!",
+        badge: isDineIn ? "Servido" : isPickup ? "Retirado" : "Entregue",
+        title: isDineIn ? "Pedido Servido na Mesa! 🎉" : isPickup ? "Pedido Retirado! 🎉" : "Pedido Entregue! 🎉",
+        description: isDineIn ? "Seu pedido foi servido na mesa. Bom apetite!" : "Seu pedido foi entregue com sucesso. Bom apetite!",
         accentColor: "text-emerald-600 dark:text-emerald-400",
         badgeBg: "bg-emerald-100 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300",
         pulseColor: "bg-emerald-500",
@@ -558,6 +589,12 @@ export function FloatingOrderTracker({
                     <span className="font-mono text-xs font-bold text-gray-900 dark:text-white">
                       Pedido #{orderId}
                     </span>
+                    {isDineIn && activeTableNumber && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-0.5 text-[10px] font-extrabold shadow-2xs">
+                        <UtensilsCrossed className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                        Mesa {getTableNumberOnly(activeTableNumber)}
+                      </span>
+                    )}
                     <span
                       className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] sm:text-[11px] font-bold ${details.badgeBg}`}
                     >
@@ -751,9 +788,15 @@ export function FloatingOrderTracker({
                 {/* Detalhes de entrega ou retirada */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-slate-800/60 p-2 text-gray-700 dark:text-gray-300">
-                    <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                    {isDineIn ? (
+                      <UtensilsCrossed className="h-4 w-4 text-purple-600 shrink-0" />
+                    ) : (
+                      <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                    )}
                     <span className="truncate">
-                      {isPickup
+                      {isDineIn
+                        ? `CONSUMIR AQUI — ${formatTableDisplay(activeTableNumber).toUpperCase()} (Mesa: ${getTableNumberOnly(activeTableNumber)})`
+                        : isPickup
                         ? "Retirada no Balcão da Loja"
                         : order?.address
                         ? `${order.address.street}, ${order.address.number}`

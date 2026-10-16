@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
-import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl, formatTableDisplay } from "@/utils/order";
+import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl, formatTableDisplay, getTableNumberOnly } from "@/utils/order";
 import { broadcastNewOrder } from "@/utils/ordersChannel";
 import {
   saveActiveOrder,
@@ -95,8 +95,19 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   // Success Screen State
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
 
-  // Carrega automaticamente os dados do cliente persistidos no localStorage (Checkout Rápido)
+  // Carrega automaticamente os dados do cliente persistidos no localStorage (Checkout Rápido) e parâmetros de mesa via URL
   useEffect(() => {
+    // 1. Carrega parâmetros de mesa via URL caso o cliente tenha aberto o link do QR Code da mesa (ex: ?mesa=05 ou ?table=05)
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlTable = params.get("mesa") || params.get("table") || params.get("tableNumber") || params.get("numeroMesa");
+      if (urlTable && urlTable.trim()) {
+        const clean = urlTable.trim();
+        setTableNumber(clean);
+        setOrderType("dine_in");
+      }
+    }
+
     const saved = getCustomerProfile();
     if (saved && (saved.name || saved.phone)) {
       if (saved.name) setCustomerName(saved.name);
@@ -287,12 +298,16 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         ? `Dinheiro (Troco para R$ ${changeFor})`
         : "Dinheiro (Sem troco)";
 
+    const cleanTable = orderType === "dine_in" && tableNumber.trim() ? tableNumber.trim() : undefined;
+
     const order: Order = {
       id: generateOrderId(),
       items: cart,
       orderType,
-      tableNumber: orderType === "dine_in" ? tableNumber.trim() : undefined,
-      table_number: orderType === "dine_in" ? tableNumber.trim() : undefined,
+      tableNumber: cleanTable,
+      table_number: cleanTable,
+      mesa: cleanTable,
+      numeroMesa: cleanTable,
       paymentMethod,
       cardType: paymentMethod === "card" ? cardType : undefined,
       paymentDetails,
@@ -329,6 +344,9 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         total: finalOrder.total,
         status: finalOrder.status,
         orderType: finalOrder.orderType,
+        tableNumber: finalOrder.tableNumber || finalOrder.table_number || (finalOrder as any).mesa || cleanTable,
+        table_number: finalOrder.table_number || finalOrder.tableNumber || (finalOrder as any).mesa || cleanTable,
+        mesa: (finalOrder as any).mesa || finalOrder.tableNumber || finalOrder.table_number || cleanTable,
       });
 
       // Limpa erros anteriores de envio, limpa o carrinho e exibe a Tela de Sucesso
@@ -444,7 +462,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                     <span className="text-[10px] text-slate-400 font-semibold block">Modalidade</span>
                     <span className="font-bold text-slate-800">
                       {submittedOrder.orderType === "dine_in"
-                        ? `Consumir Aqui (${formatTableDisplay(submittedOrder.tableNumber || submittedOrder.table_number)})`
+                        ? `Consumir Aqui (Mesa: ${getTableNumberOnly(submittedOrder.tableNumber || submittedOrder.table_number || (submittedOrder as any).mesa)})`
                         : submittedOrder.orderType === "delivery"
                         ? "Entrega no Endereço"
                         : "Retirada no Balcão"}
@@ -461,7 +479,10 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   </div>
                   <div>
                     <p className="font-black text-purple-950 text-sm">
-                      CONSUMIR AQUI — {formatTableDisplay(submittedOrder.tableNumber || submittedOrder.table_number).toUpperCase()}
+                      CONSUMIR AQUI — {formatTableDisplay(submittedOrder.tableNumber || submittedOrder.table_number || (submittedOrder as any).mesa).toUpperCase()}
+                    </p>
+                    <p className="text-xs font-black text-purple-900 mt-0.5">
+                      Mesa: {getTableNumberOnly(submittedOrder.tableNumber || submittedOrder.table_number || (submittedOrder as any).mesa)}
                     </p>
                     <p className="text-[11px] text-purple-800 mt-0.5">
                       Seu pedido será entregue diretamente na sua mesa pela equipe da cozinha!
@@ -684,6 +705,8 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
               </div>
 
               <Input
+                id="checkout-table-number"
+                name="tableNumber"
                 label="Número da mesa *"
                 value={tableNumber}
                 onChange={(v) => {
@@ -698,6 +721,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                 }}
                 error={errors.tableNumber}
                 placeholder="Ex: Mesa 02, Mesa 05 ou Balcão"
+                autoFocus={orderType === "dine_in"}
               />
             </div>
           </Section>
@@ -733,6 +757,15 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                 <Phone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                 <span>{customerPhone}</span>
               </div>
+
+              {orderType === "dine_in" && (
+                <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                  <UtensilsCrossed className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                  <span className="font-bold text-purple-950">
+                    Consumir no Local — {tableNumber.trim() ? `Mesa: ${getTableNumberOnly(tableNumber)}` : "Mesa não informada"}
+                  </span>
+                </div>
+              )}
 
               {orderType === "delivery" && (
                 <div className="flex items-start gap-2 pt-1 border-t border-gray-100">
@@ -1492,28 +1525,37 @@ function PaymentOption({
 }
 
 function Input({
+  id,
+  name,
   label,
   value,
   onChange,
   error,
   placeholder,
   type = "text",
+  autoFocus,
 }: {
+  id?: string;
+  name?: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   error?: string;
   placeholder?: string;
   type?: string;
+  autoFocus?: boolean;
 }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-gray-500">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-xs font-medium text-gray-500">{label}</label>
       <input
+        id={id}
+        name={name}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         className={`w-full rounded-xl border-2 px-4 py-2.5 text-sm text-gray-800 outline-none transition focus:border-primary ${
           error ? "border-red-300 bg-red-50/50" : "border-gray-200 bg-white"
         }`}
