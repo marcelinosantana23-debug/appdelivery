@@ -522,9 +522,16 @@ export async function createOrderApi(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(orderData),
     });
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data?.order?.id) {
+      return {
+        success: false,
+        error: data?.error || `Falha ao gravar pedido no servidor (HTTP ${res.status})`,
+      };
+    }
+    return data;
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err?.message || "Falha de rede ao conectar ao servidor" };
   }
 }
 
@@ -541,9 +548,16 @@ export async function createTenantOrderApi(
       },
       body: JSON.stringify(orderData),
     });
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data?.order?.id) {
+      return {
+        success: false,
+        error: data?.error || `Falha ao gravar pedido no banco de dados (HTTP ${res.status})`,
+      };
+    }
+    return data;
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err?.message || "Falha de rede ao conectar ao servidor" };
   }
 }
 

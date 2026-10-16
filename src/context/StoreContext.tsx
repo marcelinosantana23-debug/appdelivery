@@ -76,6 +76,11 @@ import {
   subscribeOrderBroadcast,
 } from "@/utils/ordersChannel";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
+import {
+  saveOrderToOfflineQueue,
+  removeOrderFromOfflineQueue,
+  getOfflineOrdersQueue,
+} from "@/utils/orderQueue";
 import type { ToastMessage } from "@/components/common/Toast";
 
 interface StoreContextValue {
@@ -2112,13 +2117,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
 
       try {
-        // Persiste imediatamente no Cloudflare D1 via API
+        // Persiste imediatamente no Cloudflare D1 via API e exige confirmação real do backend (ACK)
         const res = await createTenantOrderApi(tenantId, payload);
-        const finalOrder: Order = res.success && res.order ? {
+        
+        if (!res || !res.success || !res.order || !res.order.id) {
+          throw new Error(res?.error || "O servidor não confirmou o registro do pedido.");
+        }
+
+        const finalOrder: Order = {
           ...res.order,
           tableNumber: res.order.tableNumber || rawTable || undefined,
           table_number: res.order.table_number || rawTable || undefined,
-        } : { ...order, tenantId };
+        };
+
+        // Remove da fila offline caso estivesse pendente
+        removeOrderFromOfflineQueue(order.id);
+        removeOrderFromOfflineQueue(finalOrder.id);
 
         // Atualização imediata dos estados globais do React
         setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
@@ -2146,13 +2160,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         showToast("Pedido confirmado com sucesso!", "success");
         return finalOrder;
       } catch (err: any) {
-        console.warn("Erro ao registrar pedido no backend:", err);
-        // Fallback local seguro
-        setOrders((prev) => [order, ...prev]);
-        setNewOrderIds((prev) => [order.id, ...prev]);
-        broadcastNewOrder(order);
-        showToast("Pedido registrado localmente (sincronizando...)", "info");
-        return order;
+        console.warn("Falha ao registrar pedido no backend (salvando na fila offline de segurança):", err);
+        // Salva na fila local de segurança para reenvio automático assim que a rede estabilizar
+        saveOrderToOfflineQueue(order, tenantId, payload, err?.message || "Falha de rede ao conectar ao servidor");
+        throw err;
       }
     },
     [currentTenant, currentSlug, showToast]
@@ -2477,6 +2488,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             console.warn("SSE orders parse error:", err);
           }
         });
+
+        eventSource.onerror = (err) => {
+          console.warn("SSE connection interrupted, running safety net cloud sync:", err);
+          syncOrdersWithCloud();
+        };
       } catch (err) {
         console.warn("SSE not available:", err);
       }
@@ -2531,13 +2547,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         syncOrdersWithCloud();
       }
     };
+    const handleNetworkOnline = () => {
+      syncOrdersWithCloud();
+    };
+
     document.addEventListener("visibilitychange", handleWindowFocus);
     window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("online", handleNetworkOnline);
+
+    // 5. Verificação periódica de segurança (polling a cada 1 minuto / 60s):
+    // Varre os pedidos da loja no D1/KV em busca de qualquer pedido que possa ter entrado
+    // durante uma falha momentânea de socket/SSE ou troca de rede móvel (3G/4G/5G)
+    const safetyNetInterval = setInterval(() => {
+      if (isMounted) {
+        syncOrdersWithCloud();
+      }
+    }, 60000);
 
     return () => {
       isMounted = false;
+      clearInterval(safetyNetInterval);
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("online", handleNetworkOnline);
       unsubscribeBroadcast();
       if (eventSource) {
         eventSource.close();
@@ -2545,24 +2577,118 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [currentTenant?.id, currentTenant?.slug, currentSlug, currentUser]);
 
+  // ---------------- ROTINA DE REENVIO AUTOMÁTICO (RETRY) DA FILA OFFLINE ----------------
+  const isRetryingQueueRef = useRef(false);
+
+  const flushOfflineOrdersQueue = useCallback(async () => {
+    if (typeof window === "undefined" || !navigator.onLine || isRetryingQueueRef.current) return;
+    const queue = getOfflineOrdersQueue();
+    if (queue.length === 0) return;
+
+    isRetryingQueueRef.current = true;
+    try {
+      for (const item of queue) {
+        try {
+          const res = await createTenantOrderApi(item.tenantId, item.payload);
+          if (res && res.success && res.order && res.order.id) {
+            removeOrderFromOfflineQueue(item.id);
+            removeOrderFromOfflineQueue(res.order.id);
+
+            const confirmedOrder: Order = {
+              ...res.order,
+              tableNumber: res.order.tableNumber || item.payload.tableNumber,
+              table_number: res.order.table_number || item.payload.table_number,
+            };
+
+            setOrders((prev) => [confirmedOrder, ...prev.filter((o) => o.id !== confirmedOrder.id)]);
+            setNewOrderIds((prev) => Array.from(new Set([confirmedOrder.id, ...prev])));
+
+            try {
+              localStorage.setItem("topfood_active_order_id", confirmedOrder.id);
+              localStorage.setItem("topfood_active_order_status", confirmedOrder.status);
+              localStorage.setItem("topfood_active_order_data", JSON.stringify(confirmedOrder));
+            } catch {
+              // ignore
+            }
+
+            broadcastNewOrder(confirmedOrder);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("topfood-offline-order-sent", {
+                  detail: { tempId: item.id, order: confirmedOrder },
+                })
+              );
+            }
+            showToast(
+              `✓ Pedido #${confirmedOrder.id.replace(/^#/, "")} reenviado e confirmado com sucesso!`,
+              "success",
+              7000
+            );
+          }
+        } catch (itemErr) {
+          console.warn("Falha no retry automático do pedido enfileirado:", item.id, itemErr);
+        }
+      }
+    } finally {
+      isRetryingQueueRef.current = false;
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    flushOfflineOrdersQueue();
+
+    const handleWindowOnline = () => {
+      flushOfflineOrdersQueue();
+    };
+
+    window.addEventListener("online", handleWindowOnline);
+    return () => {
+      window.removeEventListener("online", handleWindowOnline);
+    };
+  }, [flushOfflineOrdersQueue]);
+
   // Recarga manual sob demanda de pedidos via API (usada pelos botões "Atualizar" no painel do lojista)
   const refreshOrders = useCallback(async () => {
     try {
       const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug || undefined;
       const res = await fetchOrdersApi(tenantParam);
       if (res.success && res.orders) {
-        setOrders(res.orders);
-        res.orders.forEach((o) => {
+        const incoming: Order[] = res.orders;
+        const prevIds = knownOrderIdsRef.current;
+        if (prevIds.size > 0) {
+          const newlyArrived = incoming.filter(
+            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, ""))
+          );
+          if (newlyArrived.length > 0) {
+            setNewOrderIds((prev) => Array.from(new Set([...newlyArrived.map((o) => o.id), ...prev])));
+            try {
+              playNewOrderChime();
+            } catch {
+              // ignore
+            }
+            showToast(
+              newlyArrived.length === 1
+                ? `🔔 Pedido #${newlyArrived[0].id.replace(/^#/, "")} sincronizado do banco de dados!`
+                : `🔔 ${newlyArrived.length} novos pedidos sincronizados do banco de dados!`,
+              "success",
+              8000
+            );
+          }
+        }
+        setOrders(incoming);
+        incoming.forEach((o) => {
           knownOrderIdsRef.current.add(o.id);
           knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
         });
-        return res.orders;
+        return incoming;
       }
     } catch (err) {
       console.warn("Erro ao atualizar pedidos:", err);
     }
     return null;
-  }, [currentTenant?.id, currentTenant?.slug, currentSlug]);
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug, showToast]);
 
   const refreshStoreAdminData = useCallback(async () => {
     const slug = currentTenant?.slug || currentSlug;

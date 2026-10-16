@@ -37,6 +37,7 @@ import {
 } from "@/utils/orderStorage";
 import { compressImageToDataUrl, formatFileSize } from "@/utils/imageCompressor";
 import { playOrderSubmissionConfirmationSound } from "@/utils/audio";
+import { saveOrderToOfflineQueue } from "@/utils/orderQueue";
 import type { OrderType, PaymentMethod, CardType, Order } from "@/types";
 
 interface CheckoutProps {
@@ -53,7 +54,7 @@ function formatPhone(value: string): string {
 }
 
 export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
-  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config } = useStore();
+  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config, showToast } = useStore();
 
   const [orderType, setOrderType] = useState<OrderType>("delivery");
   const [tableNumber, setTableNumber] = useState("");
@@ -94,6 +95,48 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
 
   // Success Screen State
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [pendingLocalOrder, setPendingLocalOrder] = useState<Order | null>(null);
+  const handleSubmitRef = useRef<() => Promise<void>>(async () => {});
+
+  // ==========================================
+  // FILA DE SEGURANÇA LOCAL & RETRY AUTOMÁTICO
+  // ==========================================
+  useEffect(() => {
+    // 1. Quando a conexão com a internet for restabelecida, dispara reenvio automático
+    const handleOnline = () => {
+      if (pendingLocalOrder && !submittedOrder) {
+        showToast("Internet restabelecida! Reenviando pedido automaticamente...", "info", 3500);
+        handleSubmitRef.current();
+      }
+    };
+
+    // 2. Quando a rotina de reenvio automático em background concluir a entrega do pedido pendente
+    const handleOfflineOrderSent = (e: any) => {
+      const detail = e?.detail;
+      if (detail?.order) {
+        const isTarget =
+          (pendingLocalOrder && detail.tempId === pendingLocalOrder.id) ||
+          detail.order.customerPhone === customerPhone.trim();
+
+        if (isTarget && !submittedOrder) {
+          clearCart();
+          setSubmittedOrder(detail.order);
+          setPendingLocalOrder(null);
+          setSubmitError(null);
+          showToast("✓ Pedido entregue e confirmado pela cozinha!", "success", 5000);
+        }
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("topfood-offline-order-sent", handleOfflineOrderSent);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("topfood-offline-order-sent", handleOfflineOrderSent);
+    };
+  }, [pendingLocalOrder, submittedOrder, customerPhone, clearCart, showToast]);
 
   // Carrega automaticamente os dados do cliente persistidos no localStorage (Checkout Rápido)
   useEffect(() => {
@@ -262,9 +305,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     if (!validate()) return;
     if (!isStoreOpen || !isStoreActive) return;
 
-    // Som de confirmação imediato para o cliente ("tricks" sonoro agradável)
-    playOrderSubmissionConfirmationSound();
-
+    setSubmitError(null);
     setIsSubmitting(true);
 
     // Salva imediatamente no localStorage os dados do cliente (Checkout Rápido para próximos pedidos)
@@ -313,9 +354,17 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     };
 
     try {
-      // 1. Enviar pedido diretamente via API para o sistema da cozinha sem abrir obrigatoriamente o WhatsApp
+      // 1. Enviar pedido diretamente via API para o sistema da cozinha e aguardar confirmação real (ACK) do banco (D1/KV)
       const placedOrder = await addOrder(order);
-      const finalOrder = placedOrder || order;
+
+      if (!placedOrder || !placedOrder.id) {
+        throw new Error("O servidor não confirmou a gravação do pedido.");
+      }
+
+      const finalOrder = placedOrder;
+
+      // Som de confirmação do pedido somente após ACK bem-sucedido
+      playOrderSubmissionConfirmationSound();
 
       // 2. Dispara notificação imediata para o painel do lojista (BroadcastChannel)
       broadcastNewOrder(finalOrder);
@@ -328,18 +377,55 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         orderType: finalOrder.orderType,
       });
 
-      // Limpa o carrinho e exibe a Tela de Sucesso
+      // Limpa o carrinho e exibe a Tela de Sucesso somente após receber resposta com ID do banco
       clearCart();
       setSubmittedOrder(finalOrder);
+      setPendingLocalOrder(null);
+      setSubmitError(null);
     } catch (err: any) {
-      console.error("Erro ao enviar pedido:", err);
-      // Fallback local seguro
-      setSubmittedOrder(order);
-      clearCart();
+      console.error("Erro ao enviar pedido para o servidor:", err);
+
+      // Salva o payload do pedido na fila local (localStorage) como rede de segurança para retry automático
+      const tenantId = config.id || config.slug || "marcelino";
+      saveOrderToOfflineQueue(
+        order,
+        tenantId,
+        {
+          tenantId,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          orderType: order.orderType,
+          tableNumber: order.tableNumber || (order as any).table_number,
+          table_number: order.tableNumber || (order as any).table_number,
+          paymentMethod: order.paymentMethod,
+          cardType: order.cardType,
+          paymentDetails: order.paymentDetails,
+          pixReceiptUrl: order.pixReceiptUrl || order.pix_receipt_url,
+          pix_receipt_url: order.pixReceiptUrl || order.pix_receipt_url,
+          location_url: order.location_url || order.locationUrl,
+          locationUrl: order.locationUrl || order.location_url,
+          address: order.address,
+          changeFor: order.changeFor,
+          subtotal: order.subtotal,
+          deliveryFee: order.deliveryFee,
+          total: order.total,
+          status: order.status,
+          items: order.items,
+        },
+        err?.message || "Falha de conexão com a internet"
+      );
+
+      setPendingLocalOrder(order);
+      const errorMsg = "Falha ao enviar pedido. Verifique sua internet e tente novamente";
+      setSubmitError(errorMsg);
+      showToast(errorMsg, "error", 6000);
+      // IMPEDE que o cliente feche a tela achando que o pedido foi feito:
+      // Mantém a tela de checkout aberta com os dados e produtos preservados
     } finally {
       setIsSubmitting(false);
     }
   };
+  handleSubmitRef.current = handleSubmit;
 
   // ==========================================
   // TELA DE SUCESSO: PEDIDO RECEBIDO
@@ -1330,17 +1416,52 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         {/* ==========================================
             BOTÃO PRINCIPAL: FINALIZAR PEDIDO
             - Envia dados via API para o sistema da cozinha
-            - NÃO abre obrigatoriamente o WhatsApp
-            - Só ativa se o comprovante estiver anexado (quando PIX)
+            - Aguarda confirmação ACK (200 OK + ID do banco D1/KV)
+            - Exibe alerta imediato e retém o cliente na tela em caso de falha de conexão
+            - Salva payload na fila de segurança local para retry automático
             ========================================== */}
-        <div className="space-y-2 pt-1">
+        <div className="space-y-2.5 pt-1">
+          {/* ALERTA CLARO DE FALHA DE REDE / INTERNET */}
+          {submitError && (
+            <div className="rounded-2xl border-2 border-red-400 bg-red-50 p-4 text-red-900 shadow-md animate-fade-in space-y-2.5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-xs">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <h4 className="text-sm font-black text-red-950">
+                    {submitError}
+                  </h4>
+                  <p className="text-xs text-red-800 leading-relaxed">
+                    O pedido não foi concluído por oscilação na conexão. Seus itens continuam salvos na sacola e armazenados na fila de segurança do seu aparelho. Verifique seu sinal de internet e toque em <strong>Tentar Novamente</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1 border-t border-red-200/80">
+                <button
+                  type="button"
+                  id="btn-retry-submit-order"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white py-2.5 px-4 text-xs font-black shadow-xs cursor-pointer transition disabled:opacity-60"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isSubmitting ? "animate-spin" : ""}`} />
+                  <span>{isSubmitting ? "Reenviando..." : "Tentar Novamente Agora"}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <button
             id="btn-submit-order"
             onClick={handleSubmit}
-            disabled={!canSubmit}
+            disabled={!canSubmit || isSubmitting}
             className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black text-white shadow-lg transition active:scale-[0.98] cursor-pointer ${
-              canSubmit
-                ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30"
+              canSubmit && !isSubmitting
+                ? submitError
+                  ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/30"
+                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30"
                 : "bg-slate-400 cursor-not-allowed opacity-60 shadow-none"
             }`}
           >
@@ -1348,6 +1469,11 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
               <>
                 <RefreshCw className="h-5 w-5 animate-spin" />
                 <span>Enviando para a cozinha...</span>
+              </>
+            ) : submitError ? (
+              <>
+                <RefreshCw className="h-5 w-5" />
+                <span>Reenviar Pedido</span>
               </>
             ) : (
               <>

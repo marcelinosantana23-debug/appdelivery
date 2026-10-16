@@ -65,13 +65,15 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
 
-  // Atualiza o relógio relativo a cada 60s para manter os rótulos ("Há X min", "Há X horas", etc.) sempre sincronizados
+  // Atualiza o relógio relativo a cada 60s e executa varredura de segurança periódica (polling a cada 1 minuto)
+  // para capturar qualquer pedido do dia que possa ter entrado no banco durante oscilações de socket
   useEffect(() => {
     const timer = setInterval(() => {
       setNowMs(Date.now());
+      refreshOrders().catch(() => {});
     }, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [refreshOrders]);
 
   // Screen Wake Lock API: mantém a tela acesa continuamente exclusivamente nesta tela de pedidos
   const {
