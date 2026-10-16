@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { StoreProvider, useStore, applyThemeColors, applyPortalDefaultTheme, resolveDefaultStoreSlug } from "@/context/StoreContext";
+import { StoreProvider, useStore, applyThemeColors, applyPortalDefaultTheme } from "@/context/StoreContext";
 import { Header } from "@/components/customer/Header";
 import { CategoryNav } from "@/components/customer/CategoryNav";
 import { MenuList } from "@/components/customer/MenuList";
@@ -319,16 +319,15 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
   // Renderiza o cardápio instantaneamente em 0ms somente quando já houver uma lista válida de produtos (`products.length > 0`).
   // Se o cache local estava vazio ou não existia, aguarda a resposta real da API antes de exibir o estado vazio.
   const hasCachedStoreReady = Boolean(Array.isArray(products) && products.length > 0);
-  const isPendingHydration = !config?.slug || config.slug === "burger-town";
 
-  if ((isLoadingStore || isPendingHydration) && !hasCachedStoreReady) {
+  if (isLoadingStore && !hasCachedStoreReady) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
         <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-sm border border-gray-100 max-w-sm w-full">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" />
           <div>
             <h3 className="font-bold text-gray-800 text-base">Carregando cardápio...</h3>
-            <p className="text-xs text-gray-500 mt-1">Buscando categorias e produtos no D1/KV</p>
+            <p className="text-xs text-gray-500 mt-1">Buscando dados isolados da loja no D1/KV</p>
           </div>
         </div>
       </div>
@@ -514,29 +513,17 @@ function AppContent() {
       return "menu";
     }
 
-    // Se a rota for explicitamente /topfood ou /portal -> Home do Portal Top Food
+    // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
     const clean = path.replace(/\/+$/, "");
-    if (clean === "/topfood" || clean === "/portal") {
+    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       return "portal";
     }
 
-    // Caso contrário (URL raiz / ou /loja/:slug, /carrinho, /checkout, /rastreio) -> Exibe o cardápio da loja
+    // Caso contrário, é uma rota de vitrine (ex: /ms-preparacoes, /loja/:slug, /carrinho, /checkout, /rastreio)
     return "menu";
   };
 
   const [view, setView] = useState<View>(getInitialView);
-
-  // Redireciona a URL raiz / para a rota canônica da loja /loja/:slug
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const path = window.location.pathname.toLowerCase();
-    const clean = path.replace(/\/+$/, "");
-    if (clean === "" || clean === "/") {
-      const defaultSlug = resolveDefaultStoreSlug();
-      selectTenant(defaultSlug);
-      window.history.replaceState({ view: "menu", slug: defaultSlug }, "", `/loja/${defaultSlug}`);
-    }
-  }, [selectTenant]);
 
   // Sync with browser URL history using standard HTML5 History API
   const navigateTo = useCallback(
@@ -548,10 +535,10 @@ function AppContent() {
           } else if (targetView === "admin") {
             window.history.pushState({ view: "admin" }, "", "/painel");
           } else if (targetView === "portal") {
-            window.history.pushState({ view: "portal" }, "", "/portal");
+            window.history.pushState({ view: "portal" }, "", "/");
             resetToPortalTheme();
           } else {
-            const slug = targetSlug || currentTenant?.slug || config.slug || resolveDefaultStoreSlug();
+            const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
             window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
           }
         } catch (err) {
@@ -606,7 +593,7 @@ function AppContent() {
         setView("admin");
       } else {
         const clean = path.replace(/\/+$/, "");
-        if (clean === "/topfood" || clean === "/portal") {
+        if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
           const params = new URLSearchParams(window.location.search);
           const qSlug = params.get("loja") || params.get("store") || params.get("tenant");
           if (qSlug) {
@@ -616,10 +603,6 @@ function AppContent() {
             resetToPortalTheme();
             setView("portal");
           }
-        } else if (clean === "" || clean === "/") {
-          const defaultSlug = resolveDefaultStoreSlug();
-          selectTenant(defaultSlug);
-          setView("menu");
         } else {
           // É uma rota de loja direta (ex: /loja/:slug ou /ms-preparacoes)
           let slug = "";

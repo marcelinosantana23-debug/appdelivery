@@ -1434,8 +1434,7 @@ api.post("/pedidos", async (c) => {
 
     // 3. Normalização de valores e cálculos
     const tipoEntrega = body.tipoEntrega || body.orderType || "delivery";
-    const rawMesa = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;
-    const cleanTableNumber = rawMesa && typeof rawMesa === "string" && rawMesa.trim() ? rawMesa.trim() : undefined;
+    const numeroMesa = body.tableNumber || body.table_number || body.numeroMesa || undefined;
     const formaPagamento = body.formaPagamento || body.paymentMethod || "pix";
     const endereco = body.endereco || body.address;
     const trocoPara = body.trocoPara || body.changeFor;
@@ -1467,10 +1466,8 @@ api.post("/pedidos", async (c) => {
       customerName: cliente.trim(),
       customerPhone: telefone.trim(),
       orderType: tipoEntrega,
-      tableNumber: cleanTableNumber,
-      table_number: cleanTableNumber,
-      mesa: cleanTableNumber,
-      numeroMesa: cleanTableNumber,
+      tableNumber: numeroMesa,
+      table_number: numeroMesa,
       paymentMethod: formaPagamento,
       cardType: tipoCartao,
       paymentDetails: detalhesPgto,
@@ -1488,12 +1485,8 @@ api.post("/pedidos", async (c) => {
       statusHistory: [{ status: statusInicial, timestamp: Date.now() }],
     });
 
-    if (!novoPedido || !novoPedido.id) {
-      return c.json({
-        success: false,
-        error: "Falha na confirmação de gravação do pedido no banco de dados. O pedido não foi criado.",
-      }, 500);
-    }
+    // Dispara evento em tempo real via SSE e sockets diretamente para o painel do lojista
+    orderEvents.emit(novoPedido, true);
 
     // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
     sendNewOrderPushNotification(loja.id, novoPedido, c.env, () => db).catch((pushErr) => {
@@ -1620,6 +1613,9 @@ const handleStatusUpdate = async (c: any) => {
     if (!atualizado) {
       return c.json({ success: false, error: "Pedido não encontrado para atualização." }, 404);
     }
+
+    // Notifica instantaneamente todos os clientes e painéis conectados via SSE
+    orderEvents.emit(atualizado, false);
 
     // Persiste também no Cloudflare KV para sincronização instantânea com clientes 4G/5G
     const kv = (c.env?.KV || c.env?.STORE_KV);
@@ -2901,20 +2897,16 @@ api.delete("/tenants/:slugOrId/products/:productId", async (c) => {
 });
 
 api.get("/tenants/:slugOrId/orders", async (c) => {
-  try {
-    const db = getDb(c);
-    const slugOrId = c.req.param("slugOrId");
-    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+  const db = getDb(c);
+  const slugOrId = c.req.param("slugOrId");
+  const tenant = await db.getTenantByIdOrSlug(slugOrId);
 
-    if (!tenant) {
-      return c.json({ success: false, orders: [], error: "Lanchonete não encontrada" }, 404);
-    }
-
-    const orders = await db.getOrdersByTenant(tenant.id);
-    return c.json({ success: true, orders }, 200);
-  } catch (err: any) {
-    return c.json({ success: false, orders: [], error: err?.message || "Erro ao buscar pedidos da lanchonete" }, 500);
+  if (!tenant) {
+    return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
   }
+
+  const orders = await db.getOrdersByTenant(tenant.id);
+  return c.json({ success: true, orders }, 200);
 });
 
 // ===================== CLIENTES (CADASTRO E CONSULTA) =====================
@@ -3163,6 +3155,14 @@ async function parseIncomingOrderPayload(c: any): Promise<any> {
     body.pixReceiptUrl = receiptUrl;
   }
 
+  // Normalização do número da mesa para consumo no local ("Consumir aqui")
+  const rawTable = body.tableNumber || body.table_number || body.mesa || body.numeroMesa;
+  if (rawTable) {
+    const tableStr = String(rawTable).trim();
+    body.tableNumber = tableStr;
+    body.table_number = tableStr;
+  }
+
   return body;
 }
 
@@ -3184,20 +3184,10 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
     }
 
     const body = await parseIncomingOrderPayload(c);
-    const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;
-    const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
-    body.tableNumber = cleanTable;
-    body.table_number = cleanTable;
-    body.mesa = cleanTable;
-    body.numeroMesa = cleanTable;
-
     const order = await db.createOrder(tenant.id, body);
-    if (!order || !order.id) {
-      return c.json({
-        success: false,
-        error: "Falha na confirmação de gravação do pedido no banco de dados. O pedido não foi criado.",
-      }, 500);
-    }
+
+    // Dispara evento em tempo real via SSE diretamente para o painel do lojista
+    orderEvents.emit(order, true);
 
     // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
     sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
@@ -3210,7 +3200,7 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
   }
 });
 
-// Endpoint de listagem e polling contínuo a cada 3 segundos: GET /api/orders?tenantId=...
+// Endpoint de listagem e sincronização: GET /api/orders?tenantId=...
 api.get("/orders", async (c) => {
   try {
     const db = getDb(c);
@@ -3272,20 +3262,10 @@ api.post("/orders", async (c) => {
       );
     }
 
-    const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;
-    const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
-    body.tableNumber = cleanTable;
-    body.table_number = cleanTable;
-    body.mesa = cleanTable;
-    body.numeroMesa = cleanTable;
-
     const order = await db.createOrder(tenant.id, body);
-    if (!order || !order.id) {
-      return c.json({
-        success: false,
-        error: "Falha na confirmação de gravação do pedido no banco de dados. O pedido não foi criado.",
-      }, 500);
-    }
+
+    // Dispara evento em tempo real via SSE diretamente para o painel do lojista
+    orderEvents.emit(order, true);
 
     // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
     sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
@@ -3452,6 +3432,109 @@ api.get("/tenants/:slugOrId/orders/:orderId/stream", async (c) => {
     unsubscribe();
   });
 });
+
+// SSE Stream persistente para o painel do lojista: GET /api/tenants/:slugOrId/orders/stream e GET /api/orders/stream
+// Comunicação 100% ativa em tempo real (Push) sem qualquer necessidade de loops de polling
+const handleOrdersStream = async (c: any) => {
+  const db = getDb(c);
+  const tenantParam = c.req.param("slugOrId") || c.req.query("tenantId") || c.req.query("loja") || c.req.query("slug");
+
+  return streamSSE(c, async (stream) => {
+    let tenantId = tenantParam || "";
+    let tenantSlug = "";
+
+    try {
+      if (tenantParam) {
+        const tenant = await db.getTenantByIdOrSlug(tenantParam);
+        if (tenant) {
+          tenantId = tenant.id;
+          tenantSlug = tenant.slug;
+        }
+      }
+
+      // 1. Envia confirmação de canal SSE conectado
+      await stream.writeSSE({
+        event: "connected",
+        data: JSON.stringify({
+          status: "connected",
+          tenantId,
+          timestamp: Date.now(),
+        }),
+      });
+
+      // 2. Envia a lista atual de pedidos imediatamente na abertura da conexão
+      const currentOrders = tenantId ? await db.getOrdersByTenant(tenantId) : await db.getAllOrders();
+      await stream.writeSSE({
+        event: "orders",
+        data: JSON.stringify({
+          orders: currentOrders,
+          timestamp: Date.now(),
+        }),
+      });
+    } catch (err) {
+      console.warn("SSE merchant initial fetch error:", err);
+    }
+
+    // 3. Inscreve no barramento de eventos em tempo real do Worker
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
+      const o = payload.order;
+      if (!o) return;
+
+      const orderTenant = o.tenantId || "";
+      const matchesTenant =
+        !tenantId ||
+        orderTenant === tenantId ||
+        (tenantSlug && orderTenant === tenantSlug);
+
+      if (matchesTenant) {
+        try {
+          if (payload.isNew) {
+            await stream.writeSSE({
+              event: "new_order",
+              data: JSON.stringify({
+                order: o,
+                timestamp: payload.timestamp || Date.now(),
+              }),
+            });
+          }
+          await stream.writeSSE({
+            event: "order_update",
+            data: JSON.stringify({
+              order: o,
+              isNew: payload.isNew,
+              timestamp: payload.timestamp || Date.now(),
+            }),
+          });
+        } catch (err) {
+          console.warn("SSE failed to push order event to merchant:", err);
+        }
+      }
+    });
+
+    stream.onAbort(() => {
+      unsubscribe();
+    });
+
+    // 4. Heartbeat keepalive a cada 20 segundos para manter conexões móveis ativas
+    while (!stream.aborted) {
+      await stream.sleep(20000);
+      try {
+        await stream.writeSSE({
+          event: "ping",
+          data: "{}",
+        });
+      } catch {
+        break;
+      }
+    }
+
+    unsubscribe();
+  });
+};
+
+api.get("/tenants/:slugOrId/orders/stream", handleOrdersStream);
+api.get("/orders/stream", handleOrdersStream);
+api.get("/pedidos/stream", handleOrdersStream);
 
 // ===================== RELATÓRIO FINANCEIRO E DESEMPENHO (CLOUDFLARE D1) =====================
 api.get("/tenants/:slugOrId/financial-report", async (c) => {

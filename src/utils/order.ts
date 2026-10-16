@@ -265,36 +265,6 @@ export function generateOrderId(): string {
   return `#${num}`;
 }
 
-/**
- * Formata e padroniza a exibição do número da mesa para consumo no local.
- * Garante que se o usuário digitou "Mesa 05" ou "05", a exibição seja sempre "Mesa 05"
- * (ou "CONSUMIR AQUI — MESA 05" quando convertida em maiúsculas).
- * Caso não haja mesa informada, retorna o fallback padronizado "Mesa Não informada".
- */
-export function formatTableDisplay(table?: string | null): string {
-  if (!table || !table.trim()) return "Mesa Não informada";
-  const trimmed = table.trim();
-  if (/^mesa\b/i.test(trimmed)) {
-    return trimmed;
-  }
-  return `Mesa ${trimmed}`;
-}
-
-/**
- * Retorna apenas o número ou identificador puro da mesa (ex: "05", "12", "Balcão").
- * Se contiver "Mesa 05" ou "mesa 05", remove o prefixo para exibir "05" (ex: "Mesa: 05").
- * Caso não haja valor, retorna "Não informada", substituindo fallbacks genéricos como "S/N".
- */
-export function getTableNumberOnly(table?: string | null): string {
-  if (!table || !table.trim()) return "Não informada";
-  const trimmed = table.trim();
-  const match = trimmed.match(/^mesa\s*[:#-]?\s*(.+)$/i);
-  if (match && match[1] && match[1].trim()) {
-    return match[1].trim();
-  }
-  return trimmed;
-}
-
 export function buildWhatsAppMessage(order: Order, config: StoreConfig): string {
   const lines: string[] = [];
   lines.push(`*NOVO PEDIDO - ${config.name}*`);
@@ -327,12 +297,10 @@ export function buildWhatsAppMessage(order: Order, config: StoreConfig): string 
   lines.push(`*TOTAL: ${formatPrice(order.total, config)}*`);
   lines.push("");
   const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
-  const tableNum = order.tableNumber || order.table_number || (order as any).mesa || (order as any).numeroMesa || (order as any).table || "";
+  const tableNum = order.tableNumber || order.table_number || (order as any).table || "";
 
   if (isDineIn) {
-    const formattedTable = formatTableDisplay(tableNum);
-    lines.push(`🍽️ *CONSUMIR AQUI - ${formattedTable.toUpperCase()}*`);
-    lines.push(`*Mesa:* ${getTableNumberOnly(tableNum)}`);
+    lines.push(`🍽️ *CONSUMIR AQUI - MESA ${tableNum || "S/N"}*`);
     lines.push("*Atendimento:* Servir na Mesa");
   } else if (order.orderType === "pickup") {
     lines.push("*RETIRADA NO BALCÃO*");

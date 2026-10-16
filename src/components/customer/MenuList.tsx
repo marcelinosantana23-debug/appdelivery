@@ -46,10 +46,8 @@ const defaultCategoryIcons: Record<string, string> = {
 export function MenuList({ products, onProductClick }: MenuListProps) {
   const { config, isLoadingStore } = useStore();
 
-  const isPendingHydration = !config?.slug || config.slug === "burger-town";
-
   if (!products || products.length === 0) {
-    if (isLoadingStore || isPendingHydration) {
+    if (isLoadingStore) {
       return (
         <div className="mx-auto max-w-2xl px-4 py-8 space-y-4">
           {[1, 2, 3, 4].map((i) => (

@@ -279,27 +279,9 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     };
   }, [isAdminAuthed, soundEnabled, hasPendingOrders]);
 
-  // INTERVALO DE 5 SEGUNDOS (5000ms):
-  // Busca pedidos frescos da API em background no painel do lojista
-  useEffect(() => {
-    if (!isAdminAuthed) return;
+  // Nota: O polling contínuo (setInterval) foi removido em favor da arquitetura Push em tempo real
+  // via Server-Sent Events (SSE) e BroadcastChannel gerenciada no StoreContext.
 
-    let isMounted = true;
-
-    const pollInterval = setInterval(async () => {
-      if (!isMounted) return;
-      try {
-        await refreshOrders();
-      } catch {
-        // Falha temporária de conexão ignorada silenciosamente
-      }
-    }, 5000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(pollInterval);
-    };
-  }, [isAdminAuthed, refreshOrders]);
 
   if (!isAdminAuthed) {
     return <AdminLogin onBack={onExit} />;

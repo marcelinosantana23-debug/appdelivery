@@ -7,9 +7,6 @@ export interface StoredActiveOrder {
   total?: number;
   status?: OrderStatus;
   orderType?: OrderType;
-  tableNumber?: string;
-  table_number?: string;
-  mesa?: string;
   timestamp: number;
   completedAt?: number;
 }
@@ -85,15 +82,7 @@ export function getOrderBroadcastChannel(): BroadcastChannel | null {
 export function saveActiveOrder(
   orderId: string,
   tenantSlug?: string,
-  extra?: {
-    storeName?: string;
-    total?: number;
-    status?: OrderStatus | string;
-    orderType?: OrderType;
-    tableNumber?: string;
-    table_number?: string;
-    mesa?: string;
-  }
+  extra?: { storeName?: string; total?: number; status?: OrderStatus | string; orderType?: OrderType }
 ): void {
   try {
     if (!orderId) return;
@@ -110,9 +99,6 @@ export function saveActiveOrder(
     localStorage.setItem(ALT_STORAGE_KEY, orderId);
     localStorage.setItem(STATUS_STORAGE_KEY, normStatus);
 
-    const rawTable = extra?.tableNumber || extra?.table_number || extra?.mesa || undefined;
-    const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
-
     const data: StoredActiveOrder = {
       orderId,
       tenantSlug,
@@ -120,9 +106,6 @@ export function saveActiveOrder(
       total: extra?.total,
       status: normStatus,
       orderType: extra?.orderType || "delivery",
-      tableNumber: cleanTable,
-      table_number: cleanTable,
-      mesa: cleanTable,
       timestamp: Date.now(),
     };
     localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(data));

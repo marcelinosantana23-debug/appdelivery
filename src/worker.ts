@@ -138,38 +138,6 @@ app.get("/manifest/:slug", (c) => {
   return c.redirect(`/api/manifest/${slug}`);
 });
 
-// 4.2. Redirecionamento da URL raiz (/) para a loja padrão/último acesso (ex: /loja/marcelino)
-app.get("/", async (c) => {
-  const url = new URL(c.req.url);
-  // Se for solicitado explicitamente o portal (?portal=true ou ?marketplace=true)
-  if (url.searchParams.get("portal") === "true" || url.searchParams.get("marketplace") === "true") {
-    return c.redirect("/portal", 302);
-  }
-
-  // Verifica cookie de último acesso para respeitar a preferência do usuário
-  const cookieHeader = c.req.header("Cookie") || "";
-  const matchCookie = cookieHeader.match(/topfood_last_slug=([^;]+)/);
-  const cookieSlug = matchCookie ? decodeURIComponent(matchCookie[1]).trim().toLowerCase() : "";
-
-  let targetSlug =
-    cookieSlug && !["admin", "portal", "superadmin", "super-admin", "painel"].includes(cookieSlug)
-      ? cookieSlug
-      : "";
-
-  if (!targetSlug) {
-    try {
-      const { Database } = await import("./server/db");
-      const db = new Database(c.env);
-      const loja = await db.getTenantByIdOrSlug("marcelino");
-      targetSlug = loja?.slug || "marcelino";
-    } catch {
-      targetSlug = "marcelino";
-    }
-  }
-
-  return c.redirect(`/loja/${targetSlug}`, 302);
-});
-
 // 4.2. Injeção de metatags PWA dinâmicas na rota de vitrine /loja/:slug
 app.get("/loja/:slug*", async (c, next) => {
   const rawSlug = c.req.param("slug") || "";

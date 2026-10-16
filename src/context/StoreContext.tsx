@@ -399,57 +399,8 @@ function loadSavedCart(storeSlug?: string): CartItem[] {
   return [];
 }
 
-export function resolveDefaultStoreSlug(): string {
-  if (typeof window === "undefined") return "marcelino";
-  try {
-    // 1. Último acesso salvo no localStorage ou sessionStorage
-    const last =
-      localStorage.getItem("topfood_last_store_slug") ||
-      sessionStorage.getItem("topfood_last_store_slug");
-    if (last && typeof last === "string" && !RESERVED_SLUGS.has(last.toLowerCase())) {
-      return last.trim().toLowerCase();
-    }
-    // 2. Sessão salva de lojista ou cliente
-    const sessionTenant =
-      localStorage.getItem("delivery_tenant_session") ||
-      sessionStorage.getItem("topfood_tenant_session");
-    if (sessionTenant) {
-      const parsed = JSON.parse(sessionTenant);
-      if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug.toLowerCase())) {
-        return parsed.slug.trim().toLowerCase();
-      }
-    }
-    // 3. Lojas em cache do portal (destaque ou primeira ativa)
-    const cachedHome = loadCachedHomeData();
-    if (cachedHome?.tenants && Array.isArray(cachedHome.tenants) && cachedHome.tenants.length > 0) {
-      const featured = cachedHome.tenants.find(
-        (t) =>
-          (t.isFeatured || t.slug === "marcelino" || t.slug === "ms-preparacoes") &&
-          t.status !== "inactive"
-      );
-      if (featured?.slug) return featured.slug.toLowerCase();
-      const firstActive = cachedHome.tenants.find((t) => t.status !== "inactive" && t.slug);
-      if (firstActive?.slug) return firstActive.slug.toLowerCase();
-    }
-    const cachedTenants = loadCachedTenants();
-    if (cachedTenants && cachedTenants.length > 0) {
-      const featured = cachedTenants.find(
-        (t) =>
-          (t.isFeatured || t.slug === "marcelino" || t.slug === "ms-preparacoes") &&
-          t.status !== "inactive"
-      );
-      if (featured?.slug) return featured.slug.toLowerCase();
-      const firstActive = cachedTenants.find((t) => t.status !== "inactive" && t.slug);
-      if (firstActive?.slug) return firstActive.slug.toLowerCase();
-    }
-  } catch {
-    // ignore
-  }
-  return "marcelino";
-}
-
 function getInitialUrlSlug(): string {
-  if (typeof window === "undefined") return "marcelino";
+  if (typeof window === "undefined") return "";
   const path = window.location.pathname;
 
   // 1. /loja/:slug (incluindo sub-rotas como /loja/:slug/carrinho, /loja/:slug/checkout, /loja/:slug/rastreio)
@@ -505,24 +456,10 @@ function getInitialUrlSlug(): string {
     return "";
   }
 
-  // 5. Se for explicitamente a rota do marketplace (/portal ou /topfood)
+  // 5. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
   const clean = path.replace(/\/+$/, "").toLowerCase();
-  if (clean === "/topfood" || clean === "/portal") {
+  if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
     return "";
-  }
-
-  // 6. Rota raiz sem slug (/ ou vazio): redireciona/carrega a loja principal/padrão (ex: /loja/marcelino)
-  if (clean === "" || clean === "/") {
-    const defaultSlug = resolveDefaultStoreSlug();
-    if (typeof window !== "undefined") {
-      try {
-        const targetPath = `/loja/${defaultSlug}`;
-        window.history.replaceState({ path: targetPath, view: "menu", slug: defaultSlug }, "", targetPath);
-      } catch (err) {
-        console.warn("Error replacing state for default store:", err);
-      }
-    }
-    return defaultSlug;
   }
 
   // 6. Sub-rotas do cliente sem prefixo /loja/ (/carrinho, /checkout, /rastreio)
@@ -1516,9 +1453,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (slug && !RESERVED_SLUGS.has(slug)) {
       try {
         localStorage.setItem("topfood_last_store_slug", slug);
-        if (typeof document !== "undefined") {
-          document.cookie = `topfood_last_slug=${encodeURIComponent(slug)}; path=/; max-age=31536000; SameSite=Lax`;
-        }
       } catch {
         // ignore
       }
@@ -1530,9 +1464,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrentSlug(slugOrId);
       try {
         localStorage.setItem("topfood_last_store_slug", slugOrId);
-        if (typeof document !== "undefined") {
-          document.cookie = `topfood_last_slug=${encodeURIComponent(slugOrId)}; path=/; max-age=31536000; SameSite=Lax`;
-        }
       } catch {
         // ignore
       }
@@ -2153,20 +2084,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------------- ORDERS ----------------
   const addOrder = useCallback(
-    async (order: Order): Promise<Order> => {
+    async (order: Order): Promise<Order | null> => {
       const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
-      const rawTable = order.tableNumber || order.table_number || (order as any).mesa || (order as any).numeroMesa || undefined;
-      const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
-
+      const rawTable = order.tableNumber || (order as any).table_number || (order as any).mesa || (order as any).numeroMesa;
       const payload = {
         tenantId,
         customerName: order.customerName,
         customerPhone: order.customerPhone,
         orderType: order.orderType,
-        tableNumber: cleanTable,
-        table_number: cleanTable,
-        mesa: cleanTable,
-        numeroMesa: cleanTable,
+        tableNumber: rawTable || undefined,
+        table_number: rawTable || undefined,
         paymentMethod: order.paymentMethod,
         cardType: order.cardType,
         paymentDetails: order.paymentDetails,
@@ -2184,48 +2111,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         statusHistory: order.statusHistory || [{ status: order.status, timestamp: Date.now() }],
       };
 
-      // Persiste com confirmação obrigatória no Cloudflare D1 via API
-      const res = await createTenantOrderApi(tenantId, payload);
-      if (!res.success || !res.order) {
-        const errorMsg =
-          res.error || "Não foi possível confirmar a gravação do seu pedido no servidor. O pedido não foi criado.";
-        showToast(errorMsg, "error", 6000);
-        throw new Error(errorMsg);
-      }
-
-      const finalOrder: Order = {
-        ...res.order,
-        tableNumber: res.order.tableNumber || res.order.table_number || (res.order as any).mesa || cleanTable,
-        table_number: res.order.table_number || res.order.tableNumber || (res.order as any).mesa || cleanTable,
-        mesa: (res.order as any).mesa || res.order.tableNumber || res.order.table_number || cleanTable,
-        numeroMesa: (res.order as any).numeroMesa || res.order.tableNumber || res.order.table_number || cleanTable,
-      };
-
-      // Atualização imediata dos estados globais do React
-      setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
-      setNewOrderIds((prev) => [finalOrder.id, ...prev]);
-
-      // Grava no localStorage para permitir rastreamento em tempo real
       try {
-        localStorage.setItem("topfood_active_order_id", finalOrder.id);
-        localStorage.setItem("topfood_active_order_status", finalOrder.status);
-        localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("topfood-active-order-updated", {
-              detail: { orderId: finalOrder.id, status: finalOrder.status, order: finalOrder },
-            })
-          );
+        // Persiste imediatamente no Cloudflare D1 via API
+        const res = await createTenantOrderApi(tenantId, payload);
+        const finalOrder: Order = res.success && res.order ? {
+          ...res.order,
+          tableNumber: res.order.tableNumber || rawTable || undefined,
+          table_number: res.order.table_number || rawTable || undefined,
+        } : { ...order, tenantId };
+
+        // Atualização imediata dos estados globais do React
+        setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
+        setNewOrderIds((prev) => [finalOrder.id, ...prev]);
+
+        // Grava no localStorage para permitir rastreamento em tempo real
+        try {
+          localStorage.setItem("topfood_active_order_id", finalOrder.id);
+          localStorage.setItem("topfood_active_order_status", finalOrder.status);
+          localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("topfood-active-order-updated", {
+                detail: { orderId: finalOrder.id, status: finalOrder.status, order: finalOrder },
+              })
+            );
+          }
+        } catch {
+          // ignore storage issues
         }
-      } catch {
-        // ignore storage issues
+
+        // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
+        broadcastNewOrder(finalOrder);
+
+        showToast("Pedido confirmado com sucesso!", "success");
+        return finalOrder;
+      } catch (err: any) {
+        console.warn("Erro ao registrar pedido no backend:", err);
+        // Fallback local seguro
+        setOrders((prev) => [order, ...prev]);
+        setNewOrderIds((prev) => [order.id, ...prev]);
+        broadcastNewOrder(order);
+        showToast("Pedido registrado localmente (sincronizando...)", "info");
+        return order;
       }
-
-      // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
-      broadcastNewOrder(finalOrder);
-
-      showToast("Pedido confirmado com sucesso!", "success");
-      return finalOrder;
     },
     [currentTenant, currentSlug, showToast]
   );
@@ -2338,7 +2266,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!tenantParam) return;
     let isMounted = true;
 
-    // Função de inserção imediata de novo pedido na tela com toque de som instantâneo
+    // Função de inserção imediata de novo pedido na tela com toque de som instantâneo e notificação Toast
     const handleIncomingNewOrder = (incomingOrder: Order) => {
       if (!incomingOrder || !incomingOrder.id || !isMounted) return;
 
@@ -2352,30 +2280,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       knownOrderIdsRef.current.add(incomingOrder.id);
       knownOrderIdsRef.current.add(orderCleanId);
 
-      // 1. Insere o pedido na tela imediatamente
+      // Normaliza dados da mesa caso venham com chaves alternativas
+      const resolvedTable =
+        incomingOrder.tableNumber ||
+        incomingOrder.table_number ||
+        (incomingOrder as any).mesa ||
+        (incomingOrder as any).numeroMesa;
+
+      const normalizedIncoming: Order = {
+        ...incomingOrder,
+        tableNumber: resolvedTable || incomingOrder.tableNumber,
+        table_number: resolvedTable || incomingOrder.table_number,
+      };
+
+      // 1. Inserir o novo card do pedido no topo da lista imediatamente (sem recarregar a página)
       setOrders((prev) => {
-        const index = prev.findIndex(
+        const withoutIncoming = prev.filter(
           (o) =>
-            o.id === incomingOrder.id ||
-            o.id.replace(/^#/, "") === orderCleanId
+            o.id !== normalizedIncoming.id &&
+            o.id.replace(/^#/, "") !== orderCleanId
         );
-        if (index >= 0) {
-          const updated = [...prev];
-          updated[index] = { ...updated[index], ...incomingOrder };
-          return updated;
-        }
-        return [incomingOrder, ...prev];
+        return [normalizedIncoming, ...withoutIncoming];
       });
 
-      // Se é um pedido novo, registra badge visual e notifica via CustomEvent
+      // Se é um pedido novo:
       if (!isAlreadyKnown) {
-        setNewOrderIds((prev) => Array.from(new Set([incomingOrder.id, ...prev])));
+        setNewOrderIds((prev) => Array.from(new Set([normalizedIncoming.id, ...prev])));
 
-        // Notifica a aplicação/janela via CustomEvent (sem tocar áudio globalmente)
+        // Toca o alerta sonoro de novo pedido (campainha)
+        try {
+          playNewOrderChime();
+        } catch (audioErr) {
+          console.warn("Aviso ao tocar som de novo pedido:", audioErr);
+        }
+
+        // Exibe notificação popup/banner estilo toast na tela
+        showToast(
+          `🔔 Novo Pedido #${orderCleanId} Recebido!`,
+          "success",
+          8000
+        );
+
+        // Notifica a aplicação/janela via CustomEvent
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("new-delivery-order-received", {
-              detail: { orders: [incomingOrder], order: incomingOrder },
+              detail: { orders: [normalizedIncoming], order: normalizedIncoming },
             })
           );
         }
@@ -2527,12 +2477,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             console.warn("SSE orders parse error:", err);
           }
         });
-
-        // Recuperação imediata se a conexão SSE oscilar ou cair
-        eventSource.onerror = (err) => {
-          console.warn("Conexão SSE oscilou/reconectando. Acionando sincronização imediata:", err);
-          syncOrdersWithCloud();
-        };
       } catch (err) {
         console.warn("SSE not available:", err);
       }
@@ -2582,14 +2526,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // 5. SISTEMA HÍBRIDO DE FALLBACK DE SEGURANÇA:
-    // Polling secundário a cada 15 segundos caso a conexão do socket/SSE caia ou oscile na internet móvel do lojista
-    const fallbackPollingTimer = setInterval(() => {
-      if (isMounted) {
-        syncOrdersWithCloud();
-      }
-    }, 15000);
-
     const handleWindowFocus = () => {
       if (currentUser && document.visibilityState === "visible") {
         syncOrdersWithCloud();
@@ -2600,7 +2536,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
-      clearInterval(fallbackPollingTimer);
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
       unsubscribeBroadcast();

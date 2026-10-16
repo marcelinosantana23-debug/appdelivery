@@ -230,33 +230,6 @@ async function startServer() {
 
   const db = new Database();
 
-  // Redirecionamento da URL raiz (/) para a rota da loja principal/padrão (ex: /loja/marcelino)
-  app.get("/", async (req, res) => {
-    if (req.query.portal === "true" || req.query.marketplace === "true") {
-      return res.redirect(302, "/portal");
-    }
-
-    const cookieHeader = req.headers.cookie || "";
-    const matchCookie = cookieHeader.match(/topfood_last_slug=([^;]+)/);
-    const cookieSlug = matchCookie ? decodeURIComponent(matchCookie[1]).trim().toLowerCase() : "";
-
-    let targetSlug =
-      cookieSlug && !["admin", "portal", "superadmin", "super-admin", "painel"].includes(cookieSlug)
-        ? cookieSlug
-        : "";
-
-    if (!targetSlug) {
-      try {
-        const loja = await db.getTenantByIdOrSlug("marcelino");
-        targetSlug = loja?.slug || "marcelino";
-      } catch {
-        targetSlug = "marcelino";
-      }
-    }
-
-    return res.redirect(302, `/loja/${targetSlug}`);
-  });
-
   // Vite middleware for development
   let viteDevServer: any = null;
   if (process.env.NODE_ENV !== "production") {

@@ -2606,7 +2606,6 @@ export class Database {
           customer_name TEXT NOT NULL,
           customer_phone TEXT NOT NULL,
           order_type TEXT NOT NULL DEFAULT 'delivery',
-          table_number TEXT DEFAULT '',
           payment_method TEXT NOT NULL DEFAULT 'pix',
           card_type TEXT,
           payment_details TEXT,
@@ -5609,8 +5608,7 @@ export class Database {
     const rawPaymentDetails = (orderData as any).paymentDetails || (orderData as any).payment_details || undefined;
     const rawReceipt = (orderData as any).pixReceiptUrl || (orderData as any).pix_receipt_url || (orderData as any).receipt || undefined;
     const rawLocationUrl = (orderData as any).location_url || (orderData as any).locationUrl || undefined;
-    const rawTableNumber = (orderData as any).tableNumber || (orderData as any).table_number || (orderData as any).numeroMesa || (orderData as any).table || (orderData as any).mesa || undefined;
-    const cleanTableNumber = rawTableNumber && typeof rawTableNumber === "string" && rawTableNumber.trim() ? rawTableNumber.trim() : undefined;
+    const rawTableNumber = (orderData as any).tableNumber || (orderData as any).table_number || (orderData as any).numeroMesa || undefined;
 
     const newOrder: Order = {
       ...orderData,
@@ -5622,16 +5620,12 @@ export class Database {
       pix_receipt_url: rawReceipt,
       location_url: rawLocationUrl,
       locationUrl: rawLocationUrl,
-      tableNumber: cleanTableNumber,
-      table_number: cleanTableNumber,
-      mesa: cleanTableNumber,
-      numeroMesa: cleanTableNumber,
+      tableNumber: rawTableNumber,
+      table_number: rawTableNumber,
       createdAt: Date.now(),
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
 
-    // 1. Gravação no Cloudflare D1 com transação/envelopamento atômico
-    let d1Saved = false;
     if (this.env?.DB) {
       try {
         await this.ensureTables();
@@ -5650,7 +5644,7 @@ export class Database {
               newOrder.customerName,
               newOrder.customerPhone,
               newOrder.orderType,
-              cleanTableNumber || "",
+              newOrder.tableNumber || "",
               newOrder.paymentMethod,
               newOrder.cardType || null,
               newOrder.paymentDetails || null,
@@ -5667,10 +5661,8 @@ export class Database {
               newOrder.createdAt
             )
             .run();
-          d1Saved = true;
-        } catch (insertErr) {
-          console.warn("D1 primary insert failed, attempting schema fallback:", insertErr);
-          // Fallback se a coluna table_number não estiver criada na tabela existente
+        } catch {
+          // Fallback se a coluna table_number não estiver criada
           await this.env.DB.prepare(
             `INSERT INTO orders (
               id, tenant_id, customer_name, customer_phone, order_type, payment_method,
@@ -5701,7 +5693,6 @@ export class Database {
               newOrder.createdAt
             )
             .run();
-          d1Saved = true;
         }
 
         if (newOrder.items && newOrder.items.length > 0) {
@@ -5709,9 +5700,9 @@ export class Database {
             try {
               const oiId = item.id || `oi-${newOrder.id}-${Math.random().toString(36).substring(2, 7)}`;
               const pId = item.product?.id || `p-${Math.random().toString(36).substring(2, 7)}`;
-              const pName = item.product?.name || (item as any)?.name || "Lanche";
-              const pPrice = Number(item.product?.price ?? (item as any)?.price) || 0;
-              const pImg = item.product?.image || (item as any)?.image || "";
+              const pName = item.product?.name || "Lanche";
+              const pPrice = Number(item.product?.price) || 0;
+              const pImg = item.product?.image || "";
               const pQty = Number(item.quantity) || 1;
               const optJson = JSON.stringify(item.selectedOptions || []);
               await this.env.DB.prepare(
@@ -5733,42 +5724,34 @@ export class Database {
                 )
                 .run();
             } catch (itemErr) {
-              console.warn("D1 createOrder insert order_item warning:", itemErr);
+              console.warn("D1 createOrder insert order_item error:", itemErr);
             }
           }
         }
-      } catch (e: any) {
-        console.error("D1 createOrder fatal error:", e);
-        if (!d1Saved && !this.getKv()) {
-          throw new Error(`Falha atômica ao registrar o pedido no banco de dados Cloudflare D1: ${e.message || "Erro de integridade"}`);
-        }
+      } catch (e) {
+        console.warn("D1 createOrder error:", e);
       }
     }
 
-    // 2. Persiste imediatamente na memória global
     globalStore.orders.unshift(newOrder);
 
-    // 3. Auto-cadastro e persistência automática de cliente vinculado à loja
+    // Auto-cadastro e persistência automática de cliente vinculado à loja
     try {
       await this.saveOrUpdateCustomerFromOrder(tenantId, newOrder);
     } catch (custErr) {
       console.warn("Auto-register customer error:", custErr);
     }
 
-    // 4. Persiste no Cloudflare KV para alta disponibilidade
     const kv = this.getKv();
     if (kv) {
       try {
         await kv.put(`order:${newOrder.id}`, JSON.stringify(newOrder));
-        const cleanId = newOrder.id.replace(/^#/, "");
-        await kv.put(`order:${cleanId}`, JSON.stringify(newOrder));
-        await kv.put(`tenant_orders_version:${newOrder.tenantId}`, Date.now().toString());
       } catch (e) {
         console.warn("KV put order error:", e);
       }
     }
 
-    // 5. Emite evento em tempo real para os lojistas conectados instantaneamente
+    // Emite evento em tempo real para os lojistas conectados instantaneamente
     try {
       orderEvents.emit(newOrder, true);
     } catch (e) {
@@ -6303,10 +6286,8 @@ export class Database {
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       orderType: row.order_type,
-      tableNumber: row.table_number || row.tableNumber || row.mesa || row.numeroMesa || undefined,
-      table_number: row.table_number || row.tableNumber || row.mesa || row.numeroMesa || undefined,
-      mesa: row.table_number || row.tableNumber || row.mesa || row.numeroMesa || undefined,
-      numeroMesa: row.table_number || row.tableNumber || row.mesa || row.numeroMesa || undefined,
+      tableNumber: row.table_number || row.tableNumber || undefined,
+      table_number: row.table_number || row.tableNumber || undefined,
       paymentMethod: row.payment_method,
       cardType: row.card_type || undefined,
       paymentDetails: row.payment_details || undefined,

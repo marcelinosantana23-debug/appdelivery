@@ -494,102 +494,37 @@ export async function deleteTenantAddonGroupApi(
   }
 }
 
-export async function fetchOrdersApi(
-  tenantId?: string
-): Promise<{ success: boolean; orders: Order[]; error?: string }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+export async function fetchOrdersApi(tenantId?: string): Promise<{ success: boolean; orders: Order[]; error?: string }> {
   try {
     const url = tenantId ? `${BASE_URL}/orders?tenantId=${encodeURIComponent(tenantId)}` : `${BASE_URL}/orders`;
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-      },
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) {
-      const errData = await res.json().catch(() => null);
-      return { success: false, orders: [], error: errData?.error || `Erro do servidor (${res.status}) ao buscar pedidos.` };
-    }
-    const data = await res.json();
-    const list = Array.isArray(data.orders) ? data.orders : (Array.isArray(data.pedidos) ? data.pedidos : []);
-    return { success: true, orders: list };
+    const res = await fetch(url);
+    return await res.json();
   } catch (err: any) {
-    clearTimeout(timeoutId);
-    const isTimeout = err?.name === "AbortError";
-    return {
-      success: false,
-      orders: [],
-      error: isTimeout
-        ? "Tempo limite esgotado ao buscar pedidos. Verifique sua conexão e tente novamente."
-        : (err?.message || "Erro de conexão ao buscar pedidos."),
-    };
+    return { success: false, orders: [], error: err.message };
   }
 }
 
-export async function fetchTenantOrdersApi(
-  slugOrId: string
-): Promise<{ success: boolean; orders: Order[]; error?: string }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+export async function fetchTenantOrdersApi(slugOrId: string): Promise<{ success: boolean; orders: Order[]; error?: string }> {
   try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
-      signal: controller.signal,
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-      },
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) {
-      const errData = await res.json().catch(() => null);
-      return { success: false, orders: [], error: errData?.error || `Erro do servidor (${res.status}) ao buscar pedidos.` };
-    }
-    const data = await res.json();
-    const list = Array.isArray(data.orders) ? data.orders : (Array.isArray(data.pedidos) ? data.pedidos : []);
-    return { success: true, orders: list };
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`);
+    return await res.json();
   } catch (err: any) {
-    clearTimeout(timeoutId);
-    const isTimeout = err?.name === "AbortError";
-    return {
-      success: false,
-      orders: [],
-      error: isTimeout
-        ? "Tempo limite esgotado ao buscar pedidos. Verifique sua conexão e tente novamente."
-        : (err?.message || "Erro de conexão ao buscar pedidos."),
-    };
+    return { success: false, orders: [], error: err.message };
   }
 }
 
 export async function createOrderApi(
   orderData: any
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
   try {
     const res = await fetch(`${BASE_URL}/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(orderData),
-      signal: controller.signal,
     });
-    clearTimeout(timeoutId);
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      return { success: false, error: data.error || `Erro ao registrar pedido (${res.status})` };
-    }
-    return data;
+    return await res.json();
   } catch (err: any) {
-    clearTimeout(timeoutId);
-    const isTimeout = err?.name === "AbortError";
-    return {
-      success: false,
-      error: isTimeout
-        ? "Tempo limite esgotado ao enviar pedido. O servidor demorou para responder. Verifique sua conexão e tente novamente."
-        : (err?.message || "Falha na conexão com o servidor ao registrar pedido."),
-    };
+    return { success: false, error: err.message };
   }
 }
 
@@ -597,8 +532,6 @@ export async function createTenantOrderApi(
   slugOrId: string,
   orderData: Omit<Order, "id" | "tenantId" | "createdAt">
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
   try {
     const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
       method: "POST",
@@ -607,23 +540,10 @@ export async function createTenantOrderApi(
         ...getAuthHeaders(),
       },
       body: JSON.stringify(orderData),
-      signal: controller.signal,
     });
-    clearTimeout(timeoutId);
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      return { success: false, error: data.error || `Erro ao registrar pedido (${res.status})` };
-    }
-    return data;
+    return await res.json();
   } catch (err: any) {
-    clearTimeout(timeoutId);
-    const isTimeout = err?.name === "AbortError";
-    return {
-      success: false,
-      error: isTimeout
-        ? "Tempo limite esgotado ao enviar pedido. O servidor demorou para responder. Verifique sua conexão e tente novamente."
-        : (err?.message || "Falha na conexão com o servidor ao registrar pedido."),
-    };
+    return { success: false, error: err.message };
   }
 }
 

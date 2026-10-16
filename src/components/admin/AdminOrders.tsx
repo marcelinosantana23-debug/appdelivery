@@ -27,7 +27,6 @@ import {
   Smartphone,
   Printer,
   UtensilsCrossed,
-  AlertCircle,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
@@ -40,8 +39,6 @@ import {
   formatRelativeOrderTime,
   formatOrderExactDateTime,
   groupOrdersByTemporalBlock,
-  formatTableDisplay,
-  getTableNumberOnly,
 } from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
 
@@ -65,7 +62,6 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [motoboyModalOrder, setMotoboyModalOrder] = useState<Order | null>(null);
   const [thermalReceiptOrder, setThermalReceiptOrder] = useState<Order | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
 
@@ -115,7 +111,6 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const handleRefreshClick = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
-    setRefreshError(null);
     try {
       if (typeof window !== "undefined") {
         const p = window.location.pathname.toLowerCase();
@@ -123,18 +118,12 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
           window.history.replaceState({ view: "admin", tab: "orders" }, "", "/painel");
         }
       }
-      const res = await refreshOrders();
-      if (res) {
-        setRefreshError(null);
-        showToast("Lista de pedidos atualizada com sucesso!", "success");
-      } else {
-        setRefreshError("Não foi possível carregar os pedidos no momento. Verifique sua conexão e tente novamente.");
-      }
-    } catch (err: any) {
-      setRefreshError(err?.message || "Erro de rede ao sincronizar pedidos com o servidor.");
+      await refreshOrders();
+      showToast("Lista de pedidos atualizada com sucesso!", "success");
+    } catch {
       showToast("Erro ao sincronizar pedidos", "error");
     } finally {
-      setIsRefreshing(false);
+      setTimeout(() => setIsRefreshing(false), 300);
     }
   };
 
@@ -258,37 +247,6 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
 
       {/* Lista de Pedidos */}
       <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex-1">
-        {/* Banner de Erro na Sincronização com Retry */}
-        {refreshError && (
-          <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-3.5 text-xs text-red-800 space-y-2 animate-fade-in shadow-xs">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 font-bold text-red-900">
-                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
-                <span>Erro ao sincronizar pedidos</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRefreshError(null)}
-                className="text-red-500 hover:text-red-700 text-xs font-bold px-1.5 py-0.5 rounded-lg hover:bg-red-100 transition"
-              >
-                ✕ Fechar
-              </button>
-            </div>
-            <p className="text-red-700 font-medium">{refreshError}</p>
-            <div className="pt-0.5">
-              <button
-                type="button"
-                onClick={handleRefreshClick}
-                disabled={isRefreshing}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 active:scale-95 transition shadow-xs cursor-pointer disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
-                <span>{isRefreshing ? "Tentando novamente..." : "Tentar novamente"}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Banner de Pedidos Pendentes Aguardando Aceite */}
         {pendingOrdersCount > 0 && (
           <div className="rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 p-3 sm:p-4 text-amber-900 animate-pulse shadow-xs">
@@ -539,7 +497,7 @@ function OrderCard({
           {order.orderType === "dine_in" && (
             <span className="inline-flex items-center gap-1 rounded-lg bg-purple-100 border-2 border-purple-300 px-2.5 py-0.5 text-xs font-black text-purple-900 shadow-2xs">
               <UtensilsCrossed className="h-3.5 w-3.5 text-purple-700" />
-              <span>CONSUMIR AQUI — {formatTableDisplay(order.tableNumber || order.table_number || (order as any).mesa).toUpperCase()}</span>
+              <span>CONSUMIR AQUI - MESA {order.tableNumber || order.table_number || "S/N"}</span>
             </span>
           )}
         </div>
@@ -719,10 +677,7 @@ function OrderCard({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-black text-purple-950 truncate uppercase tracking-wide flex items-center gap-1.5">
-                  <span>CONSUMIR AQUI — {formatTableDisplay(order.tableNumber || order.table_number || (order as any).mesa).toUpperCase()}</span>
-                </p>
-                <p className="text-xs font-black text-purple-900 mt-0.5">
-                  Mesa: {getTableNumberOnly(order.tableNumber || order.table_number || (order as any).mesa)}
+                  <span>CONSUMIR AQUI — MESA {order.tableNumber || order.table_number || "Não informada"}</span>
                 </p>
                 <p className="text-[11px] text-purple-800 font-medium mt-0.5">
                   Pedido para consumo imediato no local. Servir os itens na mesa indicada.
@@ -749,7 +704,7 @@ function OrderCard({
             }`}
           >
             {order.orderType === "dine_in"
-              ? `🍽️ CONSUMIR AQUI - ${formatTableDisplay(order.tableNumber || order.table_number || (order as any).mesa).toUpperCase()}`
+              ? `🍽️ CONSUMIR AQUI - MESA ${order.tableNumber || order.table_number || "S/N"}`
               : order.orderType === "delivery"
               ? "🛵 Entrega a Domicílio"
               : "🏪 Retirada no Balcão"}
