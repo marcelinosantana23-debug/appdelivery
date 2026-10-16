@@ -399,8 +399,57 @@ function loadSavedCart(storeSlug?: string): CartItem[] {
   return [];
 }
 
+export function resolveDefaultStoreSlug(): string {
+  if (typeof window === "undefined") return "marcelino";
+  try {
+    // 1. Último acesso salvo no localStorage ou sessionStorage
+    const last =
+      localStorage.getItem("topfood_last_store_slug") ||
+      sessionStorage.getItem("topfood_last_store_slug");
+    if (last && typeof last === "string" && !RESERVED_SLUGS.has(last.toLowerCase())) {
+      return last.trim().toLowerCase();
+    }
+    // 2. Sessão salva de lojista ou cliente
+    const sessionTenant =
+      localStorage.getItem("delivery_tenant_session") ||
+      sessionStorage.getItem("topfood_tenant_session");
+    if (sessionTenant) {
+      const parsed = JSON.parse(sessionTenant);
+      if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug.toLowerCase())) {
+        return parsed.slug.trim().toLowerCase();
+      }
+    }
+    // 3. Lojas em cache do portal (destaque ou primeira ativa)
+    const cachedHome = loadCachedHomeData();
+    if (cachedHome?.tenants && Array.isArray(cachedHome.tenants) && cachedHome.tenants.length > 0) {
+      const featured = cachedHome.tenants.find(
+        (t) =>
+          (t.isFeatured || t.slug === "marcelino" || t.slug === "ms-preparacoes") &&
+          t.status !== "inactive"
+      );
+      if (featured?.slug) return featured.slug.toLowerCase();
+      const firstActive = cachedHome.tenants.find((t) => t.status !== "inactive" && t.slug);
+      if (firstActive?.slug) return firstActive.slug.toLowerCase();
+    }
+    const cachedTenants = loadCachedTenants();
+    if (cachedTenants && cachedTenants.length > 0) {
+      const featured = cachedTenants.find(
+        (t) =>
+          (t.isFeatured || t.slug === "marcelino" || t.slug === "ms-preparacoes") &&
+          t.status !== "inactive"
+      );
+      if (featured?.slug) return featured.slug.toLowerCase();
+      const firstActive = cachedTenants.find((t) => t.status !== "inactive" && t.slug);
+      if (firstActive?.slug) return firstActive.slug.toLowerCase();
+    }
+  } catch {
+    // ignore
+  }
+  return "marcelino";
+}
+
 function getInitialUrlSlug(): string {
-  if (typeof window === "undefined") return "";
+  if (typeof window === "undefined") return "marcelino";
   const path = window.location.pathname;
 
   // 1. /loja/:slug (incluindo sub-rotas como /loja/:slug/carrinho, /loja/:slug/checkout, /loja/:slug/rastreio)
@@ -456,10 +505,24 @@ function getInitialUrlSlug(): string {
     return "";
   }
 
-  // 5. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
+  // 5. Se for explicitamente a rota do marketplace (/portal ou /topfood)
   const clean = path.replace(/\/+$/, "").toLowerCase();
-  if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+  if (clean === "/topfood" || clean === "/portal") {
     return "";
+  }
+
+  // 6. Rota raiz sem slug (/ ou vazio): redireciona/carrega a loja principal/padrão (ex: /loja/marcelino)
+  if (clean === "" || clean === "/") {
+    const defaultSlug = resolveDefaultStoreSlug();
+    if (typeof window !== "undefined") {
+      try {
+        const targetPath = `/loja/${defaultSlug}`;
+        window.history.replaceState({ path: targetPath, view: "menu", slug: defaultSlug }, "", targetPath);
+      } catch (err) {
+        console.warn("Error replacing state for default store:", err);
+      }
+    }
+    return defaultSlug;
   }
 
   // 6. Sub-rotas do cliente sem prefixo /loja/ (/carrinho, /checkout, /rastreio)
@@ -1453,6 +1516,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (slug && !RESERVED_SLUGS.has(slug)) {
       try {
         localStorage.setItem("topfood_last_store_slug", slug);
+        if (typeof document !== "undefined") {
+          document.cookie = `topfood_last_slug=${encodeURIComponent(slug)}; path=/; max-age=31536000; SameSite=Lax`;
+        }
       } catch {
         // ignore
       }
@@ -1464,6 +1530,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrentSlug(slugOrId);
       try {
         localStorage.setItem("topfood_last_store_slug", slugOrId);
+        if (typeof document !== "undefined") {
+          document.cookie = `topfood_last_slug=${encodeURIComponent(slugOrId)}; path=/; max-age=31536000; SameSite=Lax`;
+        }
       } catch {
         // ignore
       }
