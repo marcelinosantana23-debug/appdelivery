@@ -1742,9 +1742,9 @@ api.get("/orders/:orderId/status", async (c) => {
 // 5. ROTAS DE COMPATIBILIDADE COM A INTERFACE EXISTENTE (/tenants, /auth)
 // -----------------------------------------------------------------------------
 
-api.post("/auth/login", async (c) => {
+export async function handleLoginPost(c: any) {
   try {
-    const body = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
     const { email, password, portal } = body;
 
     if (!email || !password) {
@@ -1752,7 +1752,7 @@ api.post("/auth/login", async (c) => {
     }
 
     const db = getDb(c);
-    const user = await db.authenticateUser(email, password);
+    const user = await db.authenticateUser(String(email).trim().toLowerCase(), String(password).trim());
 
     if (!user) {
       return c.json({ success: false, error: "Credenciais inválidas ou conta inativa" }, 401);
@@ -1821,12 +1821,25 @@ api.post("/auth/login", async (c) => {
       token,
     }, 200);
   } catch (e: any) {
+    console.error("[Login Handler Error]:", e);
     return c.json({ success: false, error: e.message || "Erro no login" }, 500);
   }
-});
+}
+
+// Registro explícito de todas as variações de rotas de login
+api.post("/auth/login", handleLoginPost);
+api.post("/login", handleLoginPost);
+api.post("/admin/login", handleLoginPost);
+api.post("/superadmin/login", handleLoginPost);
+api.post("/super-admin/login", handleLoginPost);
+api.post("/api/auth/login", handleLoginPost);
+api.post("/api/login", handleLoginPost);
+api.post("/api/admin/login", handleLoginPost);
+api.post("/api/superadmin/login", handleLoginPost);
+api.post("/api/super-admin/login", handleLoginPost);
 
 // Verificação de sessão administrativa segura (Super Admin e Lojista) com JWT_SECRET
-api.post("/auth/verify", async (c) => {
+export async function handleVerifySessionPost(c: any) {
   try {
     const authHeader = c.req.header("Authorization");
     const body = await c.req.json().catch(() => ({}));
@@ -1877,7 +1890,14 @@ api.post("/auth/verify", async (c) => {
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao validar sessão." }, 500);
   }
-});
+}
+
+api.post("/auth/verify", handleVerifySessionPost);
+api.post("/verify", handleVerifySessionPost);
+api.post("/admin/verify", handleVerifySessionPost);
+api.post("/api/auth/verify", handleVerifySessionPost);
+api.post("/api/verify", handleVerifySessionPost);
+api.post("/api/admin/verify", handleVerifySessionPost);
 
 export async function handleUpdateSuperAdminCredentials(c: any) {
   try {
@@ -4378,6 +4398,29 @@ api.get("/admin/push-status", async (c) => {
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
+});
+
+// 404 handler for API routes to guarantee application/json response and prevent HTML fallback leaks
+api.notFound((c) => {
+  return c.json(
+    {
+      success: false,
+      error: `Rota da API não encontrada: ${c.req.method} ${c.req.path}`,
+    },
+    404
+  );
+});
+
+// Global error handler for API routes
+api.onError((err, c) => {
+  console.error("[Worker API Unhandled Error]:", err);
+  return c.json(
+    {
+      success: false,
+      error: err?.message || "Erro interno no servidor da API",
+    },
+    500
+  );
 });
 
 export default api;

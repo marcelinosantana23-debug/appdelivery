@@ -101,96 +101,109 @@ async function startServer() {
     next();
   });
 
-  // Hono API router mounted at /api, /pedidos, /orders, /tenants
-  app.use(["/api", "/pedidos", "/orders", "/tenants"], async (req, res) => {
-    try {
-      const host = req.get("host") || "localhost:3000";
-      const originalPath = req.originalUrl || req.url;
-      const fullUrl = `${req.protocol}://${host}${originalPath}`;
-      const headers = new Headers();
-      
-      for (const [key, value] of Object.entries(req.headers)) {
-        if (value !== undefined) {
-          if (Array.isArray(value)) {
-            value.forEach((v) => headers.append(key, v));
-          } else {
-            headers.set(key, value);
-          }
-        }
-      }
-
-      let body: any;
-      if (["GET", "HEAD"].includes(req.method)) {
-        body = undefined;
-      } else if (Buffer.isBuffer(req.body)) {
-        body = req.body;
-      } else if (typeof req.body === "string") {
-        body = req.body;
-      } else {
-        body = JSON.stringify(req.body);
-      }
-
-      if (body && !headers.has("content-type")) {
-        headers.set("content-type", "application/json");
-      }
-
-      const webRequest = new Request(fullUrl, {
-        method: req.method,
-        headers,
-        body,
-      });
-
-      // Pass bindings environment to Cloudflare/Hono worker
-      const response = await workerApp.fetch(webRequest, {
-        PLATFORM_NAME: "Top Food Multi-tenant",
-        ENVIRONMENT: process.env.NODE_ENV || "development",
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-        JWT_SECRET: process.env.JWT_SECRET || "topfood-jwt-secret",
-      });
-
-      res.status(response.status);
-      response.headers.forEach((val, key) => {
-        res.setHeader(key, val);
-      });
-
-      // Se a resposta for um EventStream SSE (Server-Sent Events), transmite os chunks em tempo real
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/event-stream") && response.body) {
-        res.setHeader("Cache-Control", "no-cache, no-transform");
-        res.setHeader("Connection", "keep-alive");
-        res.setHeader("X-Accel-Buffering", "no");
-        if (typeof res.flushHeaders === "function") {
-          res.flushHeaders();
-        }
-
-        const reader = response.body.getReader();
-        req.on("close", () => {
-          reader.cancel().catch(() => {});
-        });
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
-            if (typeof (res as any).flush === "function") {
-              (res as any).flush();
+  // Hono API router mounted at /api, /pedidos, /orders, /tenants, /auth, /login, /admin/login, /superadmin, /super-admin
+  app.use(
+    [
+      "/api",
+      "/pedidos",
+      "/orders",
+      "/tenants",
+      "/auth",
+      "/login",
+      "/admin/login",
+      "/superadmin",
+      "/super-admin",
+    ],
+    async (req, res) => {
+      try {
+        const host = req.get("host") || "localhost:3000";
+        const originalPath = req.originalUrl || req.url;
+        const fullUrl = `${req.protocol}://${host}${originalPath}`;
+        const headers = new Headers();
+        
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (value !== undefined) {
+            if (Array.isArray(value)) {
+              value.forEach((v) => headers.append(key, v));
+            } else {
+              headers.set(key, value);
             }
           }
-        } catch {
-          // Conexão encerrada pelo cliente
         }
-        return res.end();
-      }
 
-      const buffer = await response.arrayBuffer();
-      res.end(Buffer.from(buffer));
-    } catch (err: unknown) {
-      console.error("API error:", err);
-      const msg = err instanceof Error ? err.message : "Internal Server Error";
-      res.status(500).json({ error: msg });
+        let body: any;
+        if (["GET", "HEAD"].includes(req.method)) {
+          body = undefined;
+        } else if (Buffer.isBuffer(req.body)) {
+          body = req.body;
+        } else if (typeof req.body === "string") {
+          body = req.body;
+        } else {
+          body = JSON.stringify(req.body);
+        }
+
+        if (body && !headers.has("content-type")) {
+          headers.set("content-type", "application/json");
+        }
+
+        const webRequest = new Request(fullUrl, {
+          method: req.method,
+          headers,
+          body,
+        });
+
+        // Pass bindings environment to Cloudflare/Hono worker
+        const response = await workerApp.fetch(webRequest, {
+          PLATFORM_NAME: "Top Food Multi-tenant",
+          ENVIRONMENT: process.env.NODE_ENV || "development",
+          GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+          JWT_SECRET: process.env.JWT_SECRET || "topfood-jwt-secret",
+        });
+
+        res.status(response.status);
+        response.headers.forEach((val, key) => {
+          res.setHeader(key, val);
+        });
+
+        // Se a resposta for um EventStream SSE (Server-Sent Events), transmite os chunks em tempo real
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/event-stream") && response.body) {
+          res.setHeader("Cache-Control", "no-cache, no-transform");
+          res.setHeader("Connection", "keep-alive");
+          res.setHeader("X-Accel-Buffering", "no");
+          if (typeof res.flushHeaders === "function") {
+            res.flushHeaders();
+          }
+
+          const reader = response.body.getReader();
+          req.on("close", () => {
+            reader.cancel().catch(() => {});
+          });
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(value);
+              if (typeof (res as any).flush === "function") {
+                (res as any).flush();
+              }
+            }
+          } catch {
+            // Conexão encerrada pelo cliente
+          }
+          return res.end();
+        }
+
+        const buffer = await response.arrayBuffer();
+        res.end(Buffer.from(buffer));
+      } catch (err: unknown) {
+        console.error("API error:", err);
+        const msg = err instanceof Error ? err.message : "Internal Server Error";
+        res.status(500).setHeader("Content-Type", "application/json").json({ success: false, error: msg });
+      }
     }
-  });
+  );
 
   // Dedicated PWA routes with strict headers for Android Chrome
   app.get("/sw.js", (req, res) => {
