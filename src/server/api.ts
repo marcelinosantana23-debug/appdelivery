@@ -1397,7 +1397,17 @@ const handlePedidosPost = async (c: any) => {
     const db = getDb(c);
     const body = await c.req.json().catch(() => ({}));
 
-    // 1. Identificar a loja vinculada
+    // 1. Verificação de Bindings (D1 / KV / ENV)
+    const hasD1 = Boolean(c.env?.DB || (globalThis as any)?.DB);
+    const hasKV = Boolean(c.env?.TOP_FOOD_KV || c.env?.KV || c.env?.STORE_KV);
+    if (!hasD1) {
+      console.warn("[Cloudflare Worker]: env.DB não detectado em /pedidos. Operando com persistência resiliente.");
+    }
+    if (!hasKV) {
+      console.warn("[Cloudflare Worker]: env.TOP_FOOD_KV / env.KV não detectado em /pedidos.");
+    }
+
+    // 2. Identificar a loja vinculada
     const lojaRef = body.lojaSlug || body.slug || body.lojaId || body.tenantId || "marcelino";
     let loja = await db.getTenantByIdOrSlug(lojaRef);
 
@@ -1422,7 +1432,7 @@ const handlePedidosPost = async (c: any) => {
       }, 400);
     }
 
-    // 2. Validação dos dados do cliente
+    // 3. Validação dos dados do cliente
     const cliente = (body.cliente || body.customerName || "").trim();
     const telefone = (body.telefone || body.customerPhone || "").trim();
     const itens = body.itens || body.items;
@@ -1442,7 +1452,7 @@ const handlePedidosPost = async (c: any) => {
       return c.json({ success: false, error: "O pedido deve conter pelo menos 1 item no carrinho." }, 400);
     }
 
-    // 3. Normalização de valores e cálculos
+    // 4. Normalização de valores e cálculos
     const tipoEntrega = body.tipoEntrega || body.orderType || "delivery";
     const numeroMesa = body.tableNumber || body.table_number || body.mesa || body.numeroMesa || undefined;
     const formaPagamento = body.formaPagamento || body.paymentMethod || "pix";
@@ -1466,7 +1476,7 @@ const handlePedidosPost = async (c: any) => {
     const total = Number(body.total ?? (subtotal + taxaEntrega));
     const statusInicial: OrderStatus = normalizeOrderStatus(body.status || "Pendente");
 
-    // 4. Salvar pedido no D1 e KV
+    // 5. Salvar pedido no D1 e KV
     const comprovante = body.pix_receipt_url || body.pixReceiptUrl || body.comprovantePix || body.receipt || undefined;
     const tipoCartao = body.cardType || body.card_type || body.tipoCartao || undefined;
     const detalhesPgto = body.paymentDetails || body.payment_details || undefined;
@@ -1497,13 +1507,21 @@ const handlePedidosPost = async (c: any) => {
 
     console.log(`[Worker] Pedido gravado via /pedidos no D1/KV: ID=${novoPedido.id}, Loja=${loja.name} (${loja.id})`);
 
-    // Dispara evento em tempo real via SSE e sockets diretamente para o painel do lojista
-    orderEvents.emit(novoPedido, true);
+    // Dispara evento em tempo real via SSE (não bloqueante)
+    try {
+      orderEvents.emit(novoPedido, true);
+    } catch (sseErr) {
+      console.warn("[Worker Warning]: Falha ao emitir orderEvents SSE:", sseErr);
+    }
 
-    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
-    sendNewOrderPushNotification(loja.id, novoPedido, c.env, () => db).catch((pushErr) => {
-      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
-    });
+    // Dispara notificação push de alta prioridade para o lojista (não bloqueante)
+    try {
+      sendNewOrderPushNotification(loja.id, novoPedido, c.env, () => db).catch((pushErr) => {
+        console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+      });
+    } catch (pushErr) {
+      console.warn("[Push] Erro assíncrono ao iniciar push notification:", pushErr);
+    }
 
     return c.json({
       success: true,
@@ -3201,6 +3219,15 @@ async function parseIncomingOrderPayload(c: any): Promise<any> {
 
 const handleTenantOrderPost = async (c: any) => {
   try {
+    const hasD1 = Boolean(c.env?.DB || (globalThis as any)?.DB);
+    const hasKV = Boolean(c.env?.TOP_FOOD_KV || c.env?.KV || c.env?.STORE_KV);
+    if (!hasD1) {
+      console.warn("[Cloudflare Worker]: env.DB não detectado em /tenants/:slugOrId/orders. Operando com persistência resiliente.");
+    }
+    if (!hasKV) {
+      console.warn("[Cloudflare Worker]: env.TOP_FOOD_KV / env.KV não detectado em /tenants/:slugOrId/orders.");
+    }
+
     const db = getDb(c);
     const slugOrId = c.req.param("slugOrId") || c.req.query("tenantId") || c.req.query("slug");
     const body = await parseIncomingOrderPayload(c);
@@ -3257,13 +3284,21 @@ const handleTenantOrderPost = async (c: any) => {
     const order = await db.createOrder(tenant.id, body);
     console.log(`[Worker] Pedido gravado com sucesso no D1/KV: ID=${order.id}, Loja=${tenant.name} (${tenant.id})`);
 
-    // Dispara evento em tempo real via SSE diretamente para o painel do lojista
-    orderEvents.emit(order, true);
+    // Dispara evento em tempo real via SSE (não bloqueante)
+    try {
+      orderEvents.emit(order, true);
+    } catch (sseErr) {
+      console.warn("[Worker SSE Warning]:", sseErr);
+    }
 
-    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
-    sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
-      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
-    });
+    // Dispara notificação push de alta prioridade para o lojista (não bloqueante)
+    try {
+      sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
+        console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+      });
+    } catch (pushErr) {
+      console.warn("[Push] Falha ao iniciar envio de notificação:", pushErr);
+    }
 
     return c.json({
       success: true,
@@ -3328,6 +3363,15 @@ api.get("/orders/:orderId/receipt", async (c) => {
 // Rota direta de compatibilidade para clientes móveis e redes externas postando em /orders
 const handleDirectOrdersPost = async (c: any) => {
   try {
+    const hasD1 = Boolean(c.env?.DB || (globalThis as any)?.DB);
+    const hasKV = Boolean(c.env?.TOP_FOOD_KV || c.env?.KV || c.env?.STORE_KV);
+    if (!hasD1) {
+      console.warn("[Cloudflare Worker]: env.DB não detectado em /orders. Operando com persistência resiliente.");
+    }
+    if (!hasKV) {
+      console.warn("[Cloudflare Worker]: env.TOP_FOOD_KV / env.KV não detectado em /orders.");
+    }
+
     const db = getDb(c);
     const body = await parseIncomingOrderPayload(c);
     const tenantIdentifier = body.tenantId || body.tenantSlug || body.loja || "marcelino";
@@ -3377,13 +3421,21 @@ const handleDirectOrdersPost = async (c: any) => {
     const order = await db.createOrder(tenant.id, body);
     console.log(`[Worker] Pedido gravado com sucesso no D1/KV: ID=${order.id}, Loja=${tenant.name} (${tenant.id})`);
 
-    // Dispara evento em tempo real via SSE diretamente para o painel do lojista
-    orderEvents.emit(order, true);
+    // Dispara evento em tempo real via SSE (não bloqueante)
+    try {
+      orderEvents.emit(order, true);
+    } catch (sseErr) {
+      console.warn("[Worker SSE Warning]:", sseErr);
+    }
 
-    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
-    sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
-      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
-    });
+    // Dispara notificação push de alta prioridade para o lojista (não bloqueante)
+    try {
+      sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
+        console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+      });
+    } catch (pushErr) {
+      console.warn("[Push] Falha ao iniciar envio de notificação:", pushErr);
+    }
 
     return c.json({
       success: true,

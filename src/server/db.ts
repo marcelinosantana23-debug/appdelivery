@@ -3229,8 +3229,25 @@ export class Database {
     }
   }
 
+  private getD1() {
+    return (
+      this.env?.DB ||
+      this.env?.DATABASE ||
+      this.env?.D1 ||
+      (typeof globalThis !== "undefined" && (globalThis as any)?.DB) ||
+      (typeof globalThis !== "undefined" && (globalThis as any)?.D1)
+    );
+  }
+
   private getKv() {
-    return this.env?.KV || this.env?.STORE_KV;
+    return (
+      this.env?.TOP_FOOD_KV ||
+      this.env?.TOPFOOD_KV ||
+      this.env?.KV ||
+      this.env?.STORE_KV ||
+      (typeof globalThis !== "undefined" && (globalThis as any)?.TOP_FOOD_KV) ||
+      (typeof globalThis !== "undefined" && (globalThis as any)?.KV)
+    );
   }
 
   // ===================== TENANTS =====================
@@ -5626,11 +5643,14 @@ export class Database {
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
 
-    if (this.env?.DB) {
+    const d1 = this.getD1();
+    if (!d1) {
+      console.warn("[Cloudflare Worker DB Binding]: env.DB não configurado ou inacessível no momento. Salvando em armazenamento resiliente (KV/Memória).");
+    } else {
       try {
         await this.ensureTables();
         try {
-          await this.env.DB.prepare(
+          await d1.prepare(
             `INSERT INTO orders (
               id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
               card_type, payment_details, pix_receipt_url, location_url,
@@ -5661,9 +5681,10 @@ export class Database {
               newOrder.createdAt
             )
             .run();
-        } catch {
+        } catch (insertErr) {
           // Fallback se a coluna table_number não estiver criada
-          await this.env.DB.prepare(
+          console.warn("[D1 Warning]: Tentativa com fallback de schema antigo de orders:", insertErr);
+          await d1.prepare(
             `INSERT INTO orders (
               id, tenant_id, customer_name, customer_phone, order_type, payment_method,
               card_type, payment_details, pix_receipt_url, location_url,
@@ -5705,7 +5726,7 @@ export class Database {
               const pImg = item.product?.image || "";
               const pQty = Number(item.quantity) || 1;
               const optJson = JSON.stringify(item.selectedOptions || []);
-              await this.env.DB.prepare(
+              await d1.prepare(
                 `INSERT INTO order_items (
                   id, order_id, tenant_id, product_id, name, price, quantity, image, options_json, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -5728,8 +5749,8 @@ export class Database {
             }
           }
         }
-      } catch (e) {
-        console.warn("D1 createOrder error:", e);
+      } catch (e: any) {
+        console.error("[Cloudflare Worker DB Error]: Falha na operação D1 durante criação de pedido:", e?.message || e);
       }
     }
 
@@ -5746,9 +5767,11 @@ export class Database {
     if (kv) {
       try {
         await kv.put(`order:${newOrder.id}`, JSON.stringify(newOrder));
-      } catch (e) {
-        console.warn("KV put order error:", e);
+      } catch (e: any) {
+        console.error("[Cloudflare Worker KV Error]: Erro ao salvar pedido no KV:", e?.message || e);
       }
+    } else {
+      console.warn("[Cloudflare Worker KV Binding]: env.TOP_FOOD_KV / env.KV não encontrado.");
     }
 
     // Emite evento em tempo real para os lojistas conectados instantaneamente
