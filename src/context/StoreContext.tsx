@@ -2090,7 +2090,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---------------- ORDERS ----------------
   const addOrder = useCallback(
     async (order: Order): Promise<Order | null> => {
-      const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
+      const tenantId =
+        currentTenant?.id ||
+        currentTenant?.slug ||
+        config?.id ||
+        config?.slug ||
+        currentSlug ||
+        "marcelino";
       const rawTable = order.tableNumber || (order as any).table_number || (order as any).mesa || (order as any).numeroMesa;
       const payload = {
         tenantId,
@@ -2119,15 +2125,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         // Persiste imediatamente no Cloudflare D1 via API e exige confirmação real do backend (ACK)
         const res = await createTenantOrderApi(tenantId, payload);
+        const orderId = res?.orderId || res?.order?.id;
         
-        if (!res || !res.success || !res.order || !res.order.id) {
-          throw new Error(res?.error || "O servidor não confirmou o registro do pedido.");
+        if (!res || !res.success || !orderId) {
+          throw new Error(res?.error || "O servidor não confirmou o registro do pedido no banco de dados.");
         }
 
         const finalOrder: Order = {
-          ...res.order,
-          tableNumber: res.order.tableNumber || rawTable || undefined,
-          table_number: res.order.table_number || rawTable || undefined,
+          ...(res.order || (order as any)),
+          id: orderId,
+          tableNumber: res.order?.tableNumber || rawTable || undefined,
+          table_number: res.order?.table_number || rawTable || undefined,
         };
 
         // Remove da fila offline caso estivesse pendente
@@ -2166,7 +2174,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [currentTenant, currentSlug, showToast]
+    [currentTenant, currentSlug, config?.id, config?.slug, showToast]
   );
 
   const updateOrderStatus = useCallback(

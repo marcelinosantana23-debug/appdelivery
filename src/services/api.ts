@@ -515,50 +515,120 @@ export async function fetchTenantOrdersApi(slugOrId: string): Promise<{ success:
 
 export async function createOrderApi(
   orderData: any
-): Promise<{ success: boolean; order?: Order; error?: string }> {
-  try {
-    const res = await fetch(`${BASE_URL}/orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(orderData),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.success || !data?.order?.id) {
-      return {
-        success: false,
-        error: data?.error || `Falha ao gravar pedido no servidor (HTTP ${res.status})`,
-      };
+): Promise<{ success: boolean; orderId?: string; order?: Order; error?: string }> {
+  const endpoints = [`${BASE_URL}/pedidos`, `${BASE_URL}/orders`, "/pedidos", "/orders"];
+  let lastError = "";
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData),
+      });
+
+      const data = await res.json().catch(() => null);
+      const orderObj = data?.order || data?.pedido;
+      const orderId = data?.orderId || data?.id || orderObj?.id;
+      const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
+
+      if (isSuccess && orderId) {
+        const finalOrder: Order = {
+          ...(orderObj || orderData),
+          id: orderId,
+        };
+        return {
+          success: true,
+          orderId,
+          order: finalOrder,
+        };
+      }
+
+      const errMsg = data?.error || data?.message;
+      if (res.status === 400 && errMsg) {
+        return { success: false, error: errMsg };
+      }
+
+      if (errMsg) {
+        lastError = errMsg;
+      } else if (res.status !== 404) {
+        lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
+      }
+    } catch (err: any) {
+      lastError = err?.message || "Falha de conexão com a API";
     }
-    return data;
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Falha de rede ao conectar ao servidor" };
   }
+
+  return {
+    success: false,
+    error: lastError || "Falha ao gravar pedido no servidor.",
+  };
 }
 
 export async function createTenantOrderApi(
   slugOrId: string,
   orderData: Omit<Order, "id" | "tenantId" | "createdAt">
-): Promise<{ success: boolean; order?: Order; error?: string }> {
-  try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify(orderData),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.success || !data?.order?.id) {
-      return {
-        success: false,
-        error: data?.error || `Falha ao gravar pedido no banco de dados (HTTP ${res.status})`,
-      };
+): Promise<{ success: boolean; orderId?: string; order?: Order; error?: string }> {
+  const cleanSlugOrId = (slugOrId || "marcelino").trim();
+  const endpoints = [
+    `${BASE_URL}/tenants/${encodeURIComponent(cleanSlugOrId)}/orders`,
+    `${BASE_URL}/pedidos`,
+    `${BASE_URL}/orders`,
+    `/pedidos`,
+    `/orders`,
+  ];
+
+  let lastError = "";
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...orderData,
+          tenantId: cleanSlugOrId,
+          lojaSlug: cleanSlugOrId,
+          loja: cleanSlugOrId,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      const orderObj = data?.order || data?.pedido;
+      const orderId = data?.orderId || data?.id || orderObj?.id;
+      const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
+
+      if (isSuccess && orderId) {
+        const finalOrder: Order = {
+          ...(orderObj || (orderData as any)),
+          id: orderId,
+        };
+        return {
+          success: true,
+          orderId,
+          order: finalOrder,
+        };
+      }
+
+      const errMsg = data?.error || data?.message;
+      if (res.status === 400 && errMsg) {
+        return { success: false, error: errMsg };
+      }
+
+      if (errMsg) {
+        lastError = errMsg;
+      } else if (res.status !== 404) {
+        lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
+      }
+    } catch (err: any) {
+      lastError = err?.message || "Falha de conexão com a internet";
     }
-    return data;
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Falha de rede ao conectar ao servidor" };
   }
+
+  return {
+    success: false,
+    error: lastError || "Falha ao gravar pedido no servidor.",
+  };
 }
 
 export async function updateOrderStatusApi(

@@ -1392,16 +1392,23 @@ api.delete("/lojas/:slug/produtos/:id", async (c) => {
 // -----------------------------------------------------------------------------
 
 // POST /api/pedidos - Criar novo pedido no Cloudflare D1 / KV
-api.post("/pedidos", async (c) => {
+const handlePedidosPost = async (c: any) => {
   try {
     const db = getDb(c);
-    const body = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
 
     // 1. Identificar a loja vinculada
     const lojaRef = body.lojaSlug || body.slug || body.lojaId || body.tenantId || "marcelino";
-    const loja = await db.getTenantByIdOrSlug(lojaRef);
+    let loja = await db.getTenantByIdOrSlug(lojaRef);
 
     if (!loja) {
+      // Fallback resiliente para primeira loja ativa
+      const allTenants = await db.getTenants();
+      loja = allTenants.find((t) => t.status !== "inactive") || allTenants[0];
+    }
+
+    if (!loja) {
+      console.error("[Worker Error in /pedidos]: Loja não encontrada para lojaRef:", lojaRef);
       return c.json({
         success: false,
         error: `Loja '${lojaRef}' não encontrada para vinculação do pedido.`,
@@ -1416,25 +1423,28 @@ api.post("/pedidos", async (c) => {
     }
 
     // 2. Validação dos dados do cliente
-    const cliente = body.cliente || body.customerName;
-    const telefone = body.telefone || body.customerPhone;
+    const cliente = (body.cliente || body.customerName || "").trim();
+    const telefone = (body.telefone || body.customerPhone || "").trim();
     const itens = body.itens || body.items;
 
-    if (!cliente || typeof cliente !== "string" || !cliente.trim()) {
-      return c.json({ success: false, error: "Nome do cliente é obrigatório." }, 400);
+    if (!cliente) {
+      console.error("[Worker Error in POST /pedidos]: Nome do cliente é obrigatório");
+      return c.json({ success: false, error: "Nome do cliente é obrigatório para finalizar o pedido." }, 400);
     }
 
-    if (!telefone || typeof telefone !== "string" || !telefone.trim()) {
-      return c.json({ success: false, error: "Telefone do cliente é obrigatório." }, 400);
+    if (!telefone) {
+      console.error("[Worker Error in POST /pedidos]: Telefone do cliente é obrigatório");
+      return c.json({ success: false, error: "Telefone do cliente é obrigatório para finalizar o pedido." }, 400);
     }
 
     if (!Array.isArray(itens) || itens.length === 0) {
-      return c.json({ success: false, error: "O pedido deve conter pelo menos 1 item." }, 400);
+      console.error("[Worker Error in POST /pedidos]: Nenhum item encontrado no pedido");
+      return c.json({ success: false, error: "O pedido deve conter pelo menos 1 item no carrinho." }, 400);
     }
 
     // 3. Normalização de valores e cálculos
     const tipoEntrega = body.tipoEntrega || body.orderType || "delivery";
-    const numeroMesa = body.tableNumber || body.table_number || body.numeroMesa || undefined;
+    const numeroMesa = body.tableNumber || body.table_number || body.mesa || body.numeroMesa || undefined;
     const formaPagamento = body.formaPagamento || body.paymentMethod || "pix";
     const endereco = body.endereco || body.address;
     const trocoPara = body.trocoPara || body.changeFor;
@@ -1463,8 +1473,8 @@ api.post("/pedidos", async (c) => {
     const locationUrl = body.location_url || body.locationUrl || undefined;
 
     const novoPedido = await db.createOrder(loja.id, {
-      customerName: cliente.trim(),
-      customerPhone: telefone.trim(),
+      customerName: cliente,
+      customerPhone: telefone,
       orderType: tipoEntrega,
       tableNumber: numeroMesa,
       table_number: numeroMesa,
@@ -1485,6 +1495,8 @@ api.post("/pedidos", async (c) => {
       statusHistory: [{ status: statusInicial, timestamp: Date.now() }],
     });
 
+    console.log(`[Worker] Pedido gravado via /pedidos no D1/KV: ID=${novoPedido.id}, Loja=${loja.name} (${loja.id})`);
+
     // Dispara evento em tempo real via SSE e sockets diretamente para o painel do lojista
     orderEvents.emit(novoPedido, true);
 
@@ -1495,17 +1507,24 @@ api.post("/pedidos", async (c) => {
 
     return c.json({
       success: true,
-      message: "Pedido registrado com sucesso no Cloudflare D1/KV!",
+      orderId: novoPedido.id,
+      id: novoPedido.id,
+      order: novoPedido,
       pedido: {
         ...novoPedido,
         statusPt: STATUS_MAP_EN_TO_PT[novoPedido.status] || "Pendente",
         loja: { id: loja.id, nome: loja.name, slug: loja.slug },
       },
-    }, 201);
+      message: "Pedido registrado com sucesso no Cloudflare D1/KV!",
+    }, 200);
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Erro interno ao processar pedido." }, 500);
+    console.error("[Worker Error in POST /pedidos D1/KV]:", err?.stack || err);
+    return c.json({ success: false, error: err?.message ? `Erro no servidor: ${err.message}` : "Erro interno ao processar pedido." }, 500);
   }
-});
+};
+
+api.post("/pedidos", handlePedidosPost);
+api.post("/api/pedidos", handlePedidosPost);
 
 // GET /api/pedidos - Listar pedidos (com suporte a filtro ?loja=marcelino)
 api.get("/pedidos", async (c) => {
@@ -3135,7 +3154,7 @@ async function parseIncomingOrderPayload(c: any): Promise<any> {
         }
       } else if (typeof value === "string") {
         try {
-          if (key === "items" || key === "address" || key === "statusHistory") {
+          if (key === "items" || key === "itens" || key === "address" || key === "endereco" || key === "statusHistory") {
             body[key] = JSON.parse(value);
           } else {
             body[key] = value;
@@ -3146,9 +3165,23 @@ async function parseIncomingOrderPayload(c: any): Promise<any> {
       }
     }
   } else {
-    body = await c.req.json();
-    receiptUrl = body.pix_receipt_url || body.pixReceiptUrl || body.receipt;
+    body = await c.req.json().catch((err: any) => {
+      console.warn("[Worker] Aviso ao ler JSON de entrada:", err?.message);
+      return {};
+    });
+    receiptUrl = body.pix_receipt_url || body.pixReceiptUrl || body.comprovantePix || body.receipt;
   }
+
+  // Normalização de campos entre português e inglês
+  if (!body.customerName && body.cliente) body.customerName = body.cliente;
+  if (!body.customerPhone && body.telefone) body.customerPhone = body.telefone;
+  if (!body.items && body.itens) body.items = body.itens;
+  if (!body.orderType && body.tipoEntrega) body.orderType = body.tipoEntrega;
+  if (!body.paymentMethod && body.formaPagamento) body.paymentMethod = body.formaPagamento;
+  if (!body.cardType && body.tipoCartao) body.cardType = body.tipoCartao;
+  if (!body.changeFor && body.trocoPara) body.changeFor = body.trocoPara;
+  if (body.deliveryFee === undefined && body.taxaEntrega !== undefined) body.deliveryFee = body.taxaEntrega;
+  if (!body.address && body.endereco) body.address = body.endereco;
 
   if (receiptUrl) {
     body.pix_receipt_url = receiptUrl;
@@ -3166,25 +3199,63 @@ async function parseIncomingOrderPayload(c: any): Promise<any> {
   return body;
 }
 
-api.post("/tenants/:slugOrId/orders", async (c) => {
+const handleTenantOrderPost = async (c: any) => {
   try {
     const db = getDb(c);
-    const slugOrId = c.req.param("slugOrId");
-    const tenant = await db.getTenantByIdOrSlug(slugOrId);
+    const slugOrId = c.req.param("slugOrId") || c.req.query("tenantId") || c.req.query("slug");
+    const body = await parseIncomingOrderPayload(c);
+
+    let tenant = slugOrId ? await db.getTenantByIdOrSlug(slugOrId) : null;
+    if (!tenant) {
+      const altRef = body.tenantId || body.lojaSlug || body.slug || body.loja;
+      if (altRef) {
+        tenant = await db.getTenantByIdOrSlug(altRef);
+      }
+      if (!tenant) {
+        const all = await db.getTenants();
+        tenant = all.find((t) => t.status !== "inactive") || all[0];
+      }
+    }
 
     if (!tenant) {
-      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+      console.error("[Worker Error in POST /tenants/:slugOrId/orders]: Nenhuma loja encontrada para:", slugOrId);
+      return c.json({ success: false, error: `Lanchonete '${slugOrId}' não encontrada.` }, 404);
     }
 
     if (tenant.status === "inactive") {
+      console.warn(`[Worker Warning]: Loja '${tenant.name}' está inativa.`);
       return c.json(
         { success: false, error: "Esta loja está desativada no momento e não aceita novos pedidos." },
         400
       );
     }
 
-    const body = await parseIncomingOrderPayload(c);
+    // Validação estrita dos dados mínimos do pedido
+    const customerName = (body.customerName || body.cliente || "").trim();
+    const customerPhone = (body.customerPhone || body.telefone || "").trim();
+    const items = body.items || body.itens;
+
+    if (!customerName) {
+      console.error("[Worker Error]: Nome do cliente não informado ao finalizar pedido");
+      return c.json({ success: false, error: "Nome do cliente é obrigatório para finalizar o pedido." }, 400);
+    }
+
+    if (!customerPhone) {
+      console.error("[Worker Error]: Telefone do cliente não informado ao finalizar pedido");
+      return c.json({ success: false, error: "Telefone do cliente é obrigatório para finalizar o pedido." }, 400);
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      console.error("[Worker Error]: Carrinho vazio ao finalizar pedido");
+      return c.json({ success: false, error: "O pedido deve conter pelo menos 1 item no carrinho." }, 400);
+    }
+
+    body.customerName = customerName;
+    body.customerPhone = customerPhone;
+    body.items = items;
+
     const order = await db.createOrder(tenant.id, body);
+    console.log(`[Worker] Pedido gravado com sucesso no D1/KV: ID=${order.id}, Loja=${tenant.name} (${tenant.id})`);
 
     // Dispara evento em tempo real via SSE diretamente para o painel do lojista
     orderEvents.emit(order, true);
@@ -3194,11 +3265,22 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
       console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
     });
 
-    return c.json({ success: true, order }, 201);
+    return c.json({
+      success: true,
+      orderId: order.id,
+      id: order.id,
+      order,
+      pedido: order,
+      message: "Pedido registrado com sucesso no Cloudflare D1/KV!",
+    }, 200);
   } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao criar pedido" }, 500);
+    console.error("[Worker Error in POST /tenants/:slugOrId/orders D1/KV]:", e?.stack || e);
+    return c.json({ success: false, error: e?.message ? `Erro no servidor: ${e.message}` : "Erro ao processar e salvar pedido no banco de dados." }, 500);
   }
-});
+};
+
+api.post("/tenants/:slugOrId/orders", handleTenantOrderPost);
+api.post("/api/tenants/:slugOrId/orders", handleTenantOrderPost);
 
 // Endpoint de listagem e sincronização: GET /api/orders?tenantId=...
 api.get("/orders", async (c) => {
@@ -3244,25 +3326,56 @@ api.get("/orders/:orderId/receipt", async (c) => {
 });
 
 // Rota direta de compatibilidade para clientes móveis e redes externas postando em /orders
-api.post("/orders", async (c) => {
+const handleDirectOrdersPost = async (c: any) => {
   try {
     const db = getDb(c);
     const body = await parseIncomingOrderPayload(c);
     const tenantIdentifier = body.tenantId || body.tenantSlug || body.loja || "marcelino";
-    const tenant = await db.getTenantByIdOrSlug(tenantIdentifier);
+    let tenant = await db.getTenantByIdOrSlug(tenantIdentifier);
 
     if (!tenant) {
-      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
+      const all = await db.getTenants();
+      tenant = all.find((t) => t.status !== "inactive") || all[0];
+    }
+
+    if (!tenant) {
+      console.error("[Worker Error in POST /orders]: Nenhuma lanchonete encontrada para:", tenantIdentifier);
+      return c.json({ success: false, error: `Lanchonete '${tenantIdentifier}' não encontrada.` }, 404);
     }
 
     if (tenant.status === "inactive") {
+      console.warn(`[Worker Warning]: Loja '${tenant.name}' está inativa.`);
       return c.json(
         { success: false, error: "Esta loja está desativada no momento e não aceita novos pedidos." },
         400
       );
     }
 
+    const customerName = (body.customerName || body.cliente || "").trim();
+    const customerPhone = (body.customerPhone || body.telefone || "").trim();
+    const items = body.items || body.itens;
+
+    if (!customerName) {
+      console.error("[Worker Error in POST /orders]: Nome do cliente não informado");
+      return c.json({ success: false, error: "Nome do cliente é obrigatório para finalizar o pedido." }, 400);
+    }
+
+    if (!customerPhone) {
+      console.error("[Worker Error in POST /orders]: Telefone do cliente não informado");
+      return c.json({ success: false, error: "Telefone do cliente é obrigatório para finalizar o pedido." }, 400);
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      console.error("[Worker Error in POST /orders]: Carrinho vazio");
+      return c.json({ success: false, error: "O pedido deve conter pelo menos 1 item no carrinho." }, 400);
+    }
+
+    body.customerName = customerName;
+    body.customerPhone = customerPhone;
+    body.items = items;
+
     const order = await db.createOrder(tenant.id, body);
+    console.log(`[Worker] Pedido gravado com sucesso no D1/KV: ID=${order.id}, Loja=${tenant.name} (${tenant.id})`);
 
     // Dispara evento em tempo real via SSE diretamente para o painel do lojista
     orderEvents.emit(order, true);
@@ -3272,11 +3385,22 @@ api.post("/orders", async (c) => {
       console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
     });
 
-    return c.json({ success: true, order }, 201);
+    return c.json({
+      success: true,
+      orderId: order.id,
+      id: order.id,
+      order,
+      pedido: order,
+      message: "Pedido registrado com sucesso no Cloudflare D1/KV!",
+    }, 200);
   } catch (e: any) {
-    return c.json({ success: false, error: e.message || "Erro ao registrar pedido" }, 500);
+    console.error("[Worker Error in POST /orders D1/KV]:", e?.stack || e);
+    return c.json({ success: false, error: e?.message ? `Erro no servidor: ${e.message}` : "Erro ao registrar pedido no banco de dados." }, 500);
   }
-});
+};
+
+api.post("/orders", handleDirectOrdersPost);
+api.post("/api/orders", handleDirectOrdersPost);
 
 // Atualização de status direta em /orders/:orderId/status e /tenants/:slugOrId/orders/:orderId/status
 api.patch("/orders/:orderId/status", handleStatusUpdate);

@@ -416,9 +416,17 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       );
 
       setPendingLocalOrder(order);
-      const errorMsg = "Falha ao enviar pedido. Verifique sua internet e tente novamente";
+      const serverErrMsg = err?.message || "";
+      const isConnectionIssue =
+        (typeof navigator !== "undefined" && !navigator.onLine) ||
+        /Failed to fetch|NetworkError|conexão com a internet|Failed to connect/i.test(serverErrMsg);
+
+      const errorMsg = isConnectionIssue
+        ? "Falha ao enviar pedido. Verifique sua internet e tente novamente"
+        : `Falha ao enviar pedido: ${serverErrMsg || "Erro de servidor ao registrar o pedido"}`;
+
       setSubmitError(errorMsg);
-      showToast(errorMsg, "error", 6000);
+      showToast(errorMsg, "error", 7000);
       // IMPEDE que o cliente feche a tela achando que o pedido foi feito:
       // Mantém a tela de checkout aberta com os dados e produtos preservados
     } finally {
@@ -1433,7 +1441,9 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                     {submitError}
                   </h4>
                   <p className="text-xs text-red-800 leading-relaxed">
-                    O pedido não foi concluído por oscilação na conexão. Seus itens continuam salvos na sacola e armazenados na fila de segurança do seu aparelho. Verifique seu sinal de internet e toque em <strong>Tentar Novamente</strong>.
+                    {submitError.includes("internet")
+                      ? "O pedido não foi concluído por oscilação na conexão. Seus itens continuam salvos na sacola e armazenados na fila de segurança do seu aparelho. Verifique seu sinal de internet e toque em Tentar Novamente."
+                      : "O sistema retornou uma mensagem ao registrar o pedido. Seus itens continuam salvos na sacola. Verifique os dados e toque em Tentar Novamente."}
                   </p>
                 </div>
               </div>
