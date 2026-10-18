@@ -2438,8 +2438,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         eventSource = new EventSource(streamUrl);
 
-        // Novo pedido disparado pelo backend via SSE
-        eventSource.addEventListener("new_order", (e) => {
+        // Novo pedido disparado pelo backend via SSE (nomes de evento: new_order e NOVO_PEDIDO)
+        const onNewOrderEvent = (e: MessageEvent) => {
           if (!isMounted) return;
           try {
             const data = JSON.parse(e.data);
@@ -2449,7 +2449,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           } catch (err) {
             console.warn("SSE new_order parse error:", err);
           }
-        });
+        };
+        eventSource.addEventListener("new_order", onNewOrderEvent);
+        eventSource.addEventListener("NOVO_PEDIDO", onNewOrderEvent);
 
         // Atualização de pedido disparada pelo backend via SSE
         eventSource.addEventListener("order_update", (e) => {
@@ -2506,7 +2508,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // 4. Sincronização ativa entre redes e dispositivos (4G/5G e Wi-Fi) diretamente no Cloudflare D1/KV
+    // 4. Sincronização sob demanda (Zero Polling / CPU ociosa):
+    // Não executa polling periódico curto para não estourar a cota gratuita do Cloudflare Workers.
+    // A recuperação de eventuais falhas de sinal ocorre sob demanda:
+    // - Ao focar na aba do navegador (focus / visibilitychange)
+    // - Ao reconectar a internet (online)
+    // - Ao clicar no botão 'Atualizar Pedidos' no painel
     const syncOrdersWithCloud = async () => {
       try {
         const res = await fetchOrdersApi(tenantParam);
@@ -2563,18 +2570,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", handleWindowFocus);
     window.addEventListener("online", handleNetworkOnline);
 
-    // 5. Verificação periódica de segurança (polling a cada 1 minuto / 60s):
-    // Varre os pedidos da loja no D1/KV em busca de qualquer pedido que possa ter entrado
-    // durante uma falha momentânea de socket/SSE ou troca de rede móvel (3G/4G/5G)
-    const safetyNetInterval = setInterval(() => {
-      if (isMounted) {
-        syncOrdersWithCloud();
-      }
-    }, 60000);
-
     return () => {
       isMounted = false;
-      clearInterval(safetyNetInterval);
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
       window.removeEventListener("online", handleNetworkOnline);

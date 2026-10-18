@@ -214,6 +214,8 @@ export interface Order {
   items: OrderItem[];
   statusHistory: { status: OrderStatus; timestamp: number }[];
   createdAt: number;
+  idempotencyKey?: string;
+  idempotency_key?: string;
 }
 
 export interface Customer {

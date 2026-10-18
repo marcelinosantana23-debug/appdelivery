@@ -65,14 +65,30 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
 
-  // Atualiza o relógio relativo a cada 60s e executa varredura de segurança periódica (polling a cada 1 minuto)
-  // para capturar qualquer pedido do dia que possa ter entrado no banco durante oscilações de socket
+  // Atualiza o relógio relativo a cada 60s apenas para exibição visual ("há X minutos")
+  // Sem chamadas periódicas à API (Zero Polling), poupando limites do plano Cloudflare Workers
   useEffect(() => {
     const timer = setInterval(() => {
       setNowMs(Date.now());
-      refreshOrders().catch(() => {});
     }, 60000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Sincronização sob demanda: recupera pedidos apenas quando a aba ganha foco ou reconecta rede
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        refreshOrders().catch(() => {});
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+    window.addEventListener("online", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+      window.removeEventListener("online", handleFocus);
+    };
   }, [refreshOrders]);
 
   // Screen Wake Lock API: mantém a tela acesa continuamente exclusivamente nesta tela de pedidos

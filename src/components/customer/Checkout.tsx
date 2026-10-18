@@ -98,6 +98,10 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pendingLocalOrder, setPendingLocalOrder] = useState<Order | null>(null);
   const handleSubmitRef = useRef<() => Promise<void>>(async () => {});
+  const isSubmittingRef = useRef(false);
+  const cartSessionIdRef = useRef<string>(
+    `cart_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  );
 
   // ==========================================
   // FILA DE SEGURANÇA LOCAL & RETRY AUTOMÁTICO
@@ -277,6 +281,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     );
   };
 
+
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!customerName.trim()) e.customerName = "Informe seu nome";
@@ -302,11 +307,18 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   };
 
   const handleSubmit = async () => {
+    // 1. Trava instantânea síncrona contra cliques múltiplos no primeiro clique
+    if (isSubmittingRef.current || isSubmitting) {
+      console.warn("[Checkout] Envio de pedido já em andamento. Clique duplo prevenido.");
+      return;
+    }
+
     if (!validate()) return;
     if (!isStoreOpen || !isStoreActive) return;
 
-    setSubmitError(null);
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
+    setSubmitError(null);
 
     // Salva imediatamente no localStorage os dados do cliente (Checkout Rápido para próximos pedidos)
     saveCustomerProfile({
@@ -328,8 +340,13 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         ? `Dinheiro (Troco para R$ ${changeFor})`
         : "Dinheiro (Sem troco)";
 
+    // Chave única de idempotência vinculada à sessão do carrinho e valores
+    const idempotencyKey = `${cartSessionIdRef.current}_${cart.length}_${Math.round(total * 100)}`;
+
     const order: Order = {
       id: generateOrderId(),
+      idempotencyKey,
+      idempotency_key: idempotencyKey,
       items: cart,
       orderType,
       tableNumber: orderType === "dine_in" ? tableNumber.trim() : undefined,
@@ -430,6 +447,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       // IMPEDE que o cliente feche a tela achando que o pedido foi feito:
       // Mantém a tela de checkout aberta com os dados e produtos preservados
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -1454,10 +1472,12 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   id="btn-retry-submit-order"
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white py-2.5 px-4 text-xs font-black shadow-xs cursor-pointer transition disabled:opacity-60"
+                  className={`flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white py-2.5 px-4 text-xs font-black shadow-xs transition ${
+                    isSubmitting ? "opacity-60 cursor-not-allowed pointer-events-none" : "cursor-pointer"
+                  }`}
                 >
                   <RefreshCw className={`h-4 w-4 ${isSubmitting ? "animate-spin" : ""}`} />
-                  <span>{isSubmitting ? "Reenviando..." : "Tentar Novamente Agora"}</span>
+                  <span>{isSubmitting ? "Processando seu pedido..." : "Tentar Novamente Agora"}</span>
                 </button>
               </div>
             </div>
@@ -1467,18 +1487,20 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
             id="btn-submit-order"
             onClick={handleSubmit}
             disabled={!canSubmit || isSubmitting}
-            className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black text-white shadow-lg transition active:scale-[0.98] cursor-pointer ${
-              canSubmit && !isSubmitting
+            className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black text-white shadow-lg transition active:scale-[0.98] ${
+              isSubmitting
+                ? "bg-emerald-700/80 cursor-not-allowed opacity-80 pointer-events-none shadow-none"
+                : canSubmit
                 ? submitError
-                  ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/30"
-                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30"
+                  ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/30 cursor-pointer"
+                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30 cursor-pointer"
                 : "bg-slate-400 cursor-not-allowed opacity-60 shadow-none"
             }`}
           >
             {isSubmitting ? (
               <>
                 <RefreshCw className="h-5 w-5 animate-spin" />
-                <span>Enviando para a cozinha...</span>
+                <span>Processando seu pedido...</span>
               </>
             ) : submitError ? (
               <>

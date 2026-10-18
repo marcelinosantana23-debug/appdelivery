@@ -48,76 +48,16 @@ export async function loginApi(
   code?: string;
   isSuperAdmin?: boolean;
 }> {
-  const endpoints = [
-    `${BASE_URL}/auth/login`,
-    `${BASE_URL}/login`,
-    `${BASE_URL}/admin/login`,
-    "/auth/login",
-    "/login",
-  ];
-
-  let lastError = "Falha na conexão com o servidor";
-  let lastCode: string | undefined = undefined;
-  let isSuperAdminAttempt: boolean | undefined = undefined;
-
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ email, password, portal }),
-      });
-
-      const rawText = await res.text();
-      let data: any = null;
-
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        // Resposta não é JSON (ex: HTML de 404/Fallback)
-        if (rawText.trim().startsWith("<")) {
-          lastError = `Servidor retornou resposta inesperada (HTML em ${endpoint}). Verifique as rotas da API.`;
-        } else {
-          lastError = `Resposta inválida do servidor: ${rawText.slice(0, 100)}`;
-        }
-        continue;
-      }
-
-      if (data && typeof data === "object") {
-        if (data.code) lastCode = data.code;
-        if (data.isSuperAdmin !== undefined) isSuperAdminAttempt = data.isSuperAdmin;
-
-        if (res.ok && data.success) {
-          return {
-            success: true,
-            user: data.user,
-            tenant: data.tenant,
-            token: data.token,
-          };
-        }
-
-        return {
-          success: false,
-          error: data.error || data.message || `Erro de autenticação (HTTP ${res.status})`,
-          code: data.code,
-          isSuperAdmin: data.isSuperAdmin,
-          user: data.user,
-        };
-      }
-    } catch (err: any) {
-      lastError = err?.message || "Falha na conexão com o servidor";
-    }
+  try {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, portal }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Falha na conexão com o servidor" };
   }
-
-  return {
-    success: false,
-    error: lastError,
-    code: lastCode,
-    isSuperAdmin: isSuperAdminAttempt,
-  };
 }
 
 export async function verifyAuthSessionApi(
@@ -128,59 +68,20 @@ export async function verifyAuthSessionApi(
   user?: User;
   tenant?: Tenant | null;
   error?: string;
-  sessionInvalidated?: boolean;
 }> {
-  const endpoints = [
-    `${BASE_URL}/auth/verify`,
-    `${BASE_URL}/verify`,
-    `${BASE_URL}/admin/verify`,
-    "/auth/verify",
-  ];
-
-  let lastError = "Erro ao validar sessão";
-
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ token, userId }),
-      });
-
-      const rawText = await res.text();
-      let data: any = null;
-
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        continue;
-      }
-
-      if (data && typeof data === "object") {
-        if (res.ok && data.success) {
-          return {
-            success: true,
-            user: data.user,
-            tenant: data.tenant,
-          };
-        }
-
-        return {
-          success: false,
-          error: data.error || data.message || "Sessão inválida",
-          sessionInvalidated: data.sessionInvalidated,
-        };
-      }
-    } catch (err: any) {
-      lastError = err?.message || "Erro de conexão";
-    }
+  try {
+    const res = await fetch(`${BASE_URL}/auth/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ token, userId }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro de conexão" };
   }
-
-  return { success: false, error: lastError };
 }
 
 export async function fetchTenantsApi(location?: string): Promise<{
@@ -617,13 +518,24 @@ export async function createOrderApi(
 ): Promise<{ success: boolean; orderId?: string; order?: Order; error?: string }> {
   const endpoints = [`${BASE_URL}/pedidos`, `${BASE_URL}/orders`, "/pedidos", "/orders"];
   let lastError = "";
+  const idempotencyKey =
+    (orderData as any).idempotencyKey ||
+    (orderData as any).idempotency_key ||
+    `idem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   for (const endpoint of endpoints) {
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderData),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify({
+          ...orderData,
+          idempotencyKey,
+          idempotency_key: idempotencyKey,
+        }),
       });
 
       const data = await res.json().catch(() => null);
@@ -678,17 +590,26 @@ export async function createTenantOrderApi(
   ];
 
   let lastError = "";
+  const idempotencyKey =
+    (orderData as any).idempotencyKey ||
+    (orderData as any).idempotency_key ||
+    `idem_${cleanSlugOrId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   for (const endpoint of endpoints) {
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify({
           ...orderData,
           tenantId: cleanSlugOrId,
           lojaSlug: cleanSlugOrId,
           loja: cleanSlugOrId,
+          idempotencyKey,
+          idempotency_key: idempotencyKey,
         }),
       });
 

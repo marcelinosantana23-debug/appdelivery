@@ -1476,7 +1476,37 @@ const handlePedidosPost = async (c: any) => {
     const total = Number(body.total ?? (subtotal + taxaEntrega));
     const statusInicial: OrderStatus = normalizeOrderStatus(body.status || "Pendente");
 
-    // 5. Salvar pedido no D1 e KV
+    // 5. Verificação rigorosa de Idempotência (3 minutos): previne pedidos duplicados por duplo clique ou reenvio
+    const rawIdempotencyKey =
+      body.idempotencyKey ||
+      body.idempotency_key ||
+      c.req.header("Idempotency-Key") ||
+      c.req.header("idempotency-key");
+    const itemsSig = itens.map((i: any) => `${i.product?.id || i.productId || ""}:${i.quantity || 1}`).sort().join("|");
+    const cleanPhone = telefone.replace(/\D/g, "");
+    const idempotencyKey =
+      rawIdempotencyKey ||
+      `fp_${loja.id}_${cleanPhone}_${Math.round(total * 100)}_${itemsSig}`;
+
+    const existingOrder = await db.getIdempotentOrder(idempotencyKey);
+    if (existingOrder) {
+      console.log(`[Worker Idempotency]: Pedido duplicado prevenido para a chave '${idempotencyKey}'. Devolvendo pedido #${existingOrder.id} com 200 OK.`);
+      return c.json({
+        success: true,
+        orderId: existingOrder.id,
+        id: existingOrder.id,
+        order: existingOrder,
+        pedido: {
+          ...existingOrder,
+          statusPt: STATUS_MAP_EN_TO_PT[existingOrder.status] || "Pendente",
+          loja: { id: loja.id, nome: loja.name, slug: loja.slug },
+        },
+        duplicatePrevented: true,
+        message: "Pedido já registrado anteriormente (idempotência preservada).",
+      }, 200);
+    }
+
+    // 6. Salvar pedido no D1 e KV
     const comprovante = body.pix_receipt_url || body.pixReceiptUrl || body.comprovantePix || body.receipt || undefined;
     const tipoCartao = body.cardType || body.card_type || body.tipoCartao || undefined;
     const detalhesPgto = body.paymentDetails || body.payment_details || undefined;
@@ -1503,6 +1533,8 @@ const handlePedidosPost = async (c: any) => {
       status: statusInicial,
       items: itens as OrderItem[],
       statusHistory: [{ status: statusInicial, timestamp: Date.now() }],
+      idempotencyKey,
+      idempotency_key: idempotencyKey,
     });
 
     console.log(`[Worker] Pedido gravado via /pedidos no D1/KV: ID=${novoPedido.id}, Loja=${loja.name} (${loja.id})`);
@@ -1742,9 +1774,9 @@ api.get("/orders/:orderId/status", async (c) => {
 // 5. ROTAS DE COMPATIBILIDADE COM A INTERFACE EXISTENTE (/tenants, /auth)
 // -----------------------------------------------------------------------------
 
-export async function handleLoginPost(c: any) {
+api.post("/auth/login", async (c) => {
   try {
-    const body = await c.req.json().catch(() => ({}));
+    const body = await c.req.json();
     const { email, password, portal } = body;
 
     if (!email || !password) {
@@ -1752,7 +1784,7 @@ export async function handleLoginPost(c: any) {
     }
 
     const db = getDb(c);
-    const user = await db.authenticateUser(String(email).trim().toLowerCase(), String(password).trim());
+    const user = await db.authenticateUser(email, password);
 
     if (!user) {
       return c.json({ success: false, error: "Credenciais inválidas ou conta inativa" }, 401);
@@ -1821,25 +1853,12 @@ export async function handleLoginPost(c: any) {
       token,
     }, 200);
   } catch (e: any) {
-    console.error("[Login Handler Error]:", e);
     return c.json({ success: false, error: e.message || "Erro no login" }, 500);
   }
-}
-
-// Registro explícito de todas as variações de rotas de login
-api.post("/auth/login", handleLoginPost);
-api.post("/login", handleLoginPost);
-api.post("/admin/login", handleLoginPost);
-api.post("/superadmin/login", handleLoginPost);
-api.post("/super-admin/login", handleLoginPost);
-api.post("/api/auth/login", handleLoginPost);
-api.post("/api/login", handleLoginPost);
-api.post("/api/admin/login", handleLoginPost);
-api.post("/api/superadmin/login", handleLoginPost);
-api.post("/api/super-admin/login", handleLoginPost);
+});
 
 // Verificação de sessão administrativa segura (Super Admin e Lojista) com JWT_SECRET
-export async function handleVerifySessionPost(c: any) {
+api.post("/auth/verify", async (c) => {
   try {
     const authHeader = c.req.header("Authorization");
     const body = await c.req.json().catch(() => ({}));
@@ -1890,14 +1909,7 @@ export async function handleVerifySessionPost(c: any) {
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao validar sessão." }, 500);
   }
-}
-
-api.post("/auth/verify", handleVerifySessionPost);
-api.post("/verify", handleVerifySessionPost);
-api.post("/admin/verify", handleVerifySessionPost);
-api.post("/api/auth/verify", handleVerifySessionPost);
-api.post("/api/verify", handleVerifySessionPost);
-api.post("/api/admin/verify", handleVerifySessionPost);
+});
 
 export async function handleUpdateSuperAdminCredentials(c: any) {
   try {
@@ -3057,6 +3069,13 @@ api.get("/tenants/:slugOrId/orders/stream", async (c) => {
                 timestamp: payload.timestamp,
               }),
             });
+            await stream.writeSSE({
+              event: "NOVO_PEDIDO",
+              data: JSON.stringify({
+                order: payload.order,
+                timestamp: payload.timestamp,
+              }),
+            });
           }
           await stream.writeSSE({
             event: "order_update",
@@ -3133,6 +3152,10 @@ api.get("/orders/stream", async (c) => {
           if (payload.isNew) {
             await stream.writeSSE({
               event: "new_order",
+              data: JSON.stringify({ order: payload.order, timestamp: payload.timestamp }),
+            });
+            await stream.writeSSE({
+              event: "NOVO_PEDIDO",
               data: JSON.stringify({ order: payload.order, timestamp: payload.timestamp }),
             });
           }
@@ -3234,6 +3257,15 @@ async function parseIncomingOrderPayload(c: any): Promise<any> {
     body.table_number = tableStr;
   }
 
+  // Normalização de chave de idempotência do cliente
+  const idempotencyHeader = c.req.header("Idempotency-Key") || c.req.header("idempotency-key");
+  const rawIdempotency = idempotencyHeader || body.idempotency_key || body.idempotencyKey || body.clientOrderId;
+  if (rawIdempotency) {
+    const cleanIdem = String(rawIdempotency).trim();
+    body.idempotencyKey = cleanIdem;
+    body.idempotency_key = cleanIdem;
+  }
+
   return body;
 }
 
@@ -3300,6 +3332,37 @@ const handleTenantOrderPost = async (c: any) => {
     body.customerName = customerName;
     body.customerPhone = customerPhone;
     body.items = items;
+
+    // Verificação de idempotência (3 minutos)
+    const rawIdempotencyKey =
+      body.idempotencyKey ||
+      body.idempotency_key ||
+      c.req.header("Idempotency-Key") ||
+      c.req.header("idempotency-key");
+    const itemsSig = Array.isArray(items)
+      ? items.map((i: any) => `${i.product?.id || i.productId || ""}:${i.quantity || 1}`).sort().join("|")
+      : "";
+    const cleanPhone = customerPhone.replace(/\D/g, "");
+    const idempotencyKey =
+      rawIdempotencyKey ||
+      `fp_${tenant.id}_${cleanPhone}_${Math.round(Number(body.total || 0) * 100)}_${itemsSig}`;
+
+    body.idempotencyKey = idempotencyKey;
+    body.idempotency_key = idempotencyKey;
+
+    const existingOrder = await db.getIdempotentOrder(idempotencyKey);
+    if (existingOrder) {
+      console.log(`[Worker Idempotency]: Pedido duplicado prevenido para a chave '${idempotencyKey}'. Devolvendo pedido #${existingOrder.id} com 200 OK.`);
+      return c.json({
+        success: true,
+        orderId: existingOrder.id,
+        id: existingOrder.id,
+        order: existingOrder,
+        pedido: existingOrder,
+        duplicatePrevented: true,
+        message: "Pedido já registrado anteriormente (idempotência preservada).",
+      }, 200);
+    }
 
     const order = await db.createOrder(tenant.id, body);
     console.log(`[Worker] Pedido gravado com sucesso no D1/KV: ID=${order.id}, Loja=${tenant.name} (${tenant.id})`);
@@ -3437,6 +3500,37 @@ const handleDirectOrdersPost = async (c: any) => {
     body.customerName = customerName;
     body.customerPhone = customerPhone;
     body.items = items;
+
+    // Verificação de idempotência (3 minutos)
+    const rawIdempotencyKey =
+      body.idempotencyKey ||
+      body.idempotency_key ||
+      c.req.header("Idempotency-Key") ||
+      c.req.header("idempotency-key");
+    const itemsSig = Array.isArray(items)
+      ? items.map((i: any) => `${i.product?.id || i.productId || ""}:${i.quantity || 1}`).sort().join("|")
+      : "";
+    const cleanPhone = customerPhone.replace(/\D/g, "");
+    const idempotencyKey =
+      rawIdempotencyKey ||
+      `fp_${tenant.id}_${cleanPhone}_${Math.round(Number(body.total || 0) * 100)}_${itemsSig}`;
+
+    body.idempotencyKey = idempotencyKey;
+    body.idempotency_key = idempotencyKey;
+
+    const existingOrder = await db.getIdempotentOrder(idempotencyKey);
+    if (existingOrder) {
+      console.log(`[Worker Idempotency]: Pedido duplicado prevenido para a chave '${idempotencyKey}'. Devolvendo pedido #${existingOrder.id} com 200 OK.`);
+      return c.json({
+        success: true,
+        orderId: existingOrder.id,
+        id: existingOrder.id,
+        order: existingOrder,
+        pedido: existingOrder,
+        duplicatePrevented: true,
+        message: "Pedido já registrado anteriormente (idempotência preservada).",
+      }, 200);
+    }
 
     const order = await db.createOrder(tenant.id, body);
     console.log(`[Worker] Pedido gravado com sucesso no D1/KV: ID=${order.id}, Loja=${tenant.name} (${tenant.id})`);
@@ -3687,6 +3781,13 @@ const handleOrdersStream = async (c: any) => {
           if (payload.isNew) {
             await stream.writeSSE({
               event: "new_order",
+              data: JSON.stringify({
+                order: o,
+                timestamp: payload.timestamp || Date.now(),
+              }),
+            });
+            await stream.writeSSE({
+              event: "NOVO_PEDIDO",
               data: JSON.stringify({
                 order: o,
                 timestamp: payload.timestamp || Date.now(),
@@ -4398,29 +4499,6 @@ api.get("/admin/push-status", async (c) => {
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
-});
-
-// 404 handler for API routes to guarantee application/json response and prevent HTML fallback leaks
-api.notFound((c) => {
-  return c.json(
-    {
-      success: false,
-      error: `Rota da API não encontrada: ${c.req.method} ${c.req.path}`,
-    },
-    404
-  );
-});
-
-// Global error handler for API routes
-api.onError((err, c) => {
-  console.error("[Worker API Unhandled Error]:", err);
-  return c.json(
-    {
-      success: false,
-      error: err?.message || "Erro interno no servidor da API",
-    },
-    500
-  );
 });
 
 export default api;

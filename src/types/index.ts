@@ -218,6 +218,8 @@ export interface Order {
   customerPhone: string;
   createdAt: number;
   statusHistory: { status: OrderStatus; timestamp: number }[];
+  idempotencyKey?: string;
+  idempotency_key?: string;
 }
 
 export interface Customer {
