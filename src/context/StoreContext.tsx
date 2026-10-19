@@ -516,27 +516,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   
   // Hydrate currentTenant synchronously from `cache_store_[storeSlug]` or sessionStorage / localStorage ONLY when on a store/admin route
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
-    if (!initialSlug) {
-      return null;
-    }
-    if (initialStoreCache?.tenant) {
-      return initialStoreCache.tenant;
-    }
     try {
       const saved =
         sessionStorage.getItem("topfood_tenant_session") ||
         localStorage.getItem("delivery_tenant_session");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (
-          parsed &&
-          (parsed.slug === initialSlug ||
+        if (parsed && (parsed.slug || parsed.id)) {
+          if (
+            !initialSlug ||
+            parsed.slug === initialSlug ||
             parsed.id === initialSlug ||
             (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
-            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
-        ) {
-          return parsed;
+            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes")
+          ) {
+            return parsed;
+          }
         }
+      }
+
+      if (!initialSlug) {
+        return null;
+      }
+      if (initialStoreCache?.tenant) {
+        return initialStoreCache.tenant;
       }
       const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
         (t) =>
@@ -2281,7 +2284,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [orders]);
 
   useEffect(() => {
-    const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug;
+    const tenantParam =
+      currentTenant?.id ||
+      currentTenant?.slug ||
+      currentUser?.tenantId ||
+      currentSlug ||
+      (currentUser ? "all" : "");
+
     if (!tenantParam) return;
     let isMounted = true;
 
@@ -2326,9 +2335,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!isAlreadyKnown) {
         setNewOrderIds((prev) => Array.from(new Set([normalizedIncoming.id, ...prev])));
 
-        // Toca o alerta sonoro de novo pedido (campainha)
+        // Toca o alerta sonoro de novo pedido (campainha e alarme da cozinha)
         try {
           playNewOrderChime();
+          playPendingOrderAlarm();
         } catch (audioErr) {
           console.warn("Aviso ao tocar som de novo pedido:", audioErr);
         }
@@ -2429,40 +2439,75 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
 
     // 3. Escutador de Evento em Tempo Real via Server-Sent Events (SSE) (servidor -> lojista)
+    // Conecta diretamente ao canal SSE do Cloudflare Worker com keep-alive de 20s
+    // e mecanismo de reconexão automática com retry em 3 segundos em caso de oscilação de rede
     let eventSource: EventSource | null = null;
-    if (typeof EventSource !== "undefined") {
+    let reconnectTimeout: any = null;
+
+    const connectSSE = () => {
+      if (!isMounted || typeof EventSource === "undefined") return;
+
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch {
+          // ignore
+        }
+        eventSource = null;
+      }
+
       try {
-        const streamUrl = currentTenant?.id
-          ? `/api/tenants/${currentTenant.id}/orders/stream`
-          : `/api/orders/stream?tenantId=${encodeURIComponent(tenantParam)}`;
+        const resolvedId =
+          currentTenant?.id ||
+          currentTenant?.slug ||
+          currentUser?.tenantId ||
+          (tenantParam !== "all" && tenantParam !== "admin" ? tenantParam : "");
+
+        const streamUrl = resolvedId
+          ? `/api/loja/${encodeURIComponent(resolvedId)}/stream`
+          : `/api/admin/stream`;
 
         eventSource = new EventSource(streamUrl);
 
-        // Novo pedido disparado pelo backend via SSE (nomes de evento: new_order e NOVO_PEDIDO)
+        // Handler unificado para novo pedido disparado pelo backend via SSE
         const onNewOrderEvent = (e: MessageEvent) => {
           if (!isMounted) return;
           try {
             const data = JSON.parse(e.data);
-            if (data?.order) {
-              handleIncomingNewOrder(data.order);
+            const incomingOrder = data?.order || data?.pedido || data;
+            if (incomingOrder && incomingOrder.id) {
+              handleIncomingNewOrder(incomingOrder);
             }
           } catch (err) {
             console.warn("SSE new_order parse error:", err);
           }
         };
+
+        // Escuta os eventos específicos (new_order, NOVO_PEDIDO) e genérico (message)
         eventSource.addEventListener("new_order", onNewOrderEvent);
         eventSource.addEventListener("NOVO_PEDIDO", onNewOrderEvent);
+        eventSource.addEventListener("message", (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data?.event === "new_order" || data?.type === "NOVO_PEDIDO" || data?.order) {
+              onNewOrderEvent(e);
+            }
+          } catch {
+            // ignore non-json messages (ping)
+          }
+        });
 
         // Atualização de pedido disparada pelo backend via SSE
         eventSource.addEventListener("order_update", (e) => {
           if (!isMounted) return;
           try {
             const data = JSON.parse(e.data);
-            if (data?.order) {
+            const orderObj = data?.order || data?.pedido || data;
+            if (orderObj && orderObj.id) {
               if (data.isNew) {
-                handleIncomingNewOrder(data.order);
+                handleIncomingNewOrder(orderObj);
               } else {
-                handleIncomingOrderUpdate(data.order);
+                handleIncomingOrderUpdate(orderObj);
               }
             }
           } catch (err) {
@@ -2499,14 +2544,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         });
 
+        // Mecanismo de reconexão automática (retry em 3 segundos) em caso de queda de sinal
         eventSource.onerror = (err) => {
-          console.warn("SSE connection interrupted, running safety net cloud sync:", err);
-          syncOrdersWithCloud();
+          console.warn("[SSE Lojista]: Conexão oscilou ou caiu. Reconectando em 3 segundos...", err);
+          if (eventSource) {
+            try {
+              eventSource.close();
+            } catch {
+              // ignore
+            }
+            eventSource = null;
+          }
+
+          if (isMounted) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = setTimeout(() => {
+              if (isMounted) {
+                connectSSE();
+                syncOrdersWithCloud();
+              }
+            }, 3000);
+          }
         };
       } catch (err) {
         console.warn("SSE not available:", err);
+        if (isMounted) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connectSSE, 3000);
+        }
       }
-    }
+    };
+
+    connectSSE();
 
     // 4. Sincronização sob demanda (Zero Polling / CPU ociosa):
     // Não executa polling periódico curto para não estourar a cota gratuita do Cloudflare Workers.
@@ -2516,7 +2585,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // - Ao clicar no botão 'Atualizar Pedidos' no painel
     const syncOrdersWithCloud = async () => {
       try {
-        const res = await fetchOrdersApi(tenantParam);
+        const queryTarget =
+          currentTenant?.id ||
+          currentTenant?.slug ||
+          currentUser?.tenantId ||
+          (tenantParam !== "all" && tenantParam !== "admin" ? tenantParam : undefined);
+
+        const res = await fetchOrdersApi(queryTarget);
         if (!isMounted || !res.success || !res.orders) return;
 
         const incoming: Order[] = res.orders;
@@ -2572,15 +2647,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
+      clearTimeout(reconnectTimeout);
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
       window.removeEventListener("online", handleNetworkOnline);
       unsubscribeBroadcast();
       if (eventSource) {
-        eventSource.close();
+        try {
+          eventSource.close();
+        } catch {
+          // ignore
+        }
       }
     };
-  }, [currentTenant?.id, currentTenant?.slug, currentSlug, currentUser]);
+  }, [currentTenant?.id, currentTenant?.slug, currentUser?.tenantId, currentSlug, currentUser, showToast]);
 
   // ---------------- ROTINA DE REENVIO AUTOMÁTICO (RETRY) DA FILA OFFLINE ----------------
   const isRetryingQueueRef = useRef(false);

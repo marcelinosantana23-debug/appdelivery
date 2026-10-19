@@ -163,7 +163,21 @@ if (typeof window !== "undefined") {
 export function isStoreAdminRoute(): boolean {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname.toLowerCase();
-  return path.includes("/admin") || path.includes("/painel");
+  if (
+    path.includes("/admin") ||
+    path.includes("/painel") ||
+    path.includes("/super-admin") ||
+    path.includes("/superadmin")
+  ) {
+    return true;
+  }
+  try {
+    const adminSession = sessionStorage.getItem("topfood_admin_session");
+    if (adminSession) return true;
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 /**

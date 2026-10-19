@@ -3723,19 +3723,33 @@ api.get("/tenants/:slugOrId/orders/:orderId/stream", async (c) => {
   });
 });
 
-// SSE Stream persistente para o painel do lojista: GET /api/tenants/:slugOrId/orders/stream e GET /api/orders/stream
+// SSE Stream persistente para o painel do lojista: GET /api/loja/:id/stream, GET /api/admin/stream, GET /api/tenants/:slugOrId/orders/stream
 // Comunicação 100% ativa em tempo real (Push) sem qualquer necessidade de loops de polling
 const handleOrdersStream = async (c: any) => {
   const db = getDb(c);
-  const tenantParam = c.req.param("slugOrId") || c.req.query("tenantId") || c.req.query("loja") || c.req.query("slug");
+  const rawParam =
+    c.req.param("slugOrId") ||
+    c.req.param("id") ||
+    c.req.query("tenantId") ||
+    c.req.query("loja") ||
+    c.req.query("slug");
+
+  const cleanParam =
+    !rawParam ||
+    rawParam === "undefined" ||
+    rawParam === "null" ||
+    rawParam === "all" ||
+    rawParam === "admin"
+      ? ""
+      : String(rawParam).trim();
 
   return streamSSE(c, async (stream) => {
-    let tenantId = tenantParam || "";
+    let tenantId = cleanParam;
     let tenantSlug = "";
 
     try {
-      if (tenantParam) {
-        const tenant = await db.getTenantByIdOrSlug(tenantParam);
+      if (cleanParam) {
+        const tenant = await db.getTenantByIdOrSlug(cleanParam);
         if (tenant) {
           tenantId = tenant.id;
           tenantSlug = tenant.slug;
@@ -3748,6 +3762,7 @@ const handleOrdersStream = async (c: any) => {
         data: JSON.stringify({
           status: "connected",
           tenantId,
+          tenantSlug,
           timestamp: Date.now(),
         }),
       });
@@ -3770,37 +3785,45 @@ const handleOrdersStream = async (c: any) => {
       const o = payload.order;
       if (!o) return;
 
-      const orderTenant = o.tenantId || "";
+      const orderTenant = (o.tenantId || "").trim();
+      const orderLoja = ((o as any).lojaSlug || (o as any).loja || "").trim();
+
       const matchesTenant =
         !tenantId ||
         orderTenant === tenantId ||
-        (tenantSlug && orderTenant === tenantSlug);
+        (tenantSlug && orderTenant === tenantSlug) ||
+        (orderLoja && (orderLoja === tenantId || orderLoja === tenantSlug));
 
       if (matchesTenant) {
         try {
           if (payload.isNew) {
+            const dataStr = JSON.stringify({
+              type: "NOVO_PEDIDO",
+              event: "new_order",
+              order: o,
+              timestamp: payload.timestamp || Date.now(),
+            });
             await stream.writeSSE({
               event: "new_order",
-              data: JSON.stringify({
-                order: o,
-                timestamp: payload.timestamp || Date.now(),
-              }),
+              data: dataStr,
             });
             await stream.writeSSE({
               event: "NOVO_PEDIDO",
-              data: JSON.stringify({
-                order: o,
-                timestamp: payload.timestamp || Date.now(),
-              }),
+              data: dataStr,
+            });
+            await stream.writeSSE({
+              event: "message",
+              data: dataStr,
             });
           }
+          const updateStr = JSON.stringify({
+            order: o,
+            isNew: payload.isNew,
+            timestamp: payload.timestamp || Date.now(),
+          });
           await stream.writeSSE({
             event: "order_update",
-            data: JSON.stringify({
-              order: o,
-              isNew: payload.isNew,
-              timestamp: payload.timestamp || Date.now(),
-            }),
+            data: updateStr,
           });
         } catch (err) {
           console.warn("SSE failed to push order event to merchant:", err);
@@ -3812,13 +3835,13 @@ const handleOrdersStream = async (c: any) => {
       unsubscribe();
     });
 
-    // 4. Heartbeat keepalive a cada 20 segundos para manter conexões móveis ativas
+    // 4. Heartbeat keepalive a cada 20 segundos para manter conexões móveis ativas na Cloudflare
     while (!stream.aborted) {
       await stream.sleep(20000);
       try {
         await stream.writeSSE({
           event: "ping",
-          data: "{}",
+          data: JSON.stringify({ ping: true, timestamp: Date.now() }),
         });
       } catch {
         break;
@@ -3829,9 +3852,14 @@ const handleOrdersStream = async (c: any) => {
   });
 };
 
+api.get("/loja/:id/stream", handleOrdersStream);
+api.get("/loja/:slugOrId/stream", handleOrdersStream);
+api.get("/admin/stream", handleOrdersStream);
 api.get("/tenants/:slugOrId/orders/stream", handleOrdersStream);
+api.get("/tenants/:slugOrId/stream", handleOrdersStream);
 api.get("/orders/stream", handleOrdersStream);
 api.get("/pedidos/stream", handleOrdersStream);
+api.get("/stream", handleOrdersStream);
 
 // ===================== RELATÓRIO FINANCEIRO E DESEMPENHO (CLOUDFLARE D1) =====================
 api.get("/tenants/:slugOrId/financial-report", async (c) => {
