@@ -553,50 +553,72 @@ export async function createOrderApi(
     (orderData as any).idempotency_key ||
     `idem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey,
-        },
-        body: JSON.stringify({
-          ...orderData,
-          idempotencyKey,
-          idempotency_key: idempotencyKey,
-        }),
-      });
+  // Mecanismo de retry automático e transparente para Cold Start do Worker (até 2 novas tentativas)
+  const MAX_RETRIES = 2;
+  const totalAttempts = 1 + MAX_RETRIES;
 
-      const data = await res.json().catch(() => null);
-      const orderObj = data?.order || data?.pedido;
-      const orderId = data?.orderId || data?.id || orderObj?.id;
-      const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+    for (const endpoint of endpoints) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-      if (isSuccess && orderId) {
-        const finalOrder: Order = {
-          ...(orderObj || orderData),
-          id: orderId,
-        };
-        return {
-          success: true,
-          orderId,
-          order: finalOrder,
-        };
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKey,
+          },
+          body: JSON.stringify({
+            ...orderData,
+            idempotencyKey,
+            idempotency_key: idempotencyKey,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        const data = await res.json().catch(() => null);
+        const orderObj = data?.order || data?.pedido;
+        const orderId = data?.orderId || data?.id || orderObj?.id;
+        const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
+
+        if (isSuccess && orderId) {
+          const finalOrder: Order = {
+            ...(orderObj || orderData),
+            id: orderId,
+          };
+          return {
+            success: true,
+            orderId,
+            order: finalOrder,
+          };
+        }
+
+        const errMsg = data?.error || data?.message;
+        if (res.status === 400 && errMsg) {
+          return { success: false, error: errMsg };
+        }
+
+        if (errMsg) {
+          lastError = errMsg;
+        } else if (res.status !== 404) {
+          lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
+        }
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        const isTimeout = err?.name === "AbortError" || /aborted|timeout/i.test(err?.message || "");
+        lastError = isTimeout
+          ? "Tempo limite esgotado no servidor (Cold Start)"
+          : err?.message || "Falha de conexão com a API";
       }
+    }
 
-      const errMsg = data?.error || data?.message;
-      if (res.status === 400 && errMsg) {
-        return { success: false, error: errMsg };
-      }
-
-      if (errMsg) {
-        lastError = errMsg;
-      } else if (res.status !== 404) {
-        lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
-      }
-    } catch (err: any) {
-      lastError = err?.message || "Falha de conexão com a API";
+    if (attempt < totalAttempts) {
+      console.warn(
+        `[Checkout Cold Start]: Tentativa ${attempt} de ${totalAttempts} falhou (${lastError}). Executando retry transparente em segundo plano...`
+      );
+      await new Promise((r) => setTimeout(r, attempt * 600));
     }
   }
 
@@ -625,53 +647,79 @@ export async function createTenantOrderApi(
     (orderData as any).idempotency_key ||
     `idem_${cleanSlugOrId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey,
-        },
-        body: JSON.stringify({
-          ...orderData,
-          tenantId: cleanSlugOrId,
-          lojaSlug: cleanSlugOrId,
-          loja: cleanSlugOrId,
-          idempotencyKey,
-          idempotency_key: idempotencyKey,
-        }),
-      });
+  // TENTATIVA TRANSPARENTE E PREVENTIVA (COLD START NO CHECKOUT):
+  // Se a primeira requisição do pedido sofrer timeout ou falhar devido ao repouso inicial
+  // do Worker (Cold Start), realiza automaticamente até 2 novas tentativas internas em segundo plano,
+  // mantendo o spinner de carregamento ativo na tela do usuário.
+  // Assim que o Worker responder com sucesso (200 OK), encerra o processo imediatamente.
+  const MAX_RETRIES = 2; // até 2 novas tentativas internas
+  const totalAttempts = 1 + MAX_RETRIES;
 
-      const data = await res.json().catch(() => null);
-      const orderObj = data?.order || data?.pedido;
-      const orderId = data?.orderId || data?.id || orderObj?.id;
-      const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+    for (const endpoint of endpoints) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-      if (isSuccess && orderId) {
-        const finalOrder: Order = {
-          ...(orderObj || (orderData as any)),
-          id: orderId,
-        };
-        return {
-          success: true,
-          orderId,
-          order: finalOrder,
-        };
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKey,
+          },
+          body: JSON.stringify({
+            ...orderData,
+            tenantId: cleanSlugOrId,
+            lojaSlug: cleanSlugOrId,
+            loja: cleanSlugOrId,
+            idempotencyKey,
+            idempotency_key: idempotencyKey,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        const data = await res.json().catch(() => null);
+        const orderObj = data?.order || data?.pedido;
+        const orderId = data?.orderId || data?.id || orderObj?.id;
+        const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
+
+        if (isSuccess && orderId) {
+          const finalOrder: Order = {
+            ...(orderObj || (orderData as any)),
+            id: orderId,
+          };
+          return {
+            success: true,
+            orderId,
+            order: finalOrder,
+          };
+        }
+
+        const errMsg = data?.error || data?.message;
+        if (res.status === 400 && errMsg) {
+          return { success: false, error: errMsg };
+        }
+
+        if (errMsg) {
+          lastError = errMsg;
+        } else if (res.status !== 404) {
+          lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
+        }
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        const isTimeout = err?.name === "AbortError" || /aborted|timeout/i.test(err?.message || "");
+        lastError = isTimeout
+          ? "Tempo limite esgotado no servidor (Cold Start)"
+          : err?.message || "Falha de conexão com a internet";
       }
+    }
 
-      const errMsg = data?.error || data?.message;
-      if (res.status === 400 && errMsg) {
-        return { success: false, error: errMsg };
-      }
-
-      if (errMsg) {
-        lastError = errMsg;
-      } else if (res.status !== 404) {
-        lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
-      }
-    } catch (err: any) {
-      lastError = err?.message || "Falha de conexão com a internet";
+    if (attempt < totalAttempts) {
+      console.warn(
+        `[Checkout Cold Start]: Tentativa ${attempt} de ${totalAttempts} falhou (${lastError}). Executando retry transparente em segundo plano...`
+      );
+      await new Promise((r) => setTimeout(r, attempt * 600));
     }
   }
 
