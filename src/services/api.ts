@@ -513,6 +513,36 @@ export async function fetchTenantOrdersApi(slugOrId: string): Promise<{ success:
   }
 }
 
+/**
+ * Polling passivo de segurança para consulta periódica de pedidos pendentes no D1/KV (/api/pedidos/pendentes).
+ * Garante que se houver oscilação de conexão do SSE, novos pedidos não visualizados sejam recuperados.
+ */
+export async function fetchPendingOrdersApi(tenantIdOrSlug?: string): Promise<{
+  success: boolean;
+  count?: number;
+  pedidos?: Order[];
+  orders: Order[];
+  pendentes?: Order[];
+  error?: string;
+}> {
+  try {
+    const query = tenantIdOrSlug ? `?loja=${encodeURIComponent(tenantIdOrSlug)}` : "";
+    const res = await fetch(`${BASE_URL}/pedidos/pendentes${query}`);
+    const data = await res.json();
+    const list = data?.pendentes || data?.pedidos || data?.orders || [];
+    return {
+      success: !!data.success,
+      count: data.count || list.length,
+      pedidos: list,
+      orders: list,
+      pendentes: list,
+      error: data.error,
+    };
+  } catch (err: any) {
+    return { success: false, orders: [], pedidos: [], pendentes: [], error: err.message };
+  }
+}
+
 export async function createOrderApi(
   orderData: any
 ): Promise<{ success: boolean; orderId?: string; order?: Order; error?: string }> {

@@ -174,6 +174,15 @@ export function isStoreAdminRoute(): boolean {
   try {
     const adminSession = sessionStorage.getItem("topfood_admin_session");
     if (adminSession) return true;
+    const userSession =
+      sessionStorage.getItem("topfood_user_session") ||
+      localStorage.getItem("topfood_user_session");
+    if (userSession) {
+      const parsed = JSON.parse(userSession);
+      if (parsed?.role === "admin" || parsed?.role === "superadmin" || parsed?.role === "merchant") {
+        return true;
+      }
+    }
   } catch {
     // ignore
   }
@@ -185,8 +194,8 @@ export function isStoreAdminRoute(): boolean {
  * Garante que nenhuma chamada a .play() seja executada na tela do cliente,
  * Checkout, Acompanhamento de Pedidos ou fora do painel do lojista.
  */
-export function safePlayAudio(audio?: HTMLAudioElement | null): Promise<void> | void {
-  if (!isStoreAdminRoute()) {
+export function safePlayAudio(audio?: HTMLAudioElement | null, force: boolean = false): Promise<void> | void {
+  if (!force && !isStoreAdminRoute()) {
     return;
   }
   if (audio && typeof audio.play === "function") {
@@ -201,8 +210,8 @@ let lastNewOrderChimeTime = 0;
  * Indicates a new customer order has arrived in real-time.
  * RESTRICTED EXCLUSIVELY TO STORE ADMIN ROUTE.
  */
-export function playNewOrderChime(): void {
-  if (!isStoreAdminRoute()) {
+export function playNewOrderChime(force: boolean = false): void {
+  if (!force && !isStoreAdminRoute()) {
     return;
   }
 
@@ -313,8 +322,8 @@ let lastPendingAlarmTime = 0;
  * até que o lojista clique no botão para aceitar o pedido.
  * Utiliza Web Audio API nativa com sequência de bipes marcantes e bem audíveis no celular.
  */
-export function playPendingOrderAlarm(): void {
-  if (!isStoreAdminRoute()) {
+export function playPendingOrderAlarm(force: boolean = false): void {
+  if (!force && !isStoreAdminRoute()) {
     return;
   }
 

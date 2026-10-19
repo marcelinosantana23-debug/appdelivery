@@ -65,14 +65,14 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
 
-  // Atualiza o relógio relativo a cada 60s apenas para exibição visual ("há X minutos")
-  // Sem chamadas periódicas à API (Zero Polling), poupando limites do plano Cloudflare Workers
+  // Atualiza o relógio relativo e executa o polling passivo de segurança a cada 60s (1 minuto)
   useEffect(() => {
     const timer = setInterval(() => {
       setNowMs(Date.now());
+      refreshOrders().catch(() => {});
     }, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [refreshOrders]);
 
   // Sincronização sob demanda: recupera pedidos apenas quando a aba ganha foco ou reconecta rede
   useEffect(() => {
@@ -98,16 +98,48 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
     toggle: toggleWakeLock,
   } = useScreenWakeLock(true);
 
-  const activeOrdersCount = orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length;
-  const pendingOrdersCount = orders.filter((o) => o.status === "received").length;
-  const allOrdersCount = orders.length;
+  // Contadores com desduplicação estrita de ID (previne duplicações entre SSE e Polling)
+  const { activeOrdersCount, pendingOrdersCount, allOrdersCount } = useMemo(() => {
+    const seen = new Set<string>();
+    let active = 0;
+    let pending = 0;
+    let total = 0;
 
-  // Ordenação determinística do pedido mais recente para o mais antigo
+    for (const o of orders) {
+      if (!o || !o.id) continue;
+      const clean = o.id.replace(/^#/, "");
+      if (seen.has(o.id) || seen.has(clean) || seen.has(`#${clean}`)) continue;
+      seen.add(o.id);
+      seen.add(clean);
+      seen.add(`#${clean}`);
+
+      total++;
+      if (o.status !== "done" && o.status !== "cancelled") active++;
+      if (o.status === "received") pending++;
+    }
+
+    return { activeOrdersCount: active, pendingOrdersCount: pending, allOrdersCount: total };
+  }, [orders]);
+
+  // Ordenação determinística do pedido mais recente para o mais antigo com filtro estrito de ID para nunca duplicar
   const filtered = useMemo(() => {
+    const seen = new Set<string>();
+    const deduplicated: Order[] = [];
+
+    for (const o of orders) {
+      if (!o || !o.id) continue;
+      const clean = o.id.replace(/^#/, "");
+      if (seen.has(o.id) || seen.has(clean) || seen.has(`#${clean}`)) continue;
+      seen.add(o.id);
+      seen.add(clean);
+      seen.add(`#${clean}`);
+      deduplicated.push(o);
+    }
+
     const base =
       filter === "active"
-        ? orders.filter((o) => o.status !== "done" && o.status !== "cancelled")
-        : orders;
+        ? deduplicated.filter((o) => o.status !== "done" && o.status !== "cancelled")
+        : deduplicated;
 
     return [...base].sort((a, b) => {
       const timeA = normalizeOrderTimestamp(a.createdAt, a as any);

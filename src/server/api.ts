@@ -1630,6 +1630,66 @@ api.get("/lojas/:slug/pedidos", async (c) => {
   }
 });
 
+// GET /api/pedidos/pendentes e /pedidos/pendentes - Polling de segurança do D1/KV para pedidos pendentes a cada 1 minuto
+const handlePedidosPendentes = async (c: any) => {
+  try {
+    const db = getDb(c);
+    const lojaQuery = c.req.query("loja") || c.req.query("tenantId") || c.req.query("slug");
+
+    let pedidos: Order[] = [];
+    let lojaInfo: any = null;
+
+    if (lojaQuery && lojaQuery !== "all" && lojaQuery !== "admin") {
+      const loja = await db.getTenantByIdOrSlug(lojaQuery);
+      if (loja) {
+        lojaInfo = { id: loja.id, nome: loja.name, slug: loja.slug };
+        pedidos = await db.getOrdersByTenant(loja.id);
+      } else {
+        pedidos = await db.getAllOrders();
+      }
+    } else {
+      pedidos = await db.getAllOrders();
+    }
+
+    // Filtra pedidos pendentes (received / preparing / não concluídos)
+    const pendentes = pedidos.filter(
+      (p) => p.status === "received" || p.status === "preparing" || (p.status !== "done" && p.status !== "cancelled")
+    );
+
+    const formatados = pendentes.map((p) => ({
+      ...p,
+      statusPt: STATUS_MAP_EN_TO_PT[p.status] || "Pendente",
+    }));
+
+    return c.json(
+      {
+        success: true,
+        count: formatados.length,
+        loja: lojaInfo,
+        pedidos: formatados,
+        orders: formatados,
+        pendentes: formatados,
+        timestamp: Date.now(),
+      },
+      200
+    );
+  } catch (err: any) {
+    console.error("[Worker Error in GET /pedidos/pendentes]:", err);
+    return c.json(
+      {
+        success: false,
+        error: err.message || "Erro ao consultar pedidos pendentes no D1/KV.",
+      },
+      500
+    );
+  }
+};
+
+api.get("/pedidos/pendentes", handlePedidosPendentes);
+api.get("/api/pedidos/pendentes", handlePedidosPendentes);
+api.get("/lojas/:slug/pedidos/pendentes", handlePedidosPendentes);
+api.get("/tenants/:slugOrId/orders/pending", handlePedidosPendentes);
+
 // GET /api/pedidos/:id - Detalhes de um pedido específico
 api.get("/pedidos/:id", async (c) => {
   try {
@@ -3062,19 +3122,24 @@ api.get("/tenants/:slugOrId/orders/stream", async (c) => {
       if (belongsToTenant) {
         try {
           if (payload.isNew) {
+            const dataStr = JSON.stringify({
+              type: "NOVO_PEDIDO",
+              event: "new_order",
+              order: payload.order,
+              pedido: payload.order,
+              timestamp: payload.timestamp || Date.now(),
+            });
             await stream.writeSSE({
               event: "new_order",
-              data: JSON.stringify({
-                order: payload.order,
-                timestamp: payload.timestamp,
-              }),
+              data: dataStr,
             });
             await stream.writeSSE({
               event: "NOVO_PEDIDO",
-              data: JSON.stringify({
-                order: payload.order,
-                timestamp: payload.timestamp,
-              }),
+              data: dataStr,
+            });
+            await stream.writeSSE({
+              event: "message",
+              data: dataStr,
             });
           }
           await stream.writeSSE({
@@ -3150,13 +3215,24 @@ api.get("/orders/stream", async (c) => {
       if (match) {
         try {
           if (payload.isNew) {
+            const dataStr = JSON.stringify({
+              type: "NOVO_PEDIDO",
+              event: "new_order",
+              order: payload.order,
+              pedido: payload.order,
+              timestamp: payload.timestamp || Date.now(),
+            });
             await stream.writeSSE({
               event: "new_order",
-              data: JSON.stringify({ order: payload.order, timestamp: payload.timestamp }),
+              data: dataStr,
             });
             await stream.writeSSE({
               event: "NOVO_PEDIDO",
-              data: JSON.stringify({ order: payload.order, timestamp: payload.timestamp }),
+              data: dataStr,
+            });
+            await stream.writeSSE({
+              event: "message",
+              data: dataStr,
             });
           }
           await stream.writeSSE({

@@ -66,10 +66,11 @@ import {
   confirmTenantPaymentApi,
   updateTenantMonthlyFeeApi,
   fetchLocalitiesApi,
+  fetchPendingOrdersApi,
 } from "@/services/api";
 import { StoreStoriesModal } from "@/components/common/StoreStoriesModal";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
-import { playNewOrderChime } from "@/utils/audio";
+import { playNewOrderChime, playPendingOrderAlarm } from "@/utils/audio";
 import {
   broadcastNewOrder,
   broadcastOrderUpdate,
@@ -2304,9 +2305,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         knownOrderIdsRef.current.has(`#${orderCleanId}`) ||
         knownOrderIdsRef.current.has(orderCleanId);
 
-      // Atualiza ref de IDs conhecidos
+      // Atualiza ref de IDs conhecidos com e sem #
       knownOrderIdsRef.current.add(incomingOrder.id);
       knownOrderIdsRef.current.add(orderCleanId);
+      knownOrderIdsRef.current.add(`#${orderCleanId}`);
 
       // Normaliza dados da mesa caso venham com chaves alternativas
       const resolvedTable =
@@ -2321,12 +2323,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         table_number: resolvedTable || incomingOrder.table_number,
       };
 
-      // 1. Inserir o novo card do pedido no topo da lista imediatamente (sem recarregar a página)
+      // 1. Inserir o novo card do pedido no topo da lista imediatamente (sem recarregar a página e sem duplicar)
       setOrders((prev) => {
         const withoutIncoming = prev.filter(
           (o) =>
             o.id !== normalizedIncoming.id &&
-            o.id.replace(/^#/, "") !== orderCleanId
+            o.id.replace(/^#/, "") !== orderCleanId &&
+            `#${o.id.replace(/^#/, "")}` !== `#${orderCleanId}`
         );
         return [normalizedIncoming, ...withoutIncoming];
       });
@@ -2337,8 +2340,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         // Toca o alerta sonoro de novo pedido (campainha e alarme da cozinha)
         try {
-          playNewOrderChime();
-          playPendingOrderAlarm();
+          playNewOrderChime(true);
+          playPendingOrderAlarm(true);
         } catch (audioErr) {
           console.warn("Aviso ao tocar som de novo pedido:", audioErr);
         }
@@ -2577,12 +2580,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     connectSSE();
 
-    // 4. Sincronização sob demanda (Zero Polling / CPU ociosa):
-    // Não executa polling periódico curto para não estourar a cota gratuita do Cloudflare Workers.
-    // A recuperação de eventuais falhas de sinal ocorre sob demanda:
-    // - Ao focar na aba do navegador (focus / visibilitychange)
-    // - Ao reconectar a internet (online)
-    // - Ao clicar no botão 'Atualizar Pedidos' no painel
+    // 4. Polling passivo de segurança a cada 60 segundos (1 minuto):
+    // Consulta pedidos pendentes no D1/KV (/api/pedidos/pendentes).
+    // Se houver algum pedido no banco que ainda não foi exibido em tela por falha pontual de conexão do SSE,
+    // adiciona-o imediatamente na lista e toca o alerta sonoro.
+    const syncPendingOrdersSafetyNet = async () => {
+      if (!isMounted) return;
+      try {
+        const queryTarget =
+          currentTenant?.id ||
+          currentTenant?.slug ||
+          currentUser?.tenantId ||
+          (tenantParam !== "all" && tenantParam !== "admin" ? tenantParam : undefined);
+
+        const res = await fetchPendingOrdersApi(queryTarget);
+        if (!isMounted || !res.success) return;
+
+        const pendingList: Order[] = res.pendentes || res.pedidos || res.orders || [];
+        const prevIds = knownOrderIdsRef.current;
+
+        for (const pendingOrder of pendingList) {
+          if (!pendingOrder || !pendingOrder.id) continue;
+          const cleanId = pendingOrder.id.replace(/^#/, "");
+          const isKnown =
+            prevIds.has(pendingOrder.id) ||
+            prevIds.has(cleanId) ||
+            prevIds.has(`#${cleanId}`);
+
+          if (!isKnown) {
+            console.log(`[Segurança 1 Minuto]: Pedido pendente #${cleanId} recuperado do D1/KV via polling de segurança.`);
+            handleIncomingNewOrder(pendingOrder);
+          }
+        }
+      } catch {
+        // ignora erros de rede móvel transitórios
+      }
+    };
+
+    // Timer de segurança de exatamente 60 segundos (1 minuto)
+    const safetyNetInterval = setInterval(() => {
+      syncPendingOrdersSafetyNet();
+    }, 60000);
+
+    // 5. Sincronização sob demanda (ao focar na aba, reconectar internet ou clicar em atualizar):
     const syncOrdersWithCloud = async () => {
       try {
         const queryTarget =
@@ -2599,17 +2639,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         if (prevIds.size > 0) {
           const newlyArrived = incoming.filter(
-            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, ""))
+            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, "")) && !prevIds.has(`#${o.id.replace(/^#/, "")}`)
           );
           if (newlyArrived.length > 0) {
             newlyArrived.forEach((o) => handleIncomingNewOrder(o));
           }
         } else {
-          setOrders(incoming);
-          incoming.forEach((o) => {
-            knownOrderIdsRef.current.add(o.id);
-            knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
-          });
+          const seen = new Set<string>();
+          const dedup: Order[] = [];
+          for (const o of incoming) {
+            if (!o || !o.id) continue;
+            const clean = o.id.replace(/^#/, "");
+            if (!seen.has(o.id) && !seen.has(clean) && !seen.has(`#${clean}`)) {
+              seen.add(o.id);
+              seen.add(clean);
+              seen.add(`#${clean}`);
+              dedup.push(o);
+              knownOrderIdsRef.current.add(o.id);
+              knownOrderIdsRef.current.add(clean);
+              knownOrderIdsRef.current.add(`#${clean}`);
+            }
+          }
+          setOrders(dedup);
         }
 
         // Atualiza status de pedidos caso alterados em outro dispositivo conectado ao D1
@@ -2635,10 +2686,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const handleWindowFocus = () => {
       if (currentUser && document.visibilityState === "visible") {
         syncOrdersWithCloud();
+        syncPendingOrdersSafetyNet();
       }
     };
     const handleNetworkOnline = () => {
       syncOrdersWithCloud();
+      syncPendingOrdersSafetyNet();
     };
 
     document.addEventListener("visibilitychange", handleWindowFocus);
@@ -2647,6 +2700,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
+      clearInterval(safetyNetInterval);
       clearTimeout(reconnectTimeout);
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
@@ -2744,12 +2798,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const prevIds = knownOrderIdsRef.current;
         if (prevIds.size > 0) {
           const newlyArrived = incoming.filter(
-            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, ""))
+            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, "")) && !prevIds.has(`#${o.id.replace(/^#/, "")}`)
           );
           if (newlyArrived.length > 0) {
             setNewOrderIds((prev) => Array.from(new Set([...newlyArrived.map((o) => o.id), ...prev])));
             try {
-              playNewOrderChime();
+              playNewOrderChime(true);
+              playPendingOrderAlarm(true);
             } catch {
               // ignore
             }
@@ -2762,12 +2817,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             );
           }
         }
-        setOrders(incoming);
-        incoming.forEach((o) => {
-          knownOrderIdsRef.current.add(o.id);
-          knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
-        });
-        return incoming;
+        const seen = new Set<string>();
+        const dedup: Order[] = [];
+        for (const o of incoming) {
+          if (!o || !o.id) continue;
+          const clean = o.id.replace(/^#/, "");
+          if (!seen.has(o.id) && !seen.has(clean) && !seen.has(`#${clean}`)) {
+            seen.add(o.id);
+            seen.add(clean);
+            seen.add(`#${clean}`);
+            dedup.push(o);
+            knownOrderIdsRef.current.add(o.id);
+            knownOrderIdsRef.current.add(clean);
+            knownOrderIdsRef.current.add(`#${clean}`);
+          }
+        }
+        setOrders(dedup);
+        return dedup;
       }
     } catch (err) {
       console.warn("Erro ao atualizar pedidos:", err);
