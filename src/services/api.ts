@@ -564,15 +564,40 @@ export async function fetchTenantOrdersApi(
 }
 
 export async function createOrderApi(
-  orderData: any
-): Promise<{ success: boolean; order?: Order; error?: string }> {
+  orderData: any,
+  idempotencyKey?: string
+): Promise<{ success: boolean; order?: Order; orderId?: string; duplicated?: boolean; error?: string }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000);
+  const rawKey =
+    idempotencyKey ||
+    (orderData as any).idempotency_key ||
+    (orderData as any).idempotencyKey ||
+    (orderData as any).cart_id ||
+    (orderData as any).cartId;
+  const cleanKey = rawKey && typeof rawKey === "string" ? rawKey.trim() : undefined;
+
   try {
-    const res = await fetch(`${BASE_URL}/orders`, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    };
+    if (cleanKey) {
+      headers["X-Idempotency-Key"] = cleanKey;
+      headers["Idempotency-Key"] = cleanKey;
+    }
+
+    const payload = {
+      ...orderData,
+      idempotency_key: cleanKey,
+      idempotencyKey: cleanKey,
+      cart_id: cleanKey,
+    };
+
+    const res = await fetch(`${BASE_URL}/pedidos`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(orderData),
+      headers,
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -580,7 +605,13 @@ export async function createOrderApi(
     if (!res.ok || !data.success) {
       return { success: false, error: data.error || `Erro ao registrar pedido (${res.status})` };
     }
-    return data;
+    const returnedOrder = data.order || data.pedido || (data.orderId ? ({ id: data.orderId, ...orderData } as any) : undefined);
+    return {
+      success: true,
+      order: returnedOrder,
+      orderId: data.orderId || returnedOrder?.id,
+      duplicated: Boolean(data.duplicated),
+    };
   } catch (err: any) {
     clearTimeout(timeoutId);
     const isTimeout = err?.name === "AbortError";
@@ -595,26 +626,70 @@ export async function createOrderApi(
 
 export async function createTenantOrderApi(
   slugOrId: string,
-  orderData: Omit<Order, "id" | "tenantId" | "createdAt">
-): Promise<{ success: boolean; order?: Order; error?: string }> {
+  orderData: Omit<Order, "id" | "tenantId" | "createdAt">,
+  idempotencyKey?: string
+): Promise<{ success: boolean; order?: Order; orderId?: string; duplicated?: boolean; error?: string }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000);
+  const rawKey =
+    idempotencyKey ||
+    (orderData as any).idempotency_key ||
+    (orderData as any).idempotencyKey ||
+    (orderData as any).cart_id ||
+    (orderData as any).cartId;
+  const cleanKey = rawKey && typeof rawKey === "string" ? rawKey.trim() : undefined;
+
   try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    };
+    if (cleanKey) {
+      headers["X-Idempotency-Key"] = cleanKey;
+      headers["Idempotency-Key"] = cleanKey;
+    }
+
+    const payload = {
+      ...orderData,
+      lojaSlug: slugOrId,
+      slug: slugOrId,
+      tenantId: slugOrId,
+      idempotency_key: cleanKey,
+      idempotencyKey: cleanKey,
+      cart_id: cleanKey,
+    };
+
+    // 1. Tenta POST /api/pedidos com cabeçalho e payload de idempotência
+    let res = await fetch(`${BASE_URL}/pedidos`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify(orderData),
+      headers,
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
+
+    // Fallback caso a rota /pedidos retorne 404 em algum ambiente
+    if (res.status === 404) {
+      res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    }
+
     clearTimeout(timeoutId);
     const data = await res.json();
     if (!res.ok || !data.success) {
       return { success: false, error: data.error || `Erro ao registrar pedido (${res.status})` };
     }
-    return data;
+
+    const returnedOrder = data.order || data.pedido || (data.orderId ? ({ id: data.orderId, ...orderData } as any) : undefined);
+    return {
+      success: true,
+      order: returnedOrder,
+      orderId: data.orderId || returnedOrder?.id,
+      duplicated: Boolean(data.duplicated),
+    };
   } catch (err: any) {
     clearTimeout(timeoutId);
     const isTimeout = err?.name === "AbortError";

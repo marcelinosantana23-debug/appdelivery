@@ -95,6 +95,23 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   // Success Screen State
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
 
+  // 1. Chave única de idempotência do carrinho/sessão (mantida mesmo se o cliente clicar em "Tentar Novamente")
+  const [idempotencyKey] = useState<string>(() => {
+    try {
+      const stored = sessionStorage.getItem("topfood_cart_idempotency_key");
+      if (stored && stored.trim()) return stored.trim();
+    } catch (_err) {
+      void _err;
+    }
+    const newKey = `cart_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    try {
+      sessionStorage.setItem("topfood_cart_idempotency_key", newKey);
+    } catch (_err) {
+      void _err;
+    }
+    return newKey;
+  });
+
   // Carrega automaticamente os dados do cliente persistidos no localStorage (Checkout Rápido)
   useEffect(() => {
     const saved = getCustomerProfile();
@@ -335,18 +352,26 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       customerPhone: customerPhone.trim(),
       createdAt: Date.now(),
       statusHistory: [{ status: "received", timestamp: Date.now() }],
+      idempotencyKey,
+      idempotency_key: idempotencyKey,
+      cart_id: idempotencyKey,
     };
 
     try {
-      // 1. Enviar pedido diretamente via API para o sistema da cozinha e confirmar gravação no servidor
+      // 1. Enviar pedido via API para o Cloudflare D1 com verificação de idempotência
       const placedOrder = await addOrder(order);
       if (!placedOrder || !placedOrder.id) {
         throw new Error("Não foi possível confirmar a gravação do seu pedido no servidor.");
       }
       const finalOrder = placedOrder;
 
-      // 2. Dispara notificação imediata para o painel do lojista (BroadcastChannel)
-      broadcastNewOrder(finalOrder);
+      // 2. Dispara notificação para o painel do lojista (apenas se for pedido inédito, sem duplicar)
+      if (!finalOrder.duplicated) {
+        broadcastNewOrder(finalOrder);
+      } else {
+        console.log("[Idempotency] Pedido já havia sido gravado no banco:", finalOrder.id);
+        showToast("Seu pedido já foi localizado e confirmado no sistema!", "success", 4000);
+      }
 
       // 3. Salva o ID do pedido no localStorage do navegador para rastreamento
       saveActiveOrder(finalOrder.id, config.slug, {
@@ -356,14 +381,25 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         orderType: finalOrder.orderType,
       });
 
-      // Limpa erros anteriores de envio, limpa o carrinho e exibe a Tela de Sucesso
+      // 4. Limpa a chave da sessão de checkout e erros anteriores
+      try {
+        sessionStorage.removeItem("topfood_cart_idempotency_key");
+      } catch (_err) {
+        void _err;
+      }
+
       setErrors((prev) => {
         const copy = { ...prev };
         delete copy.submit;
         return copy;
       });
+
+      // 5. Limpa a sacola e redireciona diretamente para a tela de Pedido Concluído com Sucesso
       clearCart();
       setSubmittedOrder(finalOrder);
+      if (onOrderPlaced) {
+        onOrderPlaced(finalOrder);
+      }
     } catch (err: any) {
       console.error("Erro ao enviar pedido para o servidor:", err);
       const msg =
@@ -394,11 +430,17 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
               <CheckCircle2 className="h-12 w-12 text-white" strokeWidth={2.4} />
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-white/25 px-3 py-1 text-xs font-black tracking-wider uppercase backdrop-blur-md mb-2">
-              ✓ Enviado para a Cozinha
+              {submittedOrder.duplicated ? "✓ Pedido Localizado e Confirmado" : "✓ Enviado para a Cozinha"}
             </span>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Pedido Recebido!</h1>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+              {submittedOrder.duplicated ? "Pedido Concluído com Sucesso!" : "Pedido Recebido!"}
+            </h1>
             <p className="text-emerald-100 text-xs sm:text-sm mt-1 max-w-sm mx-auto">
-              Seu pedido já entrou no sistema de produção de <strong>{config.name}</strong> e logo começará a ser preparado.
+              {submittedOrder.duplicated ? (
+                <>Seu pedido já havia sido gravado e está confirmado no sistema de produção de <strong>{config.name}</strong>.</>
+              ) : (
+                <>Seu pedido já entrou no sistema de produção de <strong>{config.name}</strong> e logo começará a ser preparado.</>
+              )}
             </p>
           </div>
 
@@ -1383,19 +1425,30 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
             disabled={!canSubmit}
             className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black text-white shadow-lg transition active:scale-[0.98] cursor-pointer ${
               canSubmit
-                ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30"
+                ? errors.submit
+                  ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/30"
+                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30"
                 : "bg-slate-400 cursor-not-allowed opacity-60 shadow-none"
             }`}
           >
             {isSubmitting ? (
               <>
                 <RefreshCw className="h-5 w-5 animate-spin" />
-                <span>Enviando para a cozinha...</span>
+                <span>{errors.submit ? "Verificando se o pedido foi gravado..." : "Enviando para a cozinha..."}</span>
               </>
             ) : (
               <>
-                <ShoppingBag className="h-5 w-5" />
-                <span>Finalizar Pedido</span>
+                {errors.submit ? (
+                  <>
+                    <RefreshCw className="h-5 w-5" />
+                    <span>Tentar Novamente</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="h-5 w-5" />
+                    <span>Finalizar Pedido</span>
+                  </>
+                )}
               </>
             )}
           </button>
@@ -1409,15 +1462,25 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
 
           {/* Erro de envio / gravação no banco */}
           {errors.submit && (
-            <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-3.5 text-xs text-red-800 space-y-1.5 animate-fade-in">
+            <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-3.5 text-xs text-red-800 space-y-2 animate-fade-in">
               <div className="flex items-center gap-1.5 font-bold text-red-900">
                 <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
                 <span>Não foi possível confirmar o pedido</span>
               </div>
               <p className="text-red-700 font-medium">{errors.submit}</p>
               <p className="text-[11px] text-red-600">
-                Seus itens continuam salvos na sacola. Toque em &quot;Finalizar Pedido&quot; para tentar novamente.
+                Seus itens continuam salvos na sacola. Toque no botão abaixo para tentar novamente com segurança (sem risco de duplicidade).
               </p>
+              <button
+                type="button"
+                id="btn-retry-submit"
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="w-full mt-1.5 py-2.5 px-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-sm text-xs cursor-pointer"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isSubmitting ? "animate-spin" : ""}`} />
+                <span>{isSubmitting ? "Verificando pedido..." : "Tentar Novamente"}</span>
+              </button>
             </div>
           )}
 

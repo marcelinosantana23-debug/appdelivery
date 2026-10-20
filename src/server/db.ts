@@ -2620,6 +2620,7 @@ export class Database {
           status TEXT NOT NULL DEFAULT 'received',
           items_json TEXT NOT NULL DEFAULT '[]',
           status_history_json TEXT NOT NULL DEFAULT '[]',
+          idempotency_key TEXT DEFAULT '',
           created_at INTEGER NOT NULL
         )`,
         `CREATE TABLE IF NOT EXISTS customers (
@@ -2754,7 +2755,8 @@ export class Database {
         "ALTER TABLE products ADD COLUMN addon_group_ids TEXT DEFAULT '[]'",
         "ALTER TABLE tenants ADD COLUMN localidade TEXT DEFAULT 'Gargaú'",
         "ALTER TABLE tenants ADD COLUMN motoboy_phone TEXT DEFAULT ''",
-        "ALTER TABLE tenants ADD COLUMN motoboy_name TEXT DEFAULT ''"
+        "ALTER TABLE tenants ADD COLUMN motoboy_name TEXT DEFAULT ''",
+        "ALTER TABLE orders ADD COLUMN idempotency_key TEXT DEFAULT ''"
       ];
 
       for (const alter of alterQueries) {
@@ -2776,6 +2778,7 @@ export class Database {
         "CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id)",
         "CREATE INDEX IF NOT EXISTS idx_establishment_categories_order ON establishment_categories(order_index)",
         "CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_orders_idempotency ON orders(idempotency_key)",
         "CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items(product_id)",
         "CREATE INDEX IF NOT EXISTS idx_order_items_tenant ON order_items(tenant_id)",
         "CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)",
@@ -5604,6 +5607,55 @@ export class Database {
     return found || null;
   }
 
+  async getOrderByIdempotencyKey(key: string, maxAgeMs = 5 * 60 * 1000): Promise<Order | null> {
+    if (!key || typeof key !== "string" || !key.trim()) return null;
+    const cleanKey = key.trim();
+    const minTimestamp = Date.now() - maxAgeMs;
+
+    // 1. D1 Database query
+    if (this.env?.DB) {
+      try {
+        await this.ensureTables();
+        const row = await this.env.DB.prepare(
+          "SELECT * FROM orders WHERE idempotency_key = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 1"
+        )
+          .bind(cleanKey, minTimestamp)
+          .first<any>();
+        if (row) {
+          return this.mapOrderRow(row);
+        }
+      } catch (e) {
+        console.warn("D1 getOrderByIdempotencyKey error:", e);
+      }
+    }
+
+    // 2. Cloudflare KV cache query
+    const kv = this.getKv();
+    if (kv) {
+      try {
+        const cached = await kv.get(`idempotency:${cleanKey}`);
+        if (cached) {
+          const order = JSON.parse(cached) as Order;
+          if (order && Date.now() - (order.createdAt || 0) <= maxAgeMs) {
+            return order;
+          }
+        }
+      } catch (e) {
+        console.warn("KV get idempotency error:", e);
+      }
+    }
+
+    // 3. Fallback memory query
+    const found = globalStore.orders.find(
+      (o) =>
+        (o.idempotencyKey === cleanKey ||
+          (o as any).idempotency_key === cleanKey ||
+          (o as any).cart_id === cleanKey) &&
+        Date.now() - (o.createdAt || 0) <= maxAgeMs
+    );
+    return found || null;
+  }
+
   async createOrder(tenantId: string, orderData: Omit<Order, "id" | "tenantId" | "createdAt">): Promise<Order> {
     const rawCardType = (orderData as any).cardType || (orderData as any).card_type || undefined;
     const rawPaymentDetails = (orderData as any).paymentDetails || (orderData as any).payment_details || undefined;
@@ -5611,6 +5663,8 @@ export class Database {
     const rawLocationUrl = (orderData as any).location_url || (orderData as any).locationUrl || undefined;
     const rawTableNumber = (orderData as any).tableNumber || (orderData as any).table_number || (orderData as any).numeroMesa || (orderData as any).table || (orderData as any).mesa || undefined;
     const cleanTableNumber = rawTableNumber && typeof rawTableNumber === "string" && rawTableNumber.trim() ? rawTableNumber.trim() : undefined;
+    const rawIdempotency = (orderData as any).idempotencyKey || (orderData as any).idempotency_key || (orderData as any).cart_id || (orderData as any).cartId || undefined;
+    const cleanIdempotencyKey = rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim() ? rawIdempotency.trim() : undefined;
 
     const newOrder: Order = {
       ...orderData,
@@ -5626,6 +5680,9 @@ export class Database {
       table_number: cleanTableNumber,
       mesa: cleanTableNumber,
       table: cleanTableNumber,
+      idempotencyKey: cleanIdempotencyKey,
+      idempotency_key: cleanIdempotencyKey,
+      cart_id: cleanIdempotencyKey,
       createdAt: Date.now(),
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
@@ -5641,8 +5698,8 @@ export class Database {
               id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
               card_type, payment_details, pix_receipt_url, location_url,
               address_json, change_for, subtotal, delivery_fee, total, status,
-              items_json, status_history_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              items_json, status_history_json, idempotency_key, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
             .bind(
               newOrder.id,
@@ -5664,44 +5721,81 @@ export class Database {
               newOrder.status,
               JSON.stringify(newOrder.items || []),
               JSON.stringify(newOrder.statusHistory || []),
+              cleanIdempotencyKey || "",
               newOrder.createdAt
             )
             .run();
           d1Saved = true;
         } catch (insertErr) {
           console.warn("D1 primary insert failed, attempting schema fallback:", insertErr);
-          // Fallback se a coluna table_number não estiver criada na tabela existente
-          await this.env.DB.prepare(
-            `INSERT INTO orders (
-              id, tenant_id, customer_name, customer_phone, order_type, payment_method,
-              card_type, payment_details, pix_receipt_url, location_url,
-              address_json, change_for, subtotal, delivery_fee, total, status,
-              items_json, status_history_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-            .bind(
-              newOrder.id,
-              newOrder.tenantId,
-              newOrder.customerName,
-              newOrder.customerPhone,
-              newOrder.orderType,
-              newOrder.paymentMethod,
-              newOrder.cardType || null,
-              newOrder.paymentDetails || null,
-              newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
-              newOrder.location_url || newOrder.locationUrl || null,
-              JSON.stringify(newOrder.address || {}),
-              newOrder.changeFor || "",
-              newOrder.subtotal,
-              newOrder.deliveryFee,
-              newOrder.total,
-              newOrder.status,
-              JSON.stringify(newOrder.items || []),
-              JSON.stringify(newOrder.statusHistory || []),
-              newOrder.createdAt
+          // Fallback se a coluna table_number ou idempotency_key não estiver criada na tabela existente
+          try {
+            await this.env.DB.prepare(
+              `INSERT INTO orders (
+                id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
+                card_type, payment_details, pix_receipt_url, location_url,
+                address_json, change_for, subtotal, delivery_fee, total, status,
+                items_json, status_history_json, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             )
-            .run();
-          d1Saved = true;
+              .bind(
+                newOrder.id,
+                newOrder.tenantId,
+                newOrder.customerName,
+                newOrder.customerPhone,
+                newOrder.orderType,
+                cleanTableNumber || "",
+                newOrder.paymentMethod,
+                newOrder.cardType || null,
+                newOrder.paymentDetails || null,
+                newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
+                newOrder.location_url || newOrder.locationUrl || null,
+                JSON.stringify(newOrder.address || {}),
+                newOrder.changeFor || "",
+                newOrder.subtotal,
+                newOrder.deliveryFee,
+                newOrder.total,
+                newOrder.status,
+                JSON.stringify(newOrder.items || []),
+                JSON.stringify(newOrder.statusHistory || []),
+                newOrder.createdAt
+              )
+              .run();
+            d1Saved = true;
+          } catch (fbErr) {
+            console.warn("D1 secondary insert fallback:", fbErr);
+            await this.env.DB.prepare(
+              `INSERT INTO orders (
+                id, tenant_id, customer_name, customer_phone, order_type, payment_method,
+                card_type, payment_details, pix_receipt_url, location_url,
+                address_json, change_for, subtotal, delivery_fee, total, status,
+                items_json, status_history_json, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            )
+              .bind(
+                newOrder.id,
+                newOrder.tenantId,
+                newOrder.customerName,
+                newOrder.customerPhone,
+                newOrder.orderType,
+                newOrder.paymentMethod,
+                newOrder.cardType || null,
+                newOrder.paymentDetails || null,
+                newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
+                newOrder.location_url || newOrder.locationUrl || null,
+                JSON.stringify(newOrder.address || {}),
+                newOrder.changeFor || "",
+                newOrder.subtotal,
+                newOrder.deliveryFee,
+                newOrder.total,
+                newOrder.status,
+                JSON.stringify(newOrder.items || []),
+                JSON.stringify(newOrder.statusHistory || []),
+                newOrder.createdAt
+              )
+              .run();
+            d1Saved = true;
+          }
         }
 
         if (newOrder.items && newOrder.items.length > 0) {
@@ -6325,6 +6419,9 @@ export class Database {
       status: row.status,
       items: this.safeJsonParse(row.items_json, []),
       statusHistory: this.safeJsonParse(row.status_history_json, []),
+      idempotencyKey: row.idempotency_key || (row as any).idempotencyKey || undefined,
+      idempotency_key: row.idempotency_key || (row as any).idempotencyKey || undefined,
+      cart_id: row.idempotency_key || (row as any).idempotencyKey || undefined,
       createdAt: this.parseOrderTimestamp(row.created_at ?? row.createdAt),
     };
   }

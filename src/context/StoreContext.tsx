@@ -2095,6 +2095,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         undefined;
       const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
 
+      const rawIdempotency =
+        (order as any).idempotencyKey ||
+        (order as any).idempotency_key ||
+        (order as any).cart_id ||
+        (order as any).cartId ||
+        undefined;
+      const cleanIdempotencyKey =
+        rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()
+          ? rawIdempotency.trim()
+          : undefined;
+
       const payload = {
         tenantId,
         customerName: order.customerName,
@@ -2105,6 +2116,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mesa: cleanTable,
         table: cleanTable,
         numeroMesa: cleanTable,
+        idempotencyKey: cleanIdempotencyKey,
+        idempotency_key: cleanIdempotencyKey,
+        cart_id: cleanIdempotencyKey,
         paymentMethod: order.paymentMethod,
         cardType: order.cardType,
         paymentDetails: order.paymentDetails,
@@ -2123,7 +2137,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
 
       // Persiste com confirmação obrigatória no Cloudflare D1 via API
-      const res = await createTenantOrderApi(tenantId, payload);
+      const res = await createTenantOrderApi(tenantId, payload, cleanIdempotencyKey);
       if (!res.success || !res.order) {
         const errorMsg =
           res.error || "Não foi possível confirmar a gravação do seu pedido no servidor. O pedido não foi criado.";
@@ -2140,6 +2154,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const finalOrder: Order = {
         ...res.order,
+        idempotencyKey: cleanIdempotencyKey,
+        idempotency_key: cleanIdempotencyKey,
+        duplicated: res.duplicated,
         tableNumber: returnedTable,
         table_number: returnedTable,
         mesa: returnedTable,

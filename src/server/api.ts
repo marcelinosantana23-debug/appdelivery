@@ -1397,6 +1397,36 @@ api.post("/pedidos", async (c) => {
     const db = getDb(c);
     const body = await c.req.json();
 
+    // 0. VERIFICAÇÃO DE IDEMPOTÊNCIA (Prevenção de pedidos duplicados após timeout ou retry do cliente)
+    const rawIdempotency =
+      c.req.header("x-idempotency-key") ||
+      c.req.header("idempotency-key") ||
+      body.idempotency_key ||
+      body.idempotencyKey ||
+      body.cart_id ||
+      body.cartId ||
+      undefined;
+
+    if (rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()) {
+      const cleanKey = rawIdempotency.trim();
+      const existingOrder = await db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
+      if (existingOrder) {
+        console.log(`[Idempotency] Pedido existente encontrado (${existingOrder.id}) para chave: ${cleanKey}`);
+        return c.json({
+          success: true,
+          orderId: existingOrder.id,
+          id: existingOrder.id,
+          duplicated: true,
+          order: existingOrder,
+          pedido: {
+            ...existingOrder,
+            statusPt: STATUS_MAP_EN_TO_PT[existingOrder.status] || existingOrder.status,
+          },
+          message: "Pedido já registrado anteriormente com sucesso (idempotência).",
+        }, 200);
+      }
+    }
+
     // 1. Identificar a loja vinculada
     const lojaRef = body.lojaSlug || body.slug || body.lojaId || body.tenantId || "marcelino";
     const loja = await db.getTenantByIdOrSlug(lojaRef);
@@ -1457,7 +1487,8 @@ api.post("/pedidos", async (c) => {
     const total = Number(body.total ?? (subtotal + taxaEntrega));
     const statusInicial: OrderStatus = normalizeOrderStatus(body.status || "Pendente");
 
-    // 4. Salvar pedido no D1 e KV
+    // 4. Salvar pedido no D1 e KV com chave de idempotência vinculada
+    const cleanIdempotency = rawIdempotency && typeof rawIdempotency === "string" ? rawIdempotency.trim() : undefined;
     const comprovante = body.pix_receipt_url || body.pixReceiptUrl || body.comprovantePix || body.receipt || undefined;
     const tipoCartao = body.cardType || body.card_type || body.tipoCartao || undefined;
     const detalhesPgto = body.paymentDetails || body.payment_details || undefined;
@@ -1471,6 +1502,9 @@ api.post("/pedidos", async (c) => {
       table_number: cleanTableNumber,
       mesa: cleanTableNumber,
       table: cleanTableNumber,
+      idempotencyKey: cleanIdempotency,
+      idempotency_key: cleanIdempotency,
+      cart_id: cleanIdempotency,
       paymentMethod: formaPagamento,
       cardType: tipoCartao,
       paymentDetails: detalhesPgto,
@@ -1503,6 +1537,10 @@ api.post("/pedidos", async (c) => {
     return c.json({
       success: true,
       message: "Pedido registrado com sucesso no Cloudflare D1/KV!",
+      orderId: novoPedido.id,
+      id: novoPedido.id,
+      duplicated: false,
+      order: novoPedido,
       pedido: {
         ...novoPedido,
         statusPt: STATUS_MAP_EN_TO_PT[novoPedido.status] || "Pendente",
@@ -3184,6 +3222,36 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
     }
 
     const body = await parseIncomingOrderPayload(c);
+
+    // Verificação de idempotência (Prevenção de duplicidade após timeout)
+    const rawIdempotency =
+      c.req.header("x-idempotency-key") ||
+      c.req.header("idempotency-key") ||
+      body.idempotency_key ||
+      body.idempotencyKey ||
+      body.cart_id ||
+      body.cartId ||
+      undefined;
+
+    if (rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()) {
+      const cleanKey = rawIdempotency.trim();
+      const existing = await db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
+      if (existing) {
+        return c.json({
+          success: true,
+          orderId: existing.id,
+          id: existing.id,
+          duplicated: true,
+          order: existing,
+          pedido: existing,
+          message: "Pedido já registrado anteriormente com sucesso (idempotência).",
+        }, 200);
+      }
+      body.idempotencyKey = cleanKey;
+      body.idempotency_key = cleanKey;
+      body.cart_id = cleanKey;
+    }
+
     const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;
     const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
     body.tableNumber = cleanTable;
@@ -3258,18 +3326,34 @@ api.post("/orders", async (c) => {
   try {
     const db = getDb(c);
     const body = await parseIncomingOrderPayload(c);
-    const tenantIdentifier = body.tenantId || body.tenantSlug || body.loja || "marcelino";
-    const tenant = await db.getTenantByIdOrSlug(tenantIdentifier);
 
-    if (!tenant) {
-      return c.json({ success: false, error: "Lanchonete não encontrada" }, 404);
-    }
+    // Verificação de idempotência (Prevenção de duplicidade após timeout)
+    const rawIdempotency =
+      c.req.header("x-idempotency-key") ||
+      c.req.header("idempotency-key") ||
+      body.idempotency_key ||
+      body.idempotencyKey ||
+      body.cart_id ||
+      body.cartId ||
+      undefined;
 
-    if (tenant.status === "inactive") {
-      return c.json(
-        { success: false, error: "Esta loja está desativada no momento e não aceita novos pedidos." },
-        400
-      );
+    if (rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()) {
+      const cleanKey = rawIdempotency.trim();
+      const existing = await db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
+      if (existing) {
+        return c.json({
+          success: true,
+          orderId: existing.id,
+          id: existing.id,
+          duplicated: true,
+          order: existing,
+          pedido: existing,
+          message: "Pedido já registrado anteriormente com sucesso (idempotência).",
+        }, 200);
+      }
+      body.idempotencyKey = cleanKey;
+      body.idempotency_key = cleanKey;
+      body.cart_id = cleanKey;
     }
 
     const rawTable = body.tableNumber || body.table_number || body.numeroMesa || body.table || body.mesa || undefined;

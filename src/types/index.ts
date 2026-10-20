@@ -220,6 +220,10 @@ export interface Order {
   customerPhone: string;
   createdAt: number;
   statusHistory: { status: OrderStatus; timestamp: number }[];
+  idempotencyKey?: string;
+  idempotency_key?: string;
+  cart_id?: string;
+  duplicated?: boolean;
 }
 
 export interface Customer {

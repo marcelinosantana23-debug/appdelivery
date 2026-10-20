@@ -29,6 +29,8 @@ app.use(
       "Cache-Control",
       "Pragma",
       "X-Admin-Role",
+      "X-Idempotency-Key",
+      "Idempotency-Key",
     ],
     exposeHeaders: ["Content-Length", "Content-Type"],
     credentials: true,

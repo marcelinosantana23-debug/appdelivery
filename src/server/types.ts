@@ -218,6 +218,10 @@ export interface Order {
   items: OrderItem[];
   statusHistory: { status: OrderStatus; timestamp: number }[];
   createdAt: number;
+  idempotencyKey?: string;
+  idempotency_key?: string;
+  cart_id?: string;
+  duplicated?: boolean;
 }
 
 export interface Customer {
