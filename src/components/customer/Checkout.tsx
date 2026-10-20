@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
-import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl, formatTableDisplay, formatTableNumberOnly } from "@/utils/order";
+import { formatPrice, generateOrderId, generateIdempotencyKey, getMerchantSupportWhatsAppUrl, formatTableDisplay, formatTableNumberOnly } from "@/utils/order";
 import { broadcastNewOrder } from "@/utils/ordersChannel";
 import {
   saveActiveOrder,
@@ -99,11 +99,11 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   const [idempotencyKey] = useState<string>(() => {
     try {
       const stored = sessionStorage.getItem("topfood_cart_idempotency_key");
-      if (stored && stored.trim()) return stored.trim();
+      if (stored && typeof stored === "string" && stored.trim()) return stored.trim();
     } catch (_err) {
       void _err;
     }
-    const newKey = `cart_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const newKey = generateIdempotencyKey();
     try {
       sessionStorage.setItem("topfood_cart_idempotency_key", newKey);
     } catch (_err) {

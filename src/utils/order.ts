@@ -266,6 +266,13 @@ export function generateOrderId(): string {
 }
 
 /**
+ * Gera identificador de idempotência simples e universal (compatível com 100% dos navegadores/dispositivos)
+ */
+export function generateIdempotencyKey(): string {
+  return "order_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+}
+
+/**
  * Extrai de forma resiliente o valor da mesa de qualquer objeto de pedido ou string
  */
 export function getOrderTable(input?: string | (Partial<Order> & Record<string, any>) | null): string {

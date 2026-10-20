@@ -2104,7 +2104,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const cleanIdempotencyKey =
         rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()
           ? rawIdempotency.trim()
-          : undefined;
+          : ("order_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
 
       const payload = {
         tenantId,

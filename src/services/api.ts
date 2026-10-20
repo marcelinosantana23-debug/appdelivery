@@ -583,8 +583,14 @@ export async function createOrderApi(
       ...getAuthHeaders(),
     };
     if (cleanKey) {
-      headers["X-Idempotency-Key"] = cleanKey;
-      headers["Idempotency-Key"] = cleanKey;
+      try {
+        const headerVal = cleanKey.replace(/[^a-zA-Z0-9_-]/g, "");
+        if (headerVal) {
+          headers["X-Idempotency-Key"] = headerVal;
+        }
+      } catch (_e) {
+        void _e;
+      }
     }
 
     const payload = {
@@ -645,8 +651,14 @@ export async function createTenantOrderApi(
       ...getAuthHeaders(),
     };
     if (cleanKey) {
-      headers["X-Idempotency-Key"] = cleanKey;
-      headers["Idempotency-Key"] = cleanKey;
+      try {
+        const headerVal = cleanKey.replace(/[^a-zA-Z0-9_-]/g, "");
+        if (headerVal) {
+          headers["X-Idempotency-Key"] = headerVal;
+        }
+      } catch (_e) {
+        void _e;
+      }
     }
 
     const payload = {
