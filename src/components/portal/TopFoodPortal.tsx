@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useStore } from "@/context/StoreContext";
 import { PortalHeader } from "./PortalHeader";
 import { EstablishmentCategories } from "./EstablishmentCategories";
@@ -91,13 +91,10 @@ export function TopFoodPortal({
     );
   }, [selectedLocality]);
 
-  const matchesSelectedLocation = useCallback(
-    (loc?: string) => {
-      if (isAllLocations) return true;
-      return (loc || "Gargaú").trim().toLowerCase() === selectedLocality.trim().toLowerCase();
-    },
-    [isAllLocations, selectedLocality]
-  );
+  const matchesSelectedLocation = (loc?: string) => {
+    if (isAllLocations) return true;
+    return (loc || "Gargaú").trim().toLowerCase() === selectedLocality.trim().toLowerCase();
+  };
 
   // FONTE DE DADOS REATIVA POR LOCALIDADE:
   // Unifica o array de lojas ativas e filtra pela localidade selecionada (ou mostra todas se "Todas as Localidades").
@@ -140,7 +137,7 @@ export function TopFoodPortal({
         matchesSelectedLocation(p.location || p.localidade) &&
         (activeIds.has(p.tenantId) || (p.tenantSlug && activeSlugs.has(p.tenantSlug)) || Boolean(p.location || p.localidade))
     );
-  }, [topSellingProducts, lojas, isAllLocations, matchesSelectedLocation]);
+  }, [topSellingProducts, lojas, isAllLocations]);
 
   const activeTenants = lojas;
 
@@ -413,6 +410,35 @@ export function TopFoodPortal({
     onSelectStore(slug);
   };
 
+  // Filtra as seções exibidas caso o usuário tenha clicado em uma categoria específica no topo
+  const displayedGroups = useMemo(() => {
+    if (!selectedCategory || selectedCategory === "todos") {
+      return groupedTenants;
+    }
+    const filteredGroups = groupedTenants.filter(
+      (g) =>
+        doesCategoryMatch(g.category, selectedCategory) ||
+        g.category.id.toLowerCase() === selectedCategory.toLowerCase() ||
+        g.category.name.toLowerCase() === selectedCategory.toLowerCase() ||
+        slugifyCategory(g.category.name) === slugifyCategory(selectedCategory)
+    );
+
+    if (filteredGroups.length > 0) {
+      return filteredGroups;
+    }
+
+    if (categoryFilteredStores.length > 0) {
+      const catObj = dynamicCategories.find((c) => doesCategoryMatch(c, selectedCategory)) || {
+        id: slugifyCategory(selectedCategory),
+        name: selectedCategory,
+        icon: "🍽️",
+        order: 99,
+      };
+      return [{ category: catObj, stores: categoryFilteredStores }];
+    }
+
+    return [];
+  }, [groupedTenants, selectedCategory, categoryFilteredStores, dynamicCategories]);
 
   // Categoria ativa resolvida para exibição de título
   const activeCategoryObj = useMemo(() => {
@@ -428,6 +454,17 @@ export function TopFoodPortal({
     );
   }, [dynamicCategories, selectedCategory]);
 
+  // Subtítulo dinâmico: soma de todas as lojas cadastradas (20 lojas parceiras disponíveis no Top Food)
+  // ou o total da categoria quando uma categoria específica estiver filtrada
+  const totalAvailableStores = useMemo(() => {
+    if (searchQuery.trim()) {
+      return matchingStores.length;
+    }
+    if (selectedCategory !== "todos") {
+      return categoryFilteredStores.length;
+    }
+    return lojas.length;
+  }, [searchQuery, matchingStores, selectedCategory, categoryFilteredStores, lojas]);
 
   // Contador geral dinâmico de lojas parceiras cadastradas no sistema
   const partnerStoresCount = lojas.length;

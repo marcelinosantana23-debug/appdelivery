@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
-import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl } from "@/utils/order";
+import { formatPrice, generateOrderId, getMerchantSupportWhatsAppUrl, formatTableDisplay, formatTableNumberOnly } from "@/utils/order";
 import { broadcastNewOrder } from "@/utils/ordersChannel";
 import {
   saveActiveOrder,
@@ -37,7 +37,6 @@ import {
 } from "@/utils/orderStorage";
 import { compressImageToDataUrl, formatFileSize } from "@/utils/imageCompressor";
 import { playOrderSubmissionConfirmationSound } from "@/utils/audio";
-import { saveOrderToOfflineQueue } from "@/utils/orderQueue";
 import type { OrderType, PaymentMethod, CardType, Order } from "@/types";
 
 interface CheckoutProps {
@@ -54,7 +53,7 @@ function formatPhone(value: string): string {
 }
 
 export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
-  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config, showToast } = useStore();
+  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config } = useStore();
 
   const [orderType, setOrderType] = useState<OrderType>("delivery");
   const [tableNumber, setTableNumber] = useState("");
@@ -95,52 +94,6 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
 
   // Success Screen State
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [pendingLocalOrder, setPendingLocalOrder] = useState<Order | null>(null);
-  const handleSubmitRef = useRef<() => Promise<void>>(async () => {});
-  const isSubmittingRef = useRef(false);
-  const cartSessionIdRef = useRef<string>(
-    `cart_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-  );
-
-  // ==========================================
-  // FILA DE SEGURANÇA LOCAL & RETRY AUTOMÁTICO
-  // ==========================================
-  useEffect(() => {
-    // 1. Quando a conexão com a internet for restabelecida, dispara reenvio automático
-    const handleOnline = () => {
-      if (pendingLocalOrder && !submittedOrder) {
-        showToast("Internet restabelecida! Reenviando pedido automaticamente...", "info", 3500);
-        handleSubmitRef.current();
-      }
-    };
-
-    // 2. Quando a rotina de reenvio automático em background concluir a entrega do pedido pendente
-    const handleOfflineOrderSent = (e: any) => {
-      const detail = e?.detail;
-      if (detail?.order) {
-        const isTarget =
-          (pendingLocalOrder && detail.tempId === pendingLocalOrder.id) ||
-          detail.order.customerPhone === customerPhone.trim();
-
-        if (isTarget && !submittedOrder) {
-          clearCart();
-          setSubmittedOrder(detail.order);
-          setPendingLocalOrder(null);
-          setSubmitError(null);
-          showToast("✓ Pedido entregue e confirmado pela cozinha!", "success", 5000);
-        }
-      }
-    };
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("topfood-offline-order-sent", handleOfflineOrderSent);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("topfood-offline-order-sent", handleOfflineOrderSent);
-    };
-  }, [pendingLocalOrder, submittedOrder, customerPhone, clearCart, showToast]);
 
   // Carrega automaticamente os dados do cliente persistidos no localStorage (Checkout Rápido)
   useEffect(() => {
@@ -160,6 +113,27 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
       setHasSavedProfile(true);
       if (saved.name && saved.phone && saved.street && saved.number && saved.district) {
         setShowAddressFields(false);
+      }
+    }
+
+    // Identifica e preenche mesa automaticamente se o cliente escaneou QR Code de mesa (?mesa=05 ou ?table=05)
+    if (typeof window !== "undefined") {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlTable =
+          searchParams.get("mesa") ||
+          searchParams.get("table") ||
+          searchParams.get("tableNumber") ||
+          searchParams.get("numeroMesa") ||
+          sessionStorage.getItem("topfood_table_number");
+        if (urlTable && urlTable.trim()) {
+          const clean = urlTable.trim();
+          setTableNumber(clean);
+          setOrderType("dine_in");
+          sessionStorage.setItem("topfood_table_number", clean);
+        }
+      } catch {
+        // ignore
       }
     }
   }, []);
@@ -281,7 +255,6 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     );
   };
 
-
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!customerName.trim()) e.customerName = "Informe seu nome";
@@ -307,18 +280,13 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
   };
 
   const handleSubmit = async () => {
-    // 1. Trava instantânea síncrona contra cliques múltiplos no primeiro clique
-    if (isSubmittingRef.current || isSubmitting) {
-      console.warn("[Checkout] Envio de pedido já em andamento. Clique duplo prevenido.");
-      return;
-    }
-
     if (!validate()) return;
     if (!isStoreOpen || !isStoreActive) return;
 
-    isSubmittingRef.current = true;
+    // Som de confirmação imediato para o cliente ("tricks" sonoro agradável)
+    playOrderSubmissionConfirmationSound();
+
     setIsSubmitting(true);
-    setSubmitError(null);
 
     // Salva imediatamente no localStorage os dados do cliente (Checkout Rápido para próximos pedidos)
     saveCustomerProfile({
@@ -340,17 +308,16 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         ? `Dinheiro (Troco para R$ ${changeFor})`
         : "Dinheiro (Sem troco)";
 
-    // Chave única de idempotência vinculada à sessão do carrinho e valores
-    const idempotencyKey = `${cartSessionIdRef.current}_${cart.length}_${Math.round(total * 100)}`;
+    const cleanTable = orderType === "dine_in" && tableNumber && tableNumber.trim() ? tableNumber.trim() : undefined;
 
     const order: Order = {
       id: generateOrderId(),
-      idempotencyKey,
-      idempotency_key: idempotencyKey,
       items: cart,
       orderType,
-      tableNumber: orderType === "dine_in" ? tableNumber.trim() : undefined,
-      table_number: orderType === "dine_in" ? tableNumber.trim() : undefined,
+      tableNumber: cleanTable,
+      table_number: cleanTable,
+      mesa: cleanTable,
+      table: cleanTable,
       paymentMethod,
       cardType: paymentMethod === "card" ? cardType : undefined,
       paymentDetails,
@@ -371,17 +338,12 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
     };
 
     try {
-      // 1. Enviar pedido diretamente via API para o sistema da cozinha e aguardar confirmação real (ACK) do banco (D1/KV)
+      // 1. Enviar pedido diretamente via API para o sistema da cozinha e confirmar gravação no servidor
       const placedOrder = await addOrder(order);
-
       if (!placedOrder || !placedOrder.id) {
-        throw new Error("O servidor não confirmou a gravação do pedido.");
+        throw new Error("Não foi possível confirmar a gravação do seu pedido no servidor.");
       }
-
       const finalOrder = placedOrder;
-
-      // Som de confirmação do pedido somente após ACK bem-sucedido
-      playOrderSubmissionConfirmationSound();
 
       // 2. Dispara notificação imediata para o painel do lojista (BroadcastChannel)
       broadcastNewOrder(finalOrder);
@@ -394,64 +356,28 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         orderType: finalOrder.orderType,
       });
 
-      // Limpa o carrinho e exibe a Tela de Sucesso somente após receber resposta com ID do banco
+      // Limpa erros anteriores de envio, limpa o carrinho e exibe a Tela de Sucesso
+      setErrors((prev) => {
+        const copy = { ...prev };
+        delete copy.submit;
+        return copy;
+      });
       clearCart();
       setSubmittedOrder(finalOrder);
-      setPendingLocalOrder(null);
-      setSubmitError(null);
     } catch (err: any) {
       console.error("Erro ao enviar pedido para o servidor:", err);
-
-      // Salva o payload do pedido na fila local (localStorage) como rede de segurança para retry automático
-      const tenantId = config.id || config.slug || "marcelino";
-      saveOrderToOfflineQueue(
-        order,
-        tenantId,
-        {
-          tenantId,
-          customerName: order.customerName,
-          customerPhone: order.customerPhone,
-          orderType: order.orderType,
-          tableNumber: order.tableNumber || (order as any).table_number,
-          table_number: order.tableNumber || (order as any).table_number,
-          paymentMethod: order.paymentMethod,
-          cardType: order.cardType,
-          paymentDetails: order.paymentDetails,
-          pixReceiptUrl: order.pixReceiptUrl || order.pix_receipt_url,
-          pix_receipt_url: order.pixReceiptUrl || order.pix_receipt_url,
-          location_url: order.location_url || order.locationUrl,
-          locationUrl: order.locationUrl || order.location_url,
-          address: order.address,
-          changeFor: order.changeFor,
-          subtotal: order.subtotal,
-          deliveryFee: order.deliveryFee,
-          total: order.total,
-          status: order.status,
-          items: order.items,
-        },
-        err?.message || "Falha de conexão com a internet"
-      );
-
-      setPendingLocalOrder(order);
-      const serverErrMsg = err?.message || "";
-      const isConnectionIssue =
-        (typeof navigator !== "undefined" && !navigator.onLine) ||
-        /Failed to fetch|NetworkError|conexão com a internet|Failed to connect/i.test(serverErrMsg);
-
-      const errorMsg = isConnectionIssue
-        ? "Falha ao enviar pedido. Verifique sua internet e tente novamente"
-        : `Falha ao enviar pedido: ${serverErrMsg || "Erro de servidor ao registrar o pedido"}`;
-
-      setSubmitError(errorMsg);
-      showToast(errorMsg, "error", 7000);
-      // IMPEDE que o cliente feche a tela achando que o pedido foi feito:
-      // Mantém a tela de checkout aberta com os dados e produtos preservados
+      const msg =
+        err?.message ||
+        "Falha na comunicação com o servidor ao gravar o pedido. O pedido NÃO foi criado para evitar duplicidades. Por favor, tente novamente.";
+      setErrors((prev) => ({
+        ...prev,
+        submit: msg,
+      }));
+      showToast(msg, "error", 6000);
     } finally {
-      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
-  handleSubmitRef.current = handleSubmit;
 
   // ==========================================
   // TELA DE SUCESSO: PEDIDO RECEBIDO
@@ -543,7 +469,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                     <span className="text-[10px] text-slate-400 font-semibold block">Modalidade</span>
                     <span className="font-bold text-slate-800">
                       {submittedOrder.orderType === "dine_in"
-                        ? `Consumir Aqui (Mesa ${submittedOrder.tableNumber || submittedOrder.table_number || "S/N"})`
+                        ? `Consumir Aqui (${formatTableDisplay(submittedOrder)})`
                         : submittedOrder.orderType === "delivery"
                         ? "Entrega no Endereço"
                         : "Retirada no Balcão"}
@@ -558,9 +484,13 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-600 text-white shrink-0 shadow-xs">
                     <UtensilsCrossed className="h-4 w-4" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-black text-purple-950 text-sm">
-                      CONSUMIR AQUI — MESA {submittedOrder.tableNumber || submittedOrder.table_number || "Não informada"}
+                      CONSUMIR AQUI — {formatTableDisplay(submittedOrder).toUpperCase()}
+                    </p>
+                    <p className="font-bold text-xs text-purple-900 mt-1 flex items-center gap-1">
+                      <span>Mesa:</span>
+                      <span className="font-black text-sm">{formatTableNumberOnly(submittedOrder)}</span>
                     </p>
                     <p className="text-[11px] text-purple-800 mt-0.5">
                       Seu pedido será entregue diretamente na sua mesa pela equipe da cozinha!
@@ -783,6 +713,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
               </div>
 
               <Input
+                id="input-table-number"
                 label="Número da mesa *"
                 value={tableNumber}
                 onChange={(v) => {
@@ -796,7 +727,7 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
                   }
                 }}
                 error={errors.tableNumber}
-                placeholder="Ex: Mesa 02, Mesa 05 ou Balcão"
+                placeholder="Ex: 05, Mesa 05 ou Balcão"
               />
             </div>
           </Section>
@@ -1442,70 +1373,24 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
         {/* ==========================================
             BOTÃO PRINCIPAL: FINALIZAR PEDIDO
             - Envia dados via API para o sistema da cozinha
-            - Aguarda confirmação ACK (200 OK + ID do banco D1/KV)
-            - Exibe alerta imediato e retém o cliente na tela em caso de falha de conexão
-            - Salva payload na fila de segurança local para retry automático
+            - NÃO abre obrigatoriamente o WhatsApp
+            - Só ativa se o comprovante estiver anexado (quando PIX)
             ========================================== */}
-        <div className="space-y-2.5 pt-1">
-          {/* ALERTA CLARO DE FALHA DE REDE / INTERNET */}
-          {submitError && (
-            <div className="rounded-2xl border-2 border-red-400 bg-red-50 p-4 text-red-900 shadow-md animate-fade-in space-y-2.5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-xs">
-                  <AlertCircle className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <h4 className="text-sm font-black text-red-950">
-                    {submitError}
-                  </h4>
-                  <p className="text-xs text-red-800 leading-relaxed">
-                    {submitError.includes("internet")
-                      ? "O pedido não foi concluído por oscilação na conexão. Seus itens continuam salvos na sacola e armazenados na fila de segurança do seu aparelho. Verifique seu sinal de internet e toque em Tentar Novamente."
-                      : "O sistema retornou uma mensagem ao registrar o pedido. Seus itens continuam salvos na sacola. Verifique os dados e toque em Tentar Novamente."}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-1 border-t border-red-200/80">
-                <button
-                  type="button"
-                  id="btn-retry-submit-order"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className={`flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white py-2.5 px-4 text-xs font-black shadow-xs transition ${
-                    isSubmitting ? "opacity-60 cursor-not-allowed pointer-events-none" : "cursor-pointer"
-                  }`}
-                >
-                  <RefreshCw className={`h-4 w-4 ${isSubmitting ? "animate-spin" : ""}`} />
-                  <span>{isSubmitting ? "Processando seu pedido..." : "Tentar Novamente Agora"}</span>
-                </button>
-              </div>
-            </div>
-          )}
-
+        <div className="space-y-2 pt-1">
           <button
             id="btn-submit-order"
             onClick={handleSubmit}
-            disabled={!canSubmit || isSubmitting}
-            className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black text-white shadow-lg transition active:scale-[0.98] ${
-              isSubmitting
-                ? "bg-emerald-700/80 cursor-not-allowed opacity-80 pointer-events-none shadow-none"
-                : canSubmit
-                ? submitError
-                  ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/30 cursor-pointer"
-                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30 cursor-pointer"
+            disabled={!canSubmit}
+            className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black text-white shadow-lg transition active:scale-[0.98] cursor-pointer ${
+              canSubmit
+                ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30"
                 : "bg-slate-400 cursor-not-allowed opacity-60 shadow-none"
             }`}
           >
             {isSubmitting ? (
               <>
                 <RefreshCw className="h-5 w-5 animate-spin" />
-                <span>Processando seu pedido...</span>
-              </>
-            ) : submitError ? (
-              <>
-                <RefreshCw className="h-5 w-5" />
-                <span>Reenviar Pedido</span>
+                <span>Enviando para a cozinha...</span>
               </>
             ) : (
               <>
@@ -1520,6 +1405,20 @@ export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
             <p className="text-center text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl py-2 px-3">
               ⚠️ Anexe o comprovante do PIX acima para liberar o botão &quot;Finalizar Pedido&quot;.
             </p>
+          )}
+
+          {/* Erro de envio / gravação no banco */}
+          {errors.submit && (
+            <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-3.5 text-xs text-red-800 space-y-1.5 animate-fade-in">
+              <div className="flex items-center gap-1.5 font-bold text-red-900">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                <span>Não foi possível confirmar o pedido</span>
+              </div>
+              <p className="text-red-700 font-medium">{errors.submit}</p>
+              <p className="text-[11px] text-red-600">
+                Seus itens continuam salvos na sacola. Toque em &quot;Finalizar Pedido&quot; para tentar novamente.
+              </p>
+            </div>
           )}
 
           <div className="text-center text-[11px] text-gray-400">
@@ -1629,6 +1528,7 @@ function Input({
   error,
   placeholder,
   type = "text",
+  id,
 }: {
   label: string;
   value: string;
@@ -1636,11 +1536,13 @@ function Input({
   error?: string;
   placeholder?: string;
   type?: string;
+  id?: string;
 }) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-gray-500">{label}</label>
       <input
+        id={id}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}

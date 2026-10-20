@@ -27,6 +27,7 @@ import {
   Smartphone,
   Printer,
   UtensilsCrossed,
+  AlertCircle,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
@@ -39,6 +40,8 @@ import {
   formatRelativeOrderTime,
   formatOrderExactDateTime,
   groupOrdersByTemporalBlock,
+  formatTableDisplay,
+  formatTableNumberOnly,
 } from "@/utils/order";
 import type { Order, OrderStatus } from "@/types";
 
@@ -62,34 +65,17 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [motoboyModalOrder, setMotoboyModalOrder] = useState<Order | null>(null);
   const [thermalReceiptOrder, setThermalReceiptOrder] = useState<Order | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
 
-  // Atualiza o relógio relativo e executa o polling passivo de segurança a cada 60s (1 minuto)
+  // Atualiza o relógio relativo a cada 60s para manter os rótulos ("Há X min", "Há X horas", etc.) sempre sincronizados
   useEffect(() => {
     const timer = setInterval(() => {
       setNowMs(Date.now());
-      refreshOrders().catch(() => {});
     }, 60000);
     return () => clearInterval(timer);
-  }, [refreshOrders]);
-
-  // Sincronização sob demanda: recupera pedidos apenas quando a aba ganha foco ou reconecta rede
-  useEffect(() => {
-    const handleFocus = () => {
-      if (document.visibilityState === "visible") {
-        refreshOrders().catch(() => {});
-      }
-    };
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleFocus);
-    window.addEventListener("online", handleFocus);
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleFocus);
-      window.removeEventListener("online", handleFocus);
-    };
-  }, [refreshOrders]);
+  }, []);
 
   // Screen Wake Lock API: mantém a tela acesa continuamente exclusivamente nesta tela de pedidos
   const {
@@ -98,48 +84,16 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
     toggle: toggleWakeLock,
   } = useScreenWakeLock(true);
 
-  // Contadores com desduplicação estrita de ID (previne duplicações entre SSE e Polling)
-  const { activeOrdersCount, pendingOrdersCount, allOrdersCount } = useMemo(() => {
-    const seen = new Set<string>();
-    let active = 0;
-    let pending = 0;
-    let total = 0;
+  const activeOrdersCount = orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length;
+  const pendingOrdersCount = orders.filter((o) => o.status === "received").length;
+  const allOrdersCount = orders.length;
 
-    for (const o of orders) {
-      if (!o || !o.id) continue;
-      const clean = o.id.replace(/^#/, "");
-      if (seen.has(o.id) || seen.has(clean) || seen.has(`#${clean}`)) continue;
-      seen.add(o.id);
-      seen.add(clean);
-      seen.add(`#${clean}`);
-
-      total++;
-      if (o.status !== "done" && o.status !== "cancelled") active++;
-      if (o.status === "received") pending++;
-    }
-
-    return { activeOrdersCount: active, pendingOrdersCount: pending, allOrdersCount: total };
-  }, [orders]);
-
-  // Ordenação determinística do pedido mais recente para o mais antigo com filtro estrito de ID para nunca duplicar
+  // Ordenação determinística do pedido mais recente para o mais antigo
   const filtered = useMemo(() => {
-    const seen = new Set<string>();
-    const deduplicated: Order[] = [];
-
-    for (const o of orders) {
-      if (!o || !o.id) continue;
-      const clean = o.id.replace(/^#/, "");
-      if (seen.has(o.id) || seen.has(clean) || seen.has(`#${clean}`)) continue;
-      seen.add(o.id);
-      seen.add(clean);
-      seen.add(`#${clean}`);
-      deduplicated.push(o);
-    }
-
     const base =
       filter === "active"
-        ? deduplicated.filter((o) => o.status !== "done" && o.status !== "cancelled")
-        : deduplicated;
+        ? orders.filter((o) => o.status !== "done" && o.status !== "cancelled")
+        : orders;
 
     return [...base].sort((a, b) => {
       const timeA = normalizeOrderTimestamp(a.createdAt, a as any);
@@ -161,6 +115,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const handleRefreshClick = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
+    setRefreshError(null);
     try {
       if (typeof window !== "undefined") {
         const p = window.location.pathname.toLowerCase();
@@ -168,12 +123,18 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
           window.history.replaceState({ view: "admin", tab: "orders" }, "", "/painel");
         }
       }
-      await refreshOrders();
-      showToast("Lista de pedidos atualizada com sucesso!", "success");
-    } catch {
+      const res = await refreshOrders();
+      if (res) {
+        setRefreshError(null);
+        showToast("Lista de pedidos atualizada com sucesso!", "success");
+      } else {
+        setRefreshError("Não foi possível carregar os pedidos no momento. Verifique sua conexão e tente novamente.");
+      }
+    } catch (err: any) {
+      setRefreshError(err?.message || "Erro de rede ao sincronizar pedidos com o servidor.");
       showToast("Erro ao sincronizar pedidos", "error");
     } finally {
-      setTimeout(() => setIsRefreshing(false), 300);
+      setIsRefreshing(false);
     }
   };
 
@@ -297,6 +258,37 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
 
       {/* Lista de Pedidos */}
       <div className="mx-auto w-full max-w-4xl p-3 sm:p-4 space-y-4 flex-1">
+        {/* Banner de Erro na Sincronização com Retry */}
+        {refreshError && (
+          <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-3.5 text-xs text-red-800 space-y-2 animate-fade-in shadow-xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-bold text-red-900">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                <span>Erro ao sincronizar pedidos</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRefreshError(null)}
+                className="text-red-500 hover:text-red-700 text-xs font-bold px-1.5 py-0.5 rounded-lg hover:bg-red-100 transition"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+            <p className="text-red-700 font-medium">{refreshError}</p>
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={handleRefreshClick}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 active:scale-95 transition shadow-xs cursor-pointer disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
+                <span>{isRefreshing ? "Tentando novamente..." : "Tentar novamente"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Banner de Pedidos Pendentes Aguardando Aceite */}
         {pendingOrdersCount > 0 && (
           <div className="rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 p-3 sm:p-4 text-amber-900 animate-pulse shadow-xs">
@@ -545,9 +537,11 @@ function OrderCard({
           </span>
 
           {order.orderType === "dine_in" && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-purple-100 border-2 border-purple-300 px-2.5 py-0.5 text-xs font-black text-purple-900 shadow-2xs">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-purple-100 border-2 border-purple-300 px-2.5 py-0.5 text-xs font-black text-purple-900 shadow-2xs">
               <UtensilsCrossed className="h-3.5 w-3.5 text-purple-700" />
-              <span>CONSUMIR AQUI - MESA {order.tableNumber || order.table_number || "S/N"}</span>
+              <span>CONSUMIR AQUI — {formatTableDisplay(order).toUpperCase()}</span>
+              <span className="text-purple-600 font-normal">|</span>
+              <span>Mesa: {formatTableNumberOnly(order)}</span>
             </span>
           )}
         </div>
@@ -727,7 +721,11 @@ function OrderCard({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-black text-purple-950 truncate uppercase tracking-wide flex items-center gap-1.5">
-                  <span>CONSUMIR AQUI — MESA {order.tableNumber || order.table_number || "Não informada"}</span>
+                  <span>CONSUMIR AQUI — {formatTableDisplay(order).toUpperCase()}</span>
+                </p>
+                <p className="font-bold text-xs text-purple-900 mt-0.5 flex items-center gap-1">
+                  <span>Mesa:</span>
+                  <span className="font-black text-sm">{formatTableNumberOnly(order)}</span>
                 </p>
                 <p className="text-[11px] text-purple-800 font-medium mt-0.5">
                   Pedido para consumo imediato no local. Servir os itens na mesa indicada.
@@ -754,7 +752,7 @@ function OrderCard({
             }`}
           >
             {order.orderType === "dine_in"
-              ? `🍽️ CONSUMIR AQUI - MESA ${order.tableNumber || order.table_number || "S/N"}`
+              ? `🍽️ CONSUMIR AQUI - ${formatTableDisplay(order).toUpperCase()}`
               : order.orderType === "delivery"
               ? "🛵 Entrega a Domicílio"
               : "🏪 Retirada no Balcão"}

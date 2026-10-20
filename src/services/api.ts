@@ -494,239 +494,137 @@ export async function deleteTenantAddonGroupApi(
   }
 }
 
-export async function fetchOrdersApi(tenantId?: string): Promise<{ success: boolean; orders: Order[]; error?: string }> {
+export async function fetchOrdersApi(
+  tenantId?: string
+): Promise<{ success: boolean; orders: Order[]; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
   try {
     const url = tenantId ? `${BASE_URL}/orders?tenantId=${encodeURIComponent(tenantId)}` : `${BASE_URL}/orders`;
-    const res = await fetch(url);
-    return await res.json();
-  } catch (err: any) {
-    return { success: false, orders: [], error: err.message };
-  }
-}
-
-export async function fetchTenantOrdersApi(slugOrId: string): Promise<{ success: boolean; orders: Order[]; error?: string }> {
-  try {
-    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`);
-    return await res.json();
-  } catch (err: any) {
-    return { success: false, orders: [], error: err.message };
-  }
-}
-
-/**
- * Polling passivo de segurança para consulta periódica de pedidos pendentes no D1/KV (/api/pedidos/pendentes).
- * Garante que se houver oscilação de conexão do SSE, novos pedidos não visualizados sejam recuperados.
- */
-export async function fetchPendingOrdersApi(tenantIdOrSlug?: string): Promise<{
-  success: boolean;
-  count?: number;
-  pedidos?: Order[];
-  orders: Order[];
-  pendentes?: Order[];
-  error?: string;
-}> {
-  try {
-    const query = tenantIdOrSlug ? `?loja=${encodeURIComponent(tenantIdOrSlug)}` : "";
-    const res = await fetch(`${BASE_URL}/pedidos/pendentes${query}`);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      return { success: false, orders: [], error: errData?.error || `Erro do servidor (${res.status}) ao buscar pedidos.` };
+    }
     const data = await res.json();
-    const list = data?.pendentes || data?.pedidos || data?.orders || [];
-    return {
-      success: !!data.success,
-      count: data.count || list.length,
-      pedidos: list,
-      orders: list,
-      pendentes: list,
-      error: data.error,
-    };
+    const list = Array.isArray(data.orders) ? data.orders : (Array.isArray(data.pedidos) ? data.pedidos : []);
+    return { success: true, orders: list };
   } catch (err: any) {
-    return { success: false, orders: [], pedidos: [], pendentes: [], error: err.message };
+    clearTimeout(timeoutId);
+    const isTimeout = err?.name === "AbortError";
+    return {
+      success: false,
+      orders: [],
+      error: isTimeout
+        ? "Tempo limite esgotado ao buscar pedidos. Verifique sua conexão e tente novamente."
+        : (err?.message || "Erro de conexão ao buscar pedidos."),
+    };
+  }
+}
+
+export async function fetchTenantOrdersApi(
+  slugOrId: string
+): Promise<{ success: boolean; orders: Order[]; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
+      signal: controller.signal,
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      return { success: false, orders: [], error: errData?.error || `Erro do servidor (${res.status}) ao buscar pedidos.` };
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.orders) ? data.orders : (Array.isArray(data.pedidos) ? data.pedidos : []);
+    return { success: true, orders: list };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    const isTimeout = err?.name === "AbortError";
+    return {
+      success: false,
+      orders: [],
+      error: isTimeout
+        ? "Tempo limite esgotado ao buscar pedidos. Verifique sua conexão e tente novamente."
+        : (err?.message || "Erro de conexão ao buscar pedidos."),
+    };
   }
 }
 
 export async function createOrderApi(
   orderData: any
-): Promise<{ success: boolean; orderId?: string; order?: Order; error?: string }> {
-  const endpoints = [`${BASE_URL}/pedidos`, `${BASE_URL}/orders`, "/pedidos", "/orders"];
-  let lastError = "";
-  const idempotencyKey =
-    (orderData as any).idempotencyKey ||
-    (orderData as any).idempotency_key ||
-    `idem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-  // Mecanismo de retry automático e transparente para Cold Start do Worker (até 2 novas tentativas)
-  const MAX_RETRIES = 2;
-  const totalAttempts = 1 + MAX_RETRIES;
-
-  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
-    for (const endpoint of endpoints) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-      try {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": idempotencyKey,
-          },
-          body: JSON.stringify({
-            ...orderData,
-            idempotencyKey,
-            idempotency_key: idempotencyKey,
-          }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-
-        const data = await res.json().catch(() => null);
-        const orderObj = data?.order || data?.pedido;
-        const orderId = data?.orderId || data?.id || orderObj?.id;
-        const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
-
-        if (isSuccess && orderId) {
-          const finalOrder: Order = {
-            ...(orderObj || orderData),
-            id: orderId,
-          };
-          return {
-            success: true,
-            orderId,
-            order: finalOrder,
-          };
-        }
-
-        const errMsg = data?.error || data?.message;
-        if (res.status === 400 && errMsg) {
-          return { success: false, error: errMsg };
-        }
-
-        if (errMsg) {
-          lastError = errMsg;
-        } else if (res.status !== 404) {
-          lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
-        }
-      } catch (err: any) {
-        clearTimeout(timeoutId);
-        const isTimeout = err?.name === "AbortError" || /aborted|timeout/i.test(err?.message || "");
-        lastError = isTimeout
-          ? "Tempo limite esgotado no servidor (Cold Start)"
-          : err?.message || "Falha de conexão com a API";
-      }
+): Promise<{ success: boolean; order?: Order; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(`${BASE_URL}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(orderData),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || `Erro ao registrar pedido (${res.status})` };
     }
-
-    if (attempt < totalAttempts) {
-      console.warn(
-        `[Checkout Cold Start]: Tentativa ${attempt} de ${totalAttempts} falhou (${lastError}). Executando retry transparente em segundo plano...`
-      );
-      await new Promise((r) => setTimeout(r, attempt * 600));
-    }
+    return data;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    const isTimeout = err?.name === "AbortError";
+    return {
+      success: false,
+      error: isTimeout
+        ? "Tempo limite esgotado ao enviar pedido. O servidor demorou para responder. Verifique sua conexão e tente novamente."
+        : (err?.message || "Falha na conexão com o servidor ao registrar pedido."),
+    };
   }
-
-  return {
-    success: false,
-    error: lastError || "Falha ao gravar pedido no servidor.",
-  };
 }
 
 export async function createTenantOrderApi(
   slugOrId: string,
   orderData: Omit<Order, "id" | "tenantId" | "createdAt">
-): Promise<{ success: boolean; orderId?: string; order?: Order; error?: string }> {
-  const cleanSlugOrId = (slugOrId || "marcelino").trim();
-  const endpoints = [
-    `${BASE_URL}/tenants/${encodeURIComponent(cleanSlugOrId)}/orders`,
-    `${BASE_URL}/pedidos`,
-    `${BASE_URL}/orders`,
-    `/pedidos`,
-    `/orders`,
-  ];
-
-  let lastError = "";
-  const idempotencyKey =
-    (orderData as any).idempotencyKey ||
-    (orderData as any).idempotency_key ||
-    `idem_${cleanSlugOrId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-  // TENTATIVA TRANSPARENTE E PREVENTIVA (COLD START NO CHECKOUT):
-  // Se a primeira requisição do pedido sofrer timeout ou falhar devido ao repouso inicial
-  // do Worker (Cold Start), realiza automaticamente até 2 novas tentativas internas em segundo plano,
-  // mantendo o spinner de carregamento ativo na tela do usuário.
-  // Assim que o Worker responder com sucesso (200 OK), encerra o processo imediatamente.
-  const MAX_RETRIES = 2; // até 2 novas tentativas internas
-  const totalAttempts = 1 + MAX_RETRIES;
-
-  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
-    for (const endpoint of endpoints) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-      try {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": idempotencyKey,
-          },
-          body: JSON.stringify({
-            ...orderData,
-            tenantId: cleanSlugOrId,
-            lojaSlug: cleanSlugOrId,
-            loja: cleanSlugOrId,
-            idempotencyKey,
-            idempotency_key: idempotencyKey,
-          }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-
-        const data = await res.json().catch(() => null);
-        const orderObj = data?.order || data?.pedido;
-        const orderId = data?.orderId || data?.id || orderObj?.id;
-        const isSuccess = (res.status === 200 || res.status === 201 || res.ok) && (data?.success || Boolean(orderId));
-
-        if (isSuccess && orderId) {
-          const finalOrder: Order = {
-            ...(orderObj || (orderData as any)),
-            id: orderId,
-          };
-          return {
-            success: true,
-            orderId,
-            order: finalOrder,
-          };
-        }
-
-        const errMsg = data?.error || data?.message;
-        if (res.status === 400 && errMsg) {
-          return { success: false, error: errMsg };
-        }
-
-        if (errMsg) {
-          lastError = errMsg;
-        } else if (res.status !== 404) {
-          lastError = `Erro HTTP ${res.status} retornado pelo servidor`;
-        }
-      } catch (err: any) {
-        clearTimeout(timeoutId);
-        const isTimeout = err?.name === "AbortError" || /aborted|timeout/i.test(err?.message || "");
-        lastError = isTimeout
-          ? "Tempo limite esgotado no servidor (Cold Start)"
-          : err?.message || "Falha de conexão com a internet";
-      }
+): Promise<{ success: boolean; order?: Order; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(orderData),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || `Erro ao registrar pedido (${res.status})` };
     }
-
-    if (attempt < totalAttempts) {
-      console.warn(
-        `[Checkout Cold Start]: Tentativa ${attempt} de ${totalAttempts} falhou (${lastError}). Executando retry transparente em segundo plano...`
-      );
-      await new Promise((r) => setTimeout(r, attempt * 600));
-    }
+    return data;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    const isTimeout = err?.name === "AbortError";
+    return {
+      success: false,
+      error: isTimeout
+        ? "Tempo limite esgotado ao enviar pedido. O servidor demorou para responder. Verifique sua conexão e tente novamente."
+        : (err?.message || "Falha na conexão com o servidor ao registrar pedido."),
+    };
   }
-
-  return {
-    success: false,
-    error: lastError || "Falha ao gravar pedido no servidor.",
-  };
 }
 
 export async function updateOrderStatusApi(

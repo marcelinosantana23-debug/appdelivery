@@ -163,30 +163,7 @@ if (typeof window !== "undefined") {
 export function isStoreAdminRoute(): boolean {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname.toLowerCase();
-  if (
-    path.includes("/admin") ||
-    path.includes("/painel") ||
-    path.includes("/super-admin") ||
-    path.includes("/superadmin")
-  ) {
-    return true;
-  }
-  try {
-    const adminSession = sessionStorage.getItem("topfood_admin_session");
-    if (adminSession) return true;
-    const userSession =
-      sessionStorage.getItem("topfood_user_session") ||
-      localStorage.getItem("topfood_user_session");
-    if (userSession) {
-      const parsed = JSON.parse(userSession);
-      if (parsed?.role === "admin" || parsed?.role === "superadmin" || parsed?.role === "merchant") {
-        return true;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return false;
+  return path.includes("/admin") || path.includes("/painel");
 }
 
 /**
@@ -194,8 +171,8 @@ export function isStoreAdminRoute(): boolean {
  * Garante que nenhuma chamada a .play() seja executada na tela do cliente,
  * Checkout, Acompanhamento de Pedidos ou fora do painel do lojista.
  */
-export function safePlayAudio(audio?: HTMLAudioElement | null, force: boolean = false): Promise<void> | void {
-  if (!force && !isStoreAdminRoute()) {
+export function safePlayAudio(audio?: HTMLAudioElement | null): Promise<void> | void {
+  if (!isStoreAdminRoute()) {
     return;
   }
   if (audio && typeof audio.play === "function") {
@@ -210,8 +187,8 @@ let lastNewOrderChimeTime = 0;
  * Indicates a new customer order has arrived in real-time.
  * RESTRICTED EXCLUSIVELY TO STORE ADMIN ROUTE.
  */
-export function playNewOrderChime(force: boolean = false): void {
-  if (!force && !isStoreAdminRoute()) {
+export function playNewOrderChime(): void {
+  if (!isStoreAdminRoute()) {
     return;
   }
 
@@ -322,8 +299,8 @@ let lastPendingAlarmTime = 0;
  * até que o lojista clique no botão para aceitar o pedido.
  * Utiliza Web Audio API nativa com sequência de bipes marcantes e bem audíveis no celular.
  */
-export function playPendingOrderAlarm(force: boolean = false): void {
-  if (!force && !isStoreAdminRoute()) {
+export function playPendingOrderAlarm(): void {
+  if (!isStoreAdminRoute()) {
     return;
   }
 

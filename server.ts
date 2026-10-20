@@ -101,11 +101,12 @@ async function startServer() {
     next();
   });
 
-  // Hono API router mounted at /api, /pedidos, /orders, /tenants, /loja/*/stream, /admin/stream
-  app.use(["/api", "/pedidos", "/orders", "/tenants", "/loja/:id/stream", "/admin/stream", "/stream"], async (req, res) => {
+  // Hono API router mounted at /api
+  app.use("/api", async (req, res) => {
     try {
       const host = req.get("host") || "localhost:3000";
-      const originalPath = req.originalUrl || req.url;
+      // Ensure url starts with /api
+      const originalPath = req.originalUrl || `/api${req.url}`;
       const fullUrl = `${req.protocol}://${host}${originalPath}`;
       const headers = new Headers();
       

@@ -15,6 +15,9 @@ import { useStore } from "@/context/StoreContext";
 import {
   formatPrice,
   formatOrderExactDateTime,
+  formatTableDisplay,
+  formatTableNumberOnly,
+  getOrderTable,
 } from "@/utils/order";
 import {
   generatePlainTextReceipt,
@@ -40,7 +43,7 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
   const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
   const isDelivery = !isPickup && !isDineIn;
-  const tableNum = order.tableNumber || (order as any).table_number || (order as any).table || "";
+  const tableNum = getOrderTable(order);
   const exactTime = formatOrderExactDateTime(order.createdAt, order as any) || new Date().toLocaleString("pt-BR");
 
   // Itens e Totais
@@ -75,7 +78,7 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
           <div style="font-size: 0.85em; font-weight: bold; margin-top: 2px;">[ ${tag} ]</div>
           <div style="font-size: 0.85em; margin-top: 2px;">${exactTime}</div>
           <div style="font-size: 0.95em; font-weight: 900; margin-top: 3px; border: 2px solid #000; padding: 3px 6px; display: inline-block;">
-            ${isDineIn ? `CONSUMIR AQUI - MESA ${tableNum || "S/N"}` : isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO"}
+            ${isDineIn ? `CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()}` : isPickup ? "RETIRADA NO BALCAO" : "ENTREGA A DOMICILIO"}
           </div>
         </div>
 
@@ -91,7 +94,8 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
               ? `
             <div style="margin-top: 6px; padding: 6px; border: 2px dashed #000; text-align: center; background-color: #f8fafc;">
               <div style="font-weight: 900; font-size: 1.15em;">*** CONSUMIR AQUI ***</div>
-              <div style="font-weight: 900; font-size: 1.3em; margin-top: 2px;">MESA ${tableNum || "S/N"}</div>
+              <div style="font-weight: 900; font-size: 1.3em; margin-top: 2px;">${formatTableDisplay(tableNum).toUpperCase()}</div>
+              <div style="font-weight: bold; font-size: 1em; margin-top: 2px;">MESA: ${formatTableNumberOnly(tableNum)}</div>
               <div style="font-size: 0.85em; margin-top: 2px;">ATENDIMENTO: SERVIR NA MESA</div>
             </div>
           `
@@ -425,7 +429,7 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
               </p>
               <p className="text-[10px] text-gray-600">{exactTime}</p>
               <div className="mt-1 inline-block border-2 border-black px-2 py-0.5 text-[10px] font-black">
-                {isPickup ? "RETIRADA NO BALCÃO" : "ENTREGA A DOMICÍLIO"}
+                {isDineIn ? `CONSUMIR AQUI - ${formatTableDisplay(tableNum).toUpperCase()}` : isPickup ? "RETIRADA NO BALCÃO" : "ENTREGA A DOMICÍLIO"}
               </div>
             </div>
 
@@ -439,7 +443,14 @@ export function OrderThermalReceiptModal({ order, onClose }: OrderThermalReceipt
                 <span className="font-bold">TEL:</span> {order.customerPhone}
               </p>
 
-              {!isPickup && order.address ? (
+              {isDineIn ? (
+                <div className="mt-1 pt-1 border-2 border-dashed border-black p-2 text-center bg-gray-50 rounded">
+                  <p className="font-black text-xs">*** CONSUMIR AQUI ***</p>
+                  <p className="font-black text-sm">{formatTableDisplay(tableNum).toUpperCase()}</p>
+                  <p className="font-bold text-[11px]">Mesa: {formatTableNumberOnly(tableNum)}</p>
+                  <p className="text-[9px] text-gray-600">ATENDIMENTO: SERVIR NA MESA</p>
+                </div>
+              ) : !isPickup && order.address ? (
                 <div className="mt-1 pt-1 border-t border-dotted border-gray-300">
                   <p className="font-bold">ENDEREÇO DE ENTREGA:</p>
                   <p>

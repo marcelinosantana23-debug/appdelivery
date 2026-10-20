@@ -45,6 +45,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { updateTenantApi } from "@/services/api";
 import type { Tenant, TenantStatus, EstablishmentCategory } from "@/types";
 import { DEFAULT_ESTABLISHMENT_CATEGORIES } from "@/components/portal/portalUtils";
 import { StoreLogo } from "@/components/common/StoreLogo";

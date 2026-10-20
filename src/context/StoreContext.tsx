@@ -20,6 +20,7 @@ import {
   saveCachedCategories,
   haveTenantsChanged,
   haveStoresRankedChanged,
+  haveProductsChanged,
   preloadStoreImages,
   removeCachedTenant,
 } from "@/utils/storeCache";
@@ -65,22 +66,16 @@ import {
   confirmTenantPaymentApi,
   updateTenantMonthlyFeeApi,
   fetchLocalitiesApi,
-  fetchPendingOrdersApi,
 } from "@/services/api";
 import { StoreStoriesModal } from "@/components/common/StoreStoriesModal";
 import { getSafeDisplayName, getSafeSlug } from "@/utils/storeFormat";
-import { playNewOrderChime, playPendingOrderAlarm } from "@/utils/audio";
+import { playNewOrderChime } from "@/utils/audio";
 import {
   broadcastNewOrder,
   broadcastOrderUpdate,
   subscribeOrderBroadcast,
 } from "@/utils/ordersChannel";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
-import {
-  saveOrderToOfflineQueue,
-  removeOrderFromOfflineQueue,
-  getOfflineOrdersQueue,
-} from "@/utils/orderQueue";
 import type { ToastMessage } from "@/components/common/Toast";
 
 interface StoreContextValue {
@@ -516,30 +511,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   
   // Hydrate currentTenant synchronously from `cache_store_[storeSlug]` or sessionStorage / localStorage ONLY when on a store/admin route
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
+    if (!initialSlug) {
+      return null;
+    }
+    if (initialStoreCache?.tenant) {
+      return initialStoreCache.tenant;
+    }
     try {
       const saved =
         sessionStorage.getItem("topfood_tenant_session") ||
         localStorage.getItem("delivery_tenant_session");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && (parsed.slug || parsed.id)) {
-          if (
-            !initialSlug ||
-            parsed.slug === initialSlug ||
+        if (
+          parsed &&
+          (parsed.slug === initialSlug ||
             parsed.id === initialSlug ||
             (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
-            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes")
-          ) {
-            return parsed;
-          }
+            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
+        ) {
+          return parsed;
         }
-      }
-
-      if (!initialSlug) {
-        return null;
-      }
-      if (initialStoreCache?.tenant) {
-        return initialStoreCache.tenant;
       }
       const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
         (t) =>
@@ -2092,22 +2084,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------------- ORDERS ----------------
   const addOrder = useCallback(
-    async (order: Order): Promise<Order | null> => {
-      const tenantId =
-        currentTenant?.id ||
-        currentTenant?.slug ||
-        config?.id ||
-        config?.slug ||
-        currentSlug ||
-        "marcelino";
-      const rawTable = order.tableNumber || (order as any).table_number || (order as any).mesa || (order as any).numeroMesa;
+    async (order: Order): Promise<Order> => {
+      const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
+      const rawTable =
+        order.tableNumber ||
+        order.table_number ||
+        (order as any).mesa ||
+        (order as any).table ||
+        (order as any).numeroMesa ||
+        undefined;
+      const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
+
       const payload = {
         tenantId,
         customerName: order.customerName,
         customerPhone: order.customerPhone,
         orderType: order.orderType,
-        tableNumber: rawTable || undefined,
-        table_number: rawTable || undefined,
+        tableNumber: cleanTable,
+        table_number: cleanTable,
+        mesa: cleanTable,
+        table: cleanTable,
+        numeroMesa: cleanTable,
         paymentMethod: order.paymentMethod,
         cardType: order.cardType,
         paymentDetails: order.paymentDetails,
@@ -2125,59 +2122,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         statusHistory: order.statusHistory || [{ status: order.status, timestamp: Date.now() }],
       };
 
-      try {
-        // Persiste imediatamente no Cloudflare D1 via API e exige confirmação real do backend (ACK)
-        const res = await createTenantOrderApi(tenantId, payload);
-        const orderId = res?.orderId || res?.order?.id;
-        
-        if (!res || !res.success || !orderId) {
-          throw new Error(res?.error || "O servidor não confirmou o registro do pedido no banco de dados.");
-        }
-
-        const finalOrder: Order = {
-          ...(res.order || (order as any)),
-          id: orderId,
-          tableNumber: res.order?.tableNumber || rawTable || undefined,
-          table_number: res.order?.table_number || rawTable || undefined,
-        };
-
-        // Remove da fila offline caso estivesse pendente
-        removeOrderFromOfflineQueue(order.id);
-        removeOrderFromOfflineQueue(finalOrder.id);
-
-        // Atualização imediata dos estados globais do React
-        setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
-        setNewOrderIds((prev) => [finalOrder.id, ...prev]);
-
-        // Grava no localStorage para permitir rastreamento em tempo real
-        try {
-          localStorage.setItem("topfood_active_order_id", finalOrder.id);
-          localStorage.setItem("topfood_active_order_status", finalOrder.status);
-          localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("topfood-active-order-updated", {
-                detail: { orderId: finalOrder.id, status: finalOrder.status, order: finalOrder },
-              })
-            );
-          }
-        } catch {
-          // ignore storage issues
-        }
-
-        // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
-        broadcastNewOrder(finalOrder);
-
-        showToast("Pedido confirmado com sucesso!", "success");
-        return finalOrder;
-      } catch (err: any) {
-        console.warn("Falha ao registrar pedido no backend (salvando na fila offline de segurança):", err);
-        // Salva na fila local de segurança para reenvio automático assim que a rede estabilizar
-        saveOrderToOfflineQueue(order, tenantId, payload, err?.message || "Falha de rede ao conectar ao servidor");
-        throw err;
+      // Persiste com confirmação obrigatória no Cloudflare D1 via API
+      const res = await createTenantOrderApi(tenantId, payload);
+      if (!res.success || !res.order) {
+        const errorMsg =
+          res.error || "Não foi possível confirmar a gravação do seu pedido no servidor. O pedido não foi criado.";
+        showToast(errorMsg, "error", 6000);
+        throw new Error(errorMsg);
       }
+
+      const returnedTable =
+        res.order.tableNumber ||
+        res.order.table_number ||
+        (res.order as any).mesa ||
+        (res.order as any).table ||
+        cleanTable;
+
+      const finalOrder: Order = {
+        ...res.order,
+        tableNumber: returnedTable,
+        table_number: returnedTable,
+        mesa: returnedTable,
+        table: returnedTable,
+      };
+
+      // Atualização imediata dos estados globais do React
+      setOrders((prev) => [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)]);
+      setNewOrderIds((prev) => [finalOrder.id, ...prev]);
+
+      // Grava no localStorage para permitir rastreamento em tempo real
+      try {
+        localStorage.setItem("topfood_active_order_id", finalOrder.id);
+        localStorage.setItem("topfood_active_order_status", finalOrder.status);
+        localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("topfood-active-order-updated", {
+              detail: { orderId: finalOrder.id, status: finalOrder.status, order: finalOrder },
+            })
+          );
+        }
+      } catch {
+        // ignore storage issues
+      }
+
+      // Dispara instantaneamente a mensagem de novo pedido para o painel do lojista (BroadcastChannel)
+      broadcastNewOrder(finalOrder);
+
+      showToast("Pedido confirmado com sucesso!", "success");
+      return finalOrder;
     },
-    [currentTenant, currentSlug, config?.id, config?.slug, showToast]
+    [currentTenant, currentSlug, showToast]
   );
 
   const updateOrderStatus = useCallback(
@@ -2284,17 +2279,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [orders]);
 
   useEffect(() => {
-    const tenantParam =
-      currentTenant?.id ||
-      currentTenant?.slug ||
-      currentUser?.tenantId ||
-      currentSlug ||
-      (currentUser ? "all" : "");
-
+    const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug;
     if (!tenantParam) return;
     let isMounted = true;
 
-    // Função de inserção imediata de novo pedido na tela com toque de som instantâneo e notificação Toast
+    // Função de inserção imediata de novo pedido na tela com toque de som instantâneo
     const handleIncomingNewOrder = (incomingOrder: Order) => {
       if (!incomingOrder || !incomingOrder.id || !isMounted) return;
 
@@ -2304,59 +2293,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         knownOrderIdsRef.current.has(`#${orderCleanId}`) ||
         knownOrderIdsRef.current.has(orderCleanId);
 
-      // Atualiza ref de IDs conhecidos com e sem #
+      // Atualiza ref de IDs conhecidos
       knownOrderIdsRef.current.add(incomingOrder.id);
       knownOrderIdsRef.current.add(orderCleanId);
-      knownOrderIdsRef.current.add(`#${orderCleanId}`);
 
-      // Normaliza dados da mesa caso venham com chaves alternativas
-      const resolvedTable =
-        incomingOrder.tableNumber ||
-        incomingOrder.table_number ||
-        (incomingOrder as any).mesa ||
-        (incomingOrder as any).numeroMesa;
-
-      const normalizedIncoming: Order = {
-        ...incomingOrder,
-        tableNumber: resolvedTable || incomingOrder.tableNumber,
-        table_number: resolvedTable || incomingOrder.table_number,
-      };
-
-      // 1. Inserir o novo card do pedido no topo da lista imediatamente (sem recarregar a página e sem duplicar)
+      // 1. Insere o pedido na tela imediatamente
       setOrders((prev) => {
-        const withoutIncoming = prev.filter(
+        const index = prev.findIndex(
           (o) =>
-            o.id !== normalizedIncoming.id &&
-            o.id.replace(/^#/, "") !== orderCleanId &&
-            `#${o.id.replace(/^#/, "")}` !== `#${orderCleanId}`
+            o.id === incomingOrder.id ||
+            o.id.replace(/^#/, "") === orderCleanId
         );
-        return [normalizedIncoming, ...withoutIncoming];
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], ...incomingOrder };
+          return updated;
+        }
+        return [incomingOrder, ...prev];
       });
 
-      // Se é um pedido novo:
+      // Se é um pedido novo, registra badge visual e notifica via CustomEvent
       if (!isAlreadyKnown) {
-        setNewOrderIds((prev) => Array.from(new Set([normalizedIncoming.id, ...prev])));
+        setNewOrderIds((prev) => Array.from(new Set([incomingOrder.id, ...prev])));
 
-        // Toca o alerta sonoro de novo pedido (campainha e alarme da cozinha)
-        try {
-          playNewOrderChime(true);
-          playPendingOrderAlarm(true);
-        } catch (audioErr) {
-          console.warn("Aviso ao tocar som de novo pedido:", audioErr);
-        }
-
-        // Exibe notificação popup/banner estilo toast na tela
-        showToast(
-          `🔔 Novo Pedido #${orderCleanId} Recebido!`,
-          "success",
-          8000
-        );
-
-        // Notifica a aplicação/janela via CustomEvent
+        // Notifica a aplicação/janela via CustomEvent (sem tocar áudio globalmente)
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("new-delivery-order-received", {
-              detail: { orders: [normalizedIncoming], order: normalizedIncoming },
+              detail: { orders: [incomingOrder], order: incomingOrder },
             })
           );
         }
@@ -2441,61 +2405,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
 
     // 3. Escutador de Evento em Tempo Real via Server-Sent Events (SSE) (servidor -> lojista)
-    // Conecta diretamente ao canal SSE do Cloudflare Worker com keep-alive de 20s
-    // e mecanismo de reconexão automática com retry em 3 segundos em caso de oscilação de rede
     let eventSource: EventSource | null = null;
-    let reconnectTimeout: any = null;
-
-    const connectSSE = () => {
-      if (!isMounted || typeof EventSource === "undefined") return;
-
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {
-          // ignore
-        }
-        eventSource = null;
-      }
-
+    if (typeof EventSource !== "undefined") {
       try {
-        const resolvedId =
-          currentTenant?.id ||
-          currentTenant?.slug ||
-          currentUser?.tenantId ||
-          (tenantParam !== "all" && tenantParam !== "admin" ? tenantParam : "");
-
-        const streamUrl = resolvedId
-          ? `/api/loja/${encodeURIComponent(resolvedId)}/stream`
-          : `/api/admin/stream`;
+        const streamUrl = currentTenant?.id
+          ? `/api/tenants/${currentTenant.id}/orders/stream`
+          : `/api/orders/stream?tenantId=${encodeURIComponent(tenantParam)}`;
 
         eventSource = new EventSource(streamUrl);
 
-        // Handler unificado para novo pedido disparado pelo backend via SSE
-        const onNewOrderEvent = (e: MessageEvent) => {
+        // Novo pedido disparado pelo backend via SSE
+        eventSource.addEventListener("new_order", (e) => {
           if (!isMounted) return;
           try {
             const data = JSON.parse(e.data);
-            const incomingOrder = data?.order || data?.pedido || data;
-            if (incomingOrder && incomingOrder.id) {
-              handleIncomingNewOrder(incomingOrder);
+            if (data?.order) {
+              handleIncomingNewOrder(data.order);
             }
           } catch (err) {
             console.warn("SSE new_order parse error:", err);
-          }
-        };
-
-        // Escuta os eventos específicos (new_order, NOVO_PEDIDO) e genérico (message)
-        eventSource.addEventListener("new_order", onNewOrderEvent);
-        eventSource.addEventListener("NOVO_PEDIDO", onNewOrderEvent);
-        eventSource.addEventListener("message", (e) => {
-          try {
-            const data = JSON.parse(e.data);
-            if (data?.event === "new_order" || data?.type === "NOVO_PEDIDO" || data?.order) {
-              onNewOrderEvent(e);
-            }
-          } catch {
-            // ignore non-json messages (ping)
           }
         });
 
@@ -2504,12 +2432,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!isMounted) return;
           try {
             const data = JSON.parse(e.data);
-            const orderObj = data?.order || data?.pedido || data;
-            if (orderObj && orderObj.id) {
+            if (data?.order) {
               if (data.isNew) {
-                handleIncomingNewOrder(orderObj);
+                handleIncomingNewOrder(data.order);
               } else {
-                handleIncomingOrderUpdate(orderObj);
+                handleIncomingOrderUpdate(data.order);
               }
             }
           } catch (err) {
@@ -2546,91 +2473,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        // Mecanismo de reconexão automática (retry em 3 segundos) em caso de queda de sinal
+        // Recuperação imediata se a conexão SSE oscilar ou cair
         eventSource.onerror = (err) => {
-          console.warn("[SSE Lojista]: Conexão oscilou ou caiu. Reconectando em 3 segundos...", err);
-          if (eventSource) {
-            try {
-              eventSource.close();
-            } catch {
-              // ignore
-            }
-            eventSource = null;
-          }
-
-          if (isMounted) {
-            clearTimeout(reconnectTimeout);
-            reconnectTimeout = setTimeout(() => {
-              if (isMounted) {
-                connectSSE();
-                syncOrdersWithCloud();
-              }
-            }, 3000);
-          }
+          console.warn("Conexão SSE oscilou/reconectando. Acionando sincronização imediata:", err);
+          syncOrdersWithCloud();
         };
       } catch (err) {
         console.warn("SSE not available:", err);
-        if (isMounted) {
-          clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connectSSE, 3000);
-        }
       }
-    };
+    }
 
-    connectSSE();
-
-    // 4. Polling passivo de segurança a cada 60 segundos (1 minuto):
-    // Consulta pedidos pendentes no D1/KV (/api/pedidos/pendentes).
-    // Se houver algum pedido no banco que ainda não foi exibido em tela por falha pontual de conexão do SSE,
-    // adiciona-o imediatamente na lista e toca o alerta sonoro.
-    const syncPendingOrdersSafetyNet = async () => {
-      if (!isMounted) return;
-      try {
-        const queryTarget =
-          currentTenant?.id ||
-          currentTenant?.slug ||
-          currentUser?.tenantId ||
-          (tenantParam !== "all" && tenantParam !== "admin" ? tenantParam : undefined);
-
-        const res = await fetchPendingOrdersApi(queryTarget);
-        if (!isMounted || !res.success) return;
-
-        const pendingList: Order[] = res.pendentes || res.pedidos || res.orders || [];
-        const prevIds = knownOrderIdsRef.current;
-
-        for (const pendingOrder of pendingList) {
-          if (!pendingOrder || !pendingOrder.id) continue;
-          const cleanId = pendingOrder.id.replace(/^#/, "");
-          const isKnown =
-            prevIds.has(pendingOrder.id) ||
-            prevIds.has(cleanId) ||
-            prevIds.has(`#${cleanId}`);
-
-          if (!isKnown) {
-            console.log(`[Segurança 1 Minuto]: Pedido pendente #${cleanId} recuperado do D1/KV via polling de segurança.`);
-            handleIncomingNewOrder(pendingOrder);
-          }
-        }
-      } catch {
-        // ignora erros de rede móvel transitórios
-      }
-    };
-
-    // Timer de segurança de exatamente 60 segundos (1 minuto)
-    const safetyNetInterval = setInterval(() => {
-      syncPendingOrdersSafetyNet();
-    }, 60000);
-
-    // 5. Sincronização sob demanda (ao focar na aba, reconectar internet ou clicar em atualizar):
+    // 4. Sincronização ativa entre redes e dispositivos (4G/5G e Wi-Fi) diretamente no Cloudflare D1/KV
     const syncOrdersWithCloud = async () => {
       try {
-        const queryTarget =
-          currentTenant?.id ||
-          currentTenant?.slug ||
-          currentUser?.tenantId ||
-          (tenantParam !== "all" && tenantParam !== "admin" ? tenantParam : undefined);
-
-        const res = await fetchOrdersApi(queryTarget);
+        const res = await fetchOrdersApi(tenantParam);
         if (!isMounted || !res.success || !res.orders) return;
 
         const incoming: Order[] = res.orders;
@@ -2638,28 +2494,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         if (prevIds.size > 0) {
           const newlyArrived = incoming.filter(
-            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, "")) && !prevIds.has(`#${o.id.replace(/^#/, "")}`)
+            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, ""))
           );
           if (newlyArrived.length > 0) {
             newlyArrived.forEach((o) => handleIncomingNewOrder(o));
           }
         } else {
-          const seen = new Set<string>();
-          const dedup: Order[] = [];
-          for (const o of incoming) {
-            if (!o || !o.id) continue;
-            const clean = o.id.replace(/^#/, "");
-            if (!seen.has(o.id) && !seen.has(clean) && !seen.has(`#${clean}`)) {
-              seen.add(o.id);
-              seen.add(clean);
-              seen.add(`#${clean}`);
-              dedup.push(o);
-              knownOrderIdsRef.current.add(o.id);
-              knownOrderIdsRef.current.add(clean);
-              knownOrderIdsRef.current.add(`#${clean}`);
-            }
-          }
-          setOrders(dedup);
+          setOrders(incoming);
+          incoming.forEach((o) => {
+            knownOrderIdsRef.current.add(o.id);
+            knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+          });
         }
 
         // Atualiza status de pedidos caso alterados em outro dispositivo conectado ao D1
@@ -2682,110 +2527,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // 5. SISTEMA HÍBRIDO DE FALLBACK DE SEGURANÇA:
+    // Polling secundário a cada 15 segundos caso a conexão do socket/SSE caia ou oscile na internet móvel do lojista
+    const fallbackPollingTimer = setInterval(() => {
+      if (isMounted) {
+        syncOrdersWithCloud();
+      }
+    }, 15000);
+
     const handleWindowFocus = () => {
       if (currentUser && document.visibilityState === "visible") {
         syncOrdersWithCloud();
-        syncPendingOrdersSafetyNet();
       }
     };
-    const handleNetworkOnline = () => {
-      syncOrdersWithCloud();
-      syncPendingOrdersSafetyNet();
-    };
-
     document.addEventListener("visibilitychange", handleWindowFocus);
     window.addEventListener("focus", handleWindowFocus);
-    window.addEventListener("online", handleNetworkOnline);
 
     return () => {
       isMounted = false;
-      clearInterval(safetyNetInterval);
-      clearTimeout(reconnectTimeout);
+      clearInterval(fallbackPollingTimer);
       document.removeEventListener("visibilitychange", handleWindowFocus);
       window.removeEventListener("focus", handleWindowFocus);
-      window.removeEventListener("online", handleNetworkOnline);
       unsubscribeBroadcast();
       if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {
-          // ignore
-        }
+        eventSource.close();
       }
     };
-  }, [currentTenant?.id, currentTenant?.slug, currentUser?.tenantId, currentSlug, currentUser, showToast]);
-
-  // ---------------- ROTINA DE REENVIO AUTOMÁTICO (RETRY) DA FILA OFFLINE ----------------
-  const isRetryingQueueRef = useRef(false);
-
-  const flushOfflineOrdersQueue = useCallback(async () => {
-    if (typeof window === "undefined" || !navigator.onLine || isRetryingQueueRef.current) return;
-    const queue = getOfflineOrdersQueue();
-    if (queue.length === 0) return;
-
-    isRetryingQueueRef.current = true;
-    try {
-      for (const item of queue) {
-        try {
-          const res = await createTenantOrderApi(item.tenantId, item.payload);
-          if (res && res.success && res.order && res.order.id) {
-            removeOrderFromOfflineQueue(item.id);
-            removeOrderFromOfflineQueue(res.order.id);
-
-            const confirmedOrder: Order = {
-              ...res.order,
-              tableNumber: res.order.tableNumber || item.payload.tableNumber,
-              table_number: res.order.table_number || item.payload.table_number,
-            };
-
-            setOrders((prev) => [confirmedOrder, ...prev.filter((o) => o.id !== confirmedOrder.id)]);
-            setNewOrderIds((prev) => Array.from(new Set([confirmedOrder.id, ...prev])));
-
-            try {
-              localStorage.setItem("topfood_active_order_id", confirmedOrder.id);
-              localStorage.setItem("topfood_active_order_status", confirmedOrder.status);
-              localStorage.setItem("topfood_active_order_data", JSON.stringify(confirmedOrder));
-            } catch {
-              // ignore
-            }
-
-            broadcastNewOrder(confirmedOrder);
-            if (typeof window !== "undefined") {
-              window.dispatchEvent(
-                new CustomEvent("topfood-offline-order-sent", {
-                  detail: { tempId: item.id, order: confirmedOrder },
-                })
-              );
-            }
-            showToast(
-              `✓ Pedido #${confirmedOrder.id.replace(/^#/, "")} reenviado e confirmado com sucesso!`,
-              "success",
-              7000
-            );
-          }
-        } catch (itemErr) {
-          console.warn("Falha no retry automático do pedido enfileirado:", item.id, itemErr);
-        }
-      }
-    } finally {
-      isRetryingQueueRef.current = false;
-    }
-  }, [showToast]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    flushOfflineOrdersQueue();
-
-    const handleWindowOnline = () => {
-      flushOfflineOrdersQueue();
-    };
-
-    window.addEventListener("online", handleWindowOnline);
-    return () => {
-      window.removeEventListener("online", handleWindowOnline);
-    };
-  }, [flushOfflineOrdersQueue]);
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug, currentUser]);
 
   // Recarga manual sob demanda de pedidos via API (usada pelos botões "Atualizar" no painel do lojista)
   const refreshOrders = useCallback(async () => {
@@ -2793,52 +2561,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug || undefined;
       const res = await fetchOrdersApi(tenantParam);
       if (res.success && res.orders) {
-        const incoming: Order[] = res.orders;
-        const prevIds = knownOrderIdsRef.current;
-        if (prevIds.size > 0) {
-          const newlyArrived = incoming.filter(
-            (o) => !prevIds.has(o.id) && !prevIds.has(o.id.replace(/^#/, "")) && !prevIds.has(`#${o.id.replace(/^#/, "")}`)
-          );
-          if (newlyArrived.length > 0) {
-            setNewOrderIds((prev) => Array.from(new Set([...newlyArrived.map((o) => o.id), ...prev])));
-            try {
-              playNewOrderChime(true);
-              playPendingOrderAlarm(true);
-            } catch {
-              // ignore
-            }
-            showToast(
-              newlyArrived.length === 1
-                ? `🔔 Pedido #${newlyArrived[0].id.replace(/^#/, "")} sincronizado do banco de dados!`
-                : `🔔 ${newlyArrived.length} novos pedidos sincronizados do banco de dados!`,
-              "success",
-              8000
-            );
-          }
-        }
-        const seen = new Set<string>();
-        const dedup: Order[] = [];
-        for (const o of incoming) {
-          if (!o || !o.id) continue;
-          const clean = o.id.replace(/^#/, "");
-          if (!seen.has(o.id) && !seen.has(clean) && !seen.has(`#${clean}`)) {
-            seen.add(o.id);
-            seen.add(clean);
-            seen.add(`#${clean}`);
-            dedup.push(o);
-            knownOrderIdsRef.current.add(o.id);
-            knownOrderIdsRef.current.add(clean);
-            knownOrderIdsRef.current.add(`#${clean}`);
-          }
-        }
-        setOrders(dedup);
-        return dedup;
+        setOrders(res.orders);
+        res.orders.forEach((o) => {
+          knownOrderIdsRef.current.add(o.id);
+          knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
+        });
+        return res.orders;
       }
     } catch (err) {
       console.warn("Erro ao atualizar pedidos:", err);
     }
     return null;
-  }, [currentTenant?.id, currentTenant?.slug, currentSlug, showToast]);
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug]);
 
   const refreshStoreAdminData = useCallback(async () => {
     const slug = currentTenant?.slug || currentSlug;

@@ -164,7 +164,7 @@ export interface EstablishmentCategory {
   createdAt?: number;
 }
 
-export type OrderType = "delivery" | "pickup";
+export type OrderType = "delivery" | "pickup" | "dine_in";
 export type PaymentMethod = "pix" | "card" | "cash";
 export type CardType = "credit" | "debit";
 export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "cancelled";
@@ -192,6 +192,10 @@ export interface Order {
   customerName: string;
   customerPhone: string;
   orderType: OrderType;
+  tableNumber?: string;
+  table_number?: string;
+  mesa?: string;
+  table?: string;
   paymentMethod: PaymentMethod;
   cardType?: CardType;
   paymentDetails?: string;
@@ -214,8 +218,6 @@ export interface Order {
   items: OrderItem[];
   statusHistory: { status: OrderStatus; timestamp: number }[];
   createdAt: number;
-  idempotencyKey?: string;
-  idempotency_key?: string;
 }
 
 export interface Customer {

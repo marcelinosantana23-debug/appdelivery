@@ -195,6 +195,8 @@ export interface Order {
   orderType: OrderType;
   tableNumber?: string;
   table_number?: string;
+  mesa?: string;
+  table?: string;
   paymentMethod: PaymentMethod;
   cardType?: CardType;
   paymentDetails?: string;
@@ -218,8 +220,6 @@ export interface Order {
   customerPhone: string;
   createdAt: number;
   statusHistory: { status: OrderStatus; timestamp: number }[];
-  idempotencyKey?: string;
-  idempotency_key?: string;
 }
 
 export interface Customer {

@@ -15,37 +15,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // NUNCA interceptar requisições que não sejam GET (POST, PUT, DELETE, PATCH)
-  // e NUNCA interceptar rotas de API ou checkout (/api, /pedidos, /orders, /tenants)
-  if (event.request.method !== "GET") {
-    return;
-  }
-
-  try {
-    const url = new URL(event.request.url);
-    if (
-      url.pathname.startsWith("/api") ||
-      url.pathname.startsWith("/pedidos") ||
-      url.pathname.startsWith("/orders") ||
-      url.pathname.startsWith("/tenants")
-    ) {
-      return;
-    }
-  } catch {
-    // ignore
-  }
-
   event.respondWith(
-    fetch(event.request).catch(async () => {
+    fetch(event.request).catch(() => {
       // Fallback offline para navegação de páginas HTML
       if (event.request.mode === "navigate") {
-        const cached = await caches.match("/index.html");
-        if (cached) return cached;
+        return caches.match("/index.html") || caches.match("/");
       }
-      return new Response(JSON.stringify({ offline: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response("Offline", { status: 503, statusText: "Offline" });
     })
   );
 });

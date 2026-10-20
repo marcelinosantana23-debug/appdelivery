@@ -2494,41 +2494,6 @@ class MemoryStore {
   }
 }
 
-// =========================================================================
-// GESTÃO DE IDEMPOTÊNCIA CONTRA PEDIDOS DUPLICADOS (JANELA DE 3 MINUTOS)
-// =========================================================================
-interface IdempotencyEntry {
-  order: Order;
-  timestamp: number;
-}
-const globalIdempotencyCache = new Map<string, IdempotencyEntry>();
-
-export function getCachedIdempotentOrder(key: string): Order | null {
-  if (!key) return null;
-  const cleanKey = key.trim();
-  const entry = globalIdempotencyCache.get(cleanKey);
-  if (entry) {
-    if (Date.now() - entry.timestamp < 180000) {
-      return entry.order;
-    }
-    globalIdempotencyCache.delete(cleanKey);
-  }
-  return null;
-}
-
-export function setCachedIdempotentOrder(key: string, order: Order): void {
-  if (!key || !order) return;
-  const cleanKey = key.trim();
-  const now = Date.now();
-  // Limpeza de entradas expiradas (> 3 min)
-  for (const [k, e] of globalIdempotencyCache.entries()) {
-    if (now - e.timestamp >= 180000) {
-      globalIdempotencyCache.delete(k);
-    }
-  }
-  globalIdempotencyCache.set(cleanKey, { order, timestamp: now });
-}
-
 // Global store singleton for Node.js / Hono
 const globalStore = new MemoryStore();
 
@@ -2541,53 +2506,6 @@ export class Database {
 
   constructor(env?: Env) {
     this.env = env;
-  }
-
-  async getIdempotentOrder(key: string): Promise<Order | null> {
-    if (!key) return null;
-    const cleanKey = key.trim();
-    const fromMem = getCachedIdempotentOrder(cleanKey);
-    if (fromMem) return fromMem;
-
-    const kv = this.getKv();
-    if (kv) {
-      try {
-        const cached = await kv.get(`idempotency:${cleanKey}`);
-        if (cached) {
-          const parsed = JSON.parse(cached) as Order;
-          setCachedIdempotentOrder(cleanKey, parsed);
-          return parsed;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    const d1 = this.getD1();
-    if (d1) {
-      try {
-        const row = await d1.prepare(
-          "SELECT * FROM orders WHERE idempotency_key = ? ORDER BY created_at DESC LIMIT 1"
-        ).bind(cleanKey).first<any>();
-        if (row) {
-          const order = this.mapOrderRow(row);
-          const createdAtMs =
-            typeof order.createdAt === "number"
-              ? order.createdAt
-              : new Date(order.createdAt).getTime();
-          const orderAge = Date.now() - createdAtMs;
-          // Retorna se o pedido foi criado nos últimos 3 minutos (180.000 ms) ou se não foi possível calcular
-          if (isNaN(orderAge) || orderAge < 180000) {
-            setCachedIdempotentOrder(cleanKey, order);
-            return order;
-          }
-        }
-      } catch (d1Err) {
-        console.warn("[D1 Idempotency Check Error]:", d1Err);
-      }
-    }
-
-    return null;
   }
 
   private static tablesInitialized = false;
@@ -2688,6 +2606,7 @@ export class Database {
           customer_name TEXT NOT NULL,
           customer_phone TEXT NOT NULL,
           order_type TEXT NOT NULL DEFAULT 'delivery',
+          table_number TEXT DEFAULT '',
           payment_method TEXT NOT NULL DEFAULT 'pix',
           card_type TEXT,
           payment_details TEXT,
@@ -2835,8 +2754,7 @@ export class Database {
         "ALTER TABLE products ADD COLUMN addon_group_ids TEXT DEFAULT '[]'",
         "ALTER TABLE tenants ADD COLUMN localidade TEXT DEFAULT 'Gargaú'",
         "ALTER TABLE tenants ADD COLUMN motoboy_phone TEXT DEFAULT ''",
-        "ALTER TABLE tenants ADD COLUMN motoboy_name TEXT DEFAULT ''",
-        "ALTER TABLE orders ADD COLUMN idempotency_key TEXT"
+        "ALTER TABLE tenants ADD COLUMN motoboy_name TEXT DEFAULT ''"
       ];
 
       for (const alter of alterQueries) {
@@ -2851,7 +2769,6 @@ export class Database {
       const indexQueries = [
         "CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug)",
         "CREATE INDEX IF NOT EXISTS idx_tenants_localidade ON tenants(localidade)",
-        "CREATE INDEX IF NOT EXISTS idx_orders_idempotency ON orders(idempotency_key)",
         "CREATE INDEX IF NOT EXISTS idx_tenants_featured ON tenants(is_featured, priority_order)",
         "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
         "CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id)",
@@ -3229,7 +3146,7 @@ export class Database {
             o.customerName,
             o.customerPhone,
             o.orderType,
-            o.tableNumber || o.table_number || "",
+            o.tableNumber || o.table_number || (o as any).mesa || (o as any).table || "",
             o.paymentMethod,
             o.cardType || null,
             o.paymentDetails || null,
@@ -3313,25 +3230,8 @@ export class Database {
     }
   }
 
-  private getD1() {
-    return (
-      this.env?.DB ||
-      this.env?.DATABASE ||
-      this.env?.D1 ||
-      (typeof globalThis !== "undefined" && (globalThis as any)?.DB) ||
-      (typeof globalThis !== "undefined" && (globalThis as any)?.D1)
-    );
-  }
-
   private getKv() {
-    return (
-      this.env?.TOP_FOOD_KV ||
-      this.env?.TOPFOOD_KV ||
-      this.env?.KV ||
-      this.env?.STORE_KV ||
-      (typeof globalThis !== "undefined" && (globalThis as any)?.TOP_FOOD_KV) ||
-      (typeof globalThis !== "undefined" && (globalThis as any)?.KV)
-    );
+    return this.env?.KV || this.env?.STORE_KV;
   }
 
   // ===================== TENANTS =====================
@@ -5709,60 +5609,40 @@ export class Database {
     const rawPaymentDetails = (orderData as any).paymentDetails || (orderData as any).payment_details || undefined;
     const rawReceipt = (orderData as any).pixReceiptUrl || (orderData as any).pix_receipt_url || (orderData as any).receipt || undefined;
     const rawLocationUrl = (orderData as any).location_url || (orderData as any).locationUrl || undefined;
-    const rawTableNumber = (orderData as any).tableNumber || (orderData as any).table_number || (orderData as any).numeroMesa || undefined;
-
-    // 1. GERAÇÃO / OBTENÇÃO DA CHAVE DE IDEMPOTÊNCIA (3 MINUTOS)
-    const rawIdempotencyKey =
-      (orderData as any).idempotencyKey ||
-      (orderData as any).idempotency_key ||
-      (orderData as any).clientOrderId;
-    const itemsSig = Array.isArray(orderData.items)
-      ? orderData.items.map((i: any) => `${i.product?.id || i.productId || ""}:${i.quantity || 1}`).sort().join("|")
-      : "";
-    const cleanCustomerPhone = (orderData.customerPhone || "").replace(/\D/g, "");
-    const idempotencyKey =
-      rawIdempotencyKey ||
-      `fp_${tenantId}_${cleanCustomerPhone}_${Math.round((orderData.total || 0) * 100)}_${itemsSig}`;
-
-    // 2. VERIFICAÇÃO RIGOROSA: se já foi criado nos últimos 3 minutos, retorna o mesmo pedido sem duplicar
-    const existingOrder = await this.getIdempotentOrder(idempotencyKey);
-    if (existingOrder) {
-      console.log(`[Database Idempotency]: Pedido duplicado prevenido para a chave '${idempotencyKey}'. Devolvendo pedido #${existingOrder.id}.`);
-      return existingOrder;
-    }
+    const rawTableNumber = (orderData as any).tableNumber || (orderData as any).table_number || (orderData as any).numeroMesa || (orderData as any).table || (orderData as any).mesa || undefined;
+    const cleanTableNumber = rawTableNumber && typeof rawTableNumber === "string" && rawTableNumber.trim() ? rawTableNumber.trim() : undefined;
 
     const newOrder: Order = {
       ...orderData,
       id: `#${Math.floor(1000 + Math.random() * 9000)}`,
       tenantId,
-      idempotencyKey,
-      idempotency_key: idempotencyKey,
       cardType: rawCardType,
       paymentDetails: rawPaymentDetails,
       pixReceiptUrl: rawReceipt,
       pix_receipt_url: rawReceipt,
       location_url: rawLocationUrl,
       locationUrl: rawLocationUrl,
-      tableNumber: rawTableNumber,
-      table_number: rawTableNumber,
+      tableNumber: cleanTableNumber,
+      table_number: cleanTableNumber,
+      mesa: cleanTableNumber,
+      table: cleanTableNumber,
       createdAt: Date.now(),
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
 
-    const d1 = this.getD1();
-    if (!d1) {
-      console.warn("[Cloudflare Worker DB Binding]: env.DB não configurado ou inacessível no momento. Salvando em armazenamento resiliente (KV/Memória).");
-    } else {
+    // 1. Gravação no Cloudflare D1 com transação/envelopamento atômico
+    let d1Saved = false;
+    if (this.env?.DB) {
       try {
         await this.ensureTables();
         try {
-          await d1.prepare(
+          await this.env.DB.prepare(
             `INSERT INTO orders (
               id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
               card_type, payment_details, pix_receipt_url, location_url,
               address_json, change_for, subtotal, delivery_fee, total, status,
-              items_json, status_history_json, created_at, idempotency_key
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              items_json, status_history_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
             .bind(
               newOrder.id,
@@ -5770,7 +5650,7 @@ export class Database {
               newOrder.customerName,
               newOrder.customerPhone,
               newOrder.orderType,
-              newOrder.tableNumber || "",
+              cleanTableNumber || "",
               newOrder.paymentMethod,
               newOrder.cardType || null,
               newOrder.paymentDetails || null,
@@ -5784,14 +5664,14 @@ export class Database {
               newOrder.status,
               JSON.stringify(newOrder.items || []),
               JSON.stringify(newOrder.statusHistory || []),
-              newOrder.createdAt,
-              idempotencyKey
+              newOrder.createdAt
             )
             .run();
+          d1Saved = true;
         } catch (insertErr) {
-          // Fallback se a coluna table_number ou idempotency_key não estiver criada
-          console.warn("[D1 Warning]: Tentativa com fallback de schema legado de orders:", insertErr);
-          await d1.prepare(
+          console.warn("D1 primary insert failed, attempting schema fallback:", insertErr);
+          // Fallback se a coluna table_number não estiver criada na tabela existente
+          await this.env.DB.prepare(
             `INSERT INTO orders (
               id, tenant_id, customer_name, customer_phone, order_type, payment_method,
               card_type, payment_details, pix_receipt_url, location_url,
@@ -5821,6 +5701,7 @@ export class Database {
               newOrder.createdAt
             )
             .run();
+          d1Saved = true;
         }
 
         if (newOrder.items && newOrder.items.length > 0) {
@@ -5828,12 +5709,12 @@ export class Database {
             try {
               const oiId = item.id || `oi-${newOrder.id}-${Math.random().toString(36).substring(2, 7)}`;
               const pId = item.product?.id || `p-${Math.random().toString(36).substring(2, 7)}`;
-              const pName = item.product?.name || "Lanche";
-              const pPrice = Number(item.product?.price) || 0;
-              const pImg = item.product?.image || "";
+              const pName = item.product?.name || (item as any)?.name || "Lanche";
+              const pPrice = Number(item.product?.price ?? (item as any)?.price) || 0;
+              const pImg = item.product?.image || (item as any)?.image || "";
               const pQty = Number(item.quantity) || 1;
               const optJson = JSON.stringify(item.selectedOptions || []);
-              await d1.prepare(
+              await this.env.DB.prepare(
                 `INSERT INTO order_items (
                   id, order_id, tenant_id, product_id, name, price, quantity, image, options_json, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -5852,40 +5733,42 @@ export class Database {
                 )
                 .run();
             } catch (itemErr) {
-              console.warn("D1 createOrder insert order_item error:", itemErr);
+              console.warn("D1 createOrder insert order_item warning:", itemErr);
             }
           }
         }
       } catch (e: any) {
-        console.error("[Cloudflare Worker DB Error]: Falha na operação D1 durante criação de pedido:", e?.message || e);
+        console.error("D1 createOrder fatal error:", e);
+        if (!d1Saved && !this.getKv()) {
+          throw new Error(`Falha atômica ao registrar o pedido no banco de dados Cloudflare D1: ${e.message || "Erro de integridade"}`);
+        }
       }
     }
 
+    // 2. Persiste imediatamente na memória global
     globalStore.orders.unshift(newOrder);
 
-    // Registra no cache de idempotência para interceptar qualquer chamada duplicada pelos próximos 3 minutos
-    setCachedIdempotentOrder(idempotencyKey, newOrder);
-
-    // Auto-cadastro e persistência automática de cliente vinculado à loja
+    // 3. Auto-cadastro e persistência automática de cliente vinculado à loja
     try {
       await this.saveOrUpdateCustomerFromOrder(tenantId, newOrder);
     } catch (custErr) {
       console.warn("Auto-register customer error:", custErr);
     }
 
+    // 4. Persiste no Cloudflare KV para alta disponibilidade
     const kv = this.getKv();
     if (kv) {
       try {
         await kv.put(`order:${newOrder.id}`, JSON.stringify(newOrder));
-        await kv.put(`idempotency:${idempotencyKey}`, JSON.stringify(newOrder));
-      } catch (e: any) {
-        console.error("[Cloudflare Worker KV Error]: Erro ao salvar pedido no KV:", e?.message || e);
+        const cleanId = newOrder.id.replace(/^#/, "");
+        await kv.put(`order:${cleanId}`, JSON.stringify(newOrder));
+        await kv.put(`tenant_orders_version:${newOrder.tenantId}`, Date.now().toString());
+      } catch (e) {
+        console.warn("KV put order error:", e);
       }
-    } else {
-      console.warn("[Cloudflare Worker KV Binding]: env.TOP_FOOD_KV / env.KV não encontrado.");
     }
 
-    // Emite evento em tempo real para os lojistas conectados instantaneamente
+    // 5. Emite evento em tempo real para os lojistas conectados instantaneamente
     try {
       orderEvents.emit(newOrder, true);
     } catch (e) {
@@ -6414,14 +6297,19 @@ export class Database {
   }
 
   private mapOrderRow(row: any): Order {
+    const rawTable = row.table_number || row.tableNumber || row.mesa || row.table || undefined;
+    const cleanTable = rawTable && typeof rawTable === "string" && rawTable.trim() ? rawTable.trim() : undefined;
+
     return {
       id: row.id,
       tenantId: row.tenant_id,
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       orderType: row.order_type,
-      tableNumber: row.table_number || row.tableNumber || undefined,
-      table_number: row.table_number || row.tableNumber || undefined,
+      tableNumber: cleanTable,
+      table_number: cleanTable,
+      mesa: cleanTable,
+      table: cleanTable,
       paymentMethod: row.payment_method,
       cardType: row.card_type || undefined,
       paymentDetails: row.payment_details || undefined,
