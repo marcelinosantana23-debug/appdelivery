@@ -5612,24 +5612,17 @@ export class Database {
     const cleanKey = key.trim();
     const minTimestamp = Date.now() - maxAgeMs;
 
-    // 1. D1 Database query
-    if (this.env?.DB) {
-      try {
-        await this.ensureTables();
-        const row = await this.env.DB.prepare(
-          "SELECT * FROM orders WHERE idempotency_key = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 1"
-        )
-          .bind(cleanKey, minTimestamp)
-          .first<any>();
-        if (row) {
-          return this.mapOrderRow(row);
-        }
-      } catch (e) {
-        console.warn("D1 getOrderByIdempotencyKey error:", e);
-      }
-    }
+    // 1. Checagem em memória (instantânea, 0ms)
+    const memFound = globalStore.orders.find(
+      (o) =>
+        (o.idempotencyKey === cleanKey ||
+          (o as any).idempotency_key === cleanKey ||
+          (o as any).cart_id === cleanKey) &&
+        Date.now() - (o.createdAt || 0) <= maxAgeMs
+    );
+    if (memFound) return memFound;
 
-    // 2. Cloudflare KV cache query
+    // 2. Checagem em KV (rápida, ~10ms)
     const kv = this.getKv();
     if (kv) {
       try {
@@ -5641,19 +5634,30 @@ export class Database {
           }
         }
       } catch (e) {
-        console.warn("KV get idempotency error:", e);
+        // Silencioso
       }
     }
 
-    // 3. Fallback memory query
-    const found = globalStore.orders.find(
-      (o) =>
-        (o.idempotencyKey === cleanKey ||
-          (o as any).idempotency_key === cleanKey ||
-          (o as any).cart_id === cleanKey) &&
-        Date.now() - (o.createdAt || 0) <= maxAgeMs
-    );
-    return found || null;
+    // 3. Consulta rápida no Cloudflare D1 com timeout rígido de 1.5s (NUNCA chama ensureTables)
+    if (this.env?.DB) {
+      try {
+        const d1QueryPromise = this.env.DB.prepare(
+          "SELECT * FROM orders WHERE idempotency_key = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 1"
+        )
+          .bind(cleanKey, minTimestamp)
+          .first<any>();
+
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500));
+        const row = await Promise.race([d1QueryPromise, timeoutPromise]);
+        if (row) {
+          return this.mapOrderRow(row);
+        }
+      } catch (e) {
+        console.warn("D1 getOrderByIdempotencyKey timeout/erro (ignorado):", e);
+      }
+    }
+
+    return null;
   }
 
   async createOrder(tenantId: string, orderData: Omit<Order, "id" | "tenantId" | "createdAt">): Promise<Order> {
@@ -5687,19 +5691,66 @@ export class Database {
       statusHistory: [{ status: orderData.status, timestamp: Date.now() }],
     };
 
-    // 1. Gravação no Cloudflare D1 com transação/envelopamento atômico
+    // 1. Persiste imediatamente na memória global para resposta sub-milissegundo
+    globalStore.orders.unshift(newOrder);
+
+    // 2. Gravação direta e atômica no Cloudflare D1 com timeout interno rígido (máx 3.5s)
     let d1Saved = false;
     if (this.env?.DB) {
       try {
-        await this.ensureTables();
+        const d1InsertPromise = this.env.DB.prepare(
+          `INSERT INTO orders (
+            id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
+            card_type, payment_details, pix_receipt_url, location_url,
+            address_json, change_for, subtotal, delivery_fee, total, status,
+            items_json, status_history_json, idempotency_key, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            newOrder.id,
+            newOrder.tenantId,
+            newOrder.customerName,
+            newOrder.customerPhone,
+            newOrder.orderType,
+            cleanTableNumber || "",
+            newOrder.paymentMethod,
+            newOrder.cardType || null,
+            newOrder.paymentDetails || null,
+            newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
+            newOrder.location_url || newOrder.locationUrl || null,
+            JSON.stringify(newOrder.address || {}),
+            newOrder.changeFor || "",
+            newOrder.subtotal,
+            newOrder.deliveryFee,
+            newOrder.total,
+            newOrder.status,
+            JSON.stringify(newOrder.items || []),
+            JSON.stringify(newOrder.statusHistory || []),
+            cleanIdempotencyKey || "",
+            newOrder.createdAt
+          )
+          .run();
+
+        const insertTimeoutPromise = new Promise<{ timeout: true }>((resolve) =>
+          setTimeout(() => resolve({ timeout: true }), 3500)
+        );
+
+        const result: any = await Promise.race([d1InsertPromise, insertTimeoutPromise]);
+        if (result && !result.timeout) {
+          d1Saved = true;
+        } else if (result?.timeout) {
+          console.warn("[D1] Timeout de 3.5s no INSERT primário de orders, prosseguindo com fallback de memória");
+        }
+      } catch (insertErr) {
+        console.warn("[D1] Falha no insert primário, tentando fallback de compatibilidade de schema:", insertErr);
         try {
-          await this.env.DB.prepare(
+          const fallbackPromise = this.env.DB.prepare(
             `INSERT INTO orders (
               id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
               card_type, payment_details, pix_receipt_url, location_url,
               address_json, change_for, subtotal, delivery_fee, total, status,
-              items_json, status_history_json, idempotency_key, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              items_json, status_history_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
             .bind(
               newOrder.id,
@@ -5721,153 +5772,95 @@ export class Database {
               newOrder.status,
               JSON.stringify(newOrder.items || []),
               JSON.stringify(newOrder.statusHistory || []),
-              cleanIdempotencyKey || "",
               newOrder.createdAt
             )
             .run();
-          d1Saved = true;
-        } catch (insertErr) {
-          console.warn("D1 primary insert failed, attempting schema fallback:", insertErr);
-          // Fallback se a coluna table_number ou idempotency_key não estiver criada na tabela existente
+
+          const fbTimeout = new Promise<{ timeout: true }>((resolve) =>
+            setTimeout(() => resolve({ timeout: true }), 2000)
+          );
+          const fbRes: any = await Promise.race([fallbackPromise, fbTimeout]);
+          if (fbRes && !fbRes.timeout) {
+            d1Saved = true;
+          }
+        } catch (fbErr) {
+          console.warn("[D1] Erro no fallback de insert:", fbErr);
+        }
+      }
+    }
+
+    // 3. Execução em SEGUNDO PLANO (Background Tasks) para não bloquear a resposta rápida ao cliente
+    const runBackgroundTasks = async () => {
+      // A. Cache de alta disponibilidade no Cloudflare KV
+      const kv = this.getKv();
+      if (kv) {
+        try {
+          await kv.put(`order:${newOrder.id}`, JSON.stringify(newOrder));
+          const cleanId = newOrder.id.replace(/^#/, "");
+          await kv.put(`order:${cleanId}`, JSON.stringify(newOrder));
+          if (cleanIdempotencyKey) {
+            await kv.put(`idempotency:${cleanIdempotencyKey}`, JSON.stringify(newOrder), { expirationTtl: 300 });
+          }
+          await kv.put(`tenant_orders_version:${newOrder.tenantId}`, Date.now().toString());
+        } catch (kvErr) {
+          console.warn("[Background] Erro ao gravar KV:", kvErr);
+        }
+      }
+
+      // B. Gravação assíncrona dos itens do pedido no D1
+      if (this.env?.DB && newOrder.items && newOrder.items.length > 0) {
+        for (const item of newOrder.items) {
           try {
+            const oiId = item.id || `oi-${newOrder.id}-${Math.random().toString(36).substring(2, 7)}`;
+            const pId = item.product?.id || `p-${Math.random().toString(36).substring(2, 7)}`;
+            const pName = item.product?.name || (item as any)?.name || "Lanche";
+            const pPrice = Number(item.product?.price ?? (item as any)?.price) || 0;
+            const pImg = item.product?.image || (item as any)?.image || "";
+            const pQty = Number(item.quantity) || 1;
+            const optJson = JSON.stringify(item.selectedOptions || []);
             await this.env.DB.prepare(
-              `INSERT INTO orders (
-                id, tenant_id, customer_name, customer_phone, order_type, table_number, payment_method,
-                card_type, payment_details, pix_receipt_url, location_url,
-                address_json, change_for, subtotal, delivery_fee, total, status,
-                items_json, status_history_json, created_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO order_items (
+                id, order_id, tenant_id, product_id, name, price, quantity, image, options_json, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             )
               .bind(
+                oiId,
                 newOrder.id,
                 newOrder.tenantId,
-                newOrder.customerName,
-                newOrder.customerPhone,
-                newOrder.orderType,
-                cleanTableNumber || "",
-                newOrder.paymentMethod,
-                newOrder.cardType || null,
-                newOrder.paymentDetails || null,
-                newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
-                newOrder.location_url || newOrder.locationUrl || null,
-                JSON.stringify(newOrder.address || {}),
-                newOrder.changeFor || "",
-                newOrder.subtotal,
-                newOrder.deliveryFee,
-                newOrder.total,
-                newOrder.status,
-                JSON.stringify(newOrder.items || []),
-                JSON.stringify(newOrder.statusHistory || []),
+                pId,
+                pName,
+                pPrice,
+                pQty,
+                pImg,
+                optJson,
                 newOrder.createdAt
               )
               .run();
-            d1Saved = true;
-          } catch (fbErr) {
-            console.warn("D1 secondary insert fallback:", fbErr);
-            await this.env.DB.prepare(
-              `INSERT INTO orders (
-                id, tenant_id, customer_name, customer_phone, order_type, payment_method,
-                card_type, payment_details, pix_receipt_url, location_url,
-                address_json, change_for, subtotal, delivery_fee, total, status,
-                items_json, status_history_json, created_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            )
-              .bind(
-                newOrder.id,
-                newOrder.tenantId,
-                newOrder.customerName,
-                newOrder.customerPhone,
-                newOrder.orderType,
-                newOrder.paymentMethod,
-                newOrder.cardType || null,
-                newOrder.paymentDetails || null,
-                newOrder.pixReceiptUrl || newOrder.pix_receipt_url || null,
-                newOrder.location_url || newOrder.locationUrl || null,
-                JSON.stringify(newOrder.address || {}),
-                newOrder.changeFor || "",
-                newOrder.subtotal,
-                newOrder.deliveryFee,
-                newOrder.total,
-                newOrder.status,
-                JSON.stringify(newOrder.items || []),
-                JSON.stringify(newOrder.statusHistory || []),
-                newOrder.createdAt
-              )
-              .run();
-            d1Saved = true;
+          } catch (itemErr) {
+            console.warn("[Background] Erro ao gravar order_item:", itemErr);
           }
-        }
-
-        if (newOrder.items && newOrder.items.length > 0) {
-          for (const item of newOrder.items) {
-            try {
-              const oiId = item.id || `oi-${newOrder.id}-${Math.random().toString(36).substring(2, 7)}`;
-              const pId = item.product?.id || `p-${Math.random().toString(36).substring(2, 7)}`;
-              const pName = item.product?.name || (item as any)?.name || "Lanche";
-              const pPrice = Number(item.product?.price ?? (item as any)?.price) || 0;
-              const pImg = item.product?.image || (item as any)?.image || "";
-              const pQty = Number(item.quantity) || 1;
-              const optJson = JSON.stringify(item.selectedOptions || []);
-              await this.env.DB.prepare(
-                `INSERT INTO order_items (
-                  id, order_id, tenant_id, product_id, name, price, quantity, image, options_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-              )
-                .bind(
-                  oiId,
-                  newOrder.id,
-                  newOrder.tenantId,
-                  pId,
-                  pName,
-                  pPrice,
-                  pQty,
-                  pImg,
-                  optJson,
-                  newOrder.createdAt
-                )
-                .run();
-            } catch (itemErr) {
-              console.warn("D1 createOrder insert order_item warning:", itemErr);
-            }
-          }
-        }
-      } catch (e: any) {
-        console.error("D1 createOrder fatal error:", e);
-        if (!d1Saved && !this.getKv()) {
-          throw new Error(`Falha atômica ao registrar o pedido no banco de dados Cloudflare D1: ${e.message || "Erro de integridade"}`);
         }
       }
-    }
 
-    // 2. Persiste imediatamente na memória global
-    globalStore.orders.unshift(newOrder);
-
-    // 3. Auto-cadastro e persistência automática de cliente vinculado à loja
-    try {
-      await this.saveOrUpdateCustomerFromOrder(tenantId, newOrder);
-    } catch (custErr) {
-      console.warn("Auto-register customer error:", custErr);
-    }
-
-    // 4. Persiste no Cloudflare KV para alta disponibilidade
-    const kv = this.getKv();
-    if (kv) {
+      // C. Auto-cadastro e atualização do cliente vinculado à loja
       try {
-        await kv.put(`order:${newOrder.id}`, JSON.stringify(newOrder));
-        const cleanId = newOrder.id.replace(/^#/, "");
-        await kv.put(`order:${cleanId}`, JSON.stringify(newOrder));
-        await kv.put(`tenant_orders_version:${newOrder.tenantId}`, Date.now().toString());
-      } catch (e) {
-        console.warn("KV put order error:", e);
+        await this.saveOrUpdateCustomerFromOrder(tenantId, newOrder);
+      } catch (custErr) {
+        console.warn("[Background] Auto-register customer error:", custErr);
       }
-    }
 
-    // 5. Emite evento em tempo real para os lojistas conectados instantaneamente
-    try {
-      orderEvents.emit(newOrder, true);
-    } catch (e) {
-      console.warn("Error emitting new order event:", e);
-    }
+      // D. Emissão do evento Server-Sent Events (SSE) em tempo real para o painel do lojista
+      try {
+        orderEvents.emit(newOrder, true);
+      } catch (eventErr) {
+        console.warn("[Background] Error emitting new order event:", eventErr);
+      }
+    };
+
+    // Dispara tarefas secundárias sem 'await' para retornar resposta imediata
+    runBackgroundTasks().catch((bgErr) => {
+      console.warn("[Background] Falha geral nas tarefas secundárias:", bgErr);
+    });
 
     return newOrder;
   }

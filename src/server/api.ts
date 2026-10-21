@@ -1397,6 +1397,19 @@ api.post("/pedidos", async (c) => {
     const db = getDb(c);
     const body = await c.req.json();
 
+    console.log("[POST /api/pedidos] [1] Recebido payload:", {
+      cliente: body.cliente || body.customerName,
+      telefone: body.telefone || body.customerPhone,
+      loja: body.lojaSlug || body.slug || body.lojaId || body.tenantId || "marcelino",
+      total: body.total,
+      idempotency:
+        c.req.header("x-idempotency-key") ||
+        c.req.header("idempotency-key") ||
+        body.idempotency_key ||
+        body.idempotencyKey ||
+        body.cart_id,
+    });
+
     // 0. VERIFICAÇÃO DE IDEMPOTÊNCIA (Prevenção de pedidos duplicados após timeout ou retry do cliente)
     const rawIdempotency =
       c.req.header("x-idempotency-key") ||
@@ -1409,21 +1422,28 @@ api.post("/pedidos", async (c) => {
 
     if (rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()) {
       const cleanKey = rawIdempotency.trim();
-      const existingOrder = await db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
-      if (existingOrder) {
-        console.log(`[Idempotency] Pedido existente encontrado (${existingOrder.id}) para chave: ${cleanKey}`);
-        return c.json({
-          success: true,
-          orderId: existingOrder.id,
-          id: existingOrder.id,
-          duplicated: true,
-          order: existingOrder,
-          pedido: {
-            ...existingOrder,
-            statusPt: STATUS_MAP_EN_TO_PT[existingOrder.status] || existingOrder.status,
-          },
-          message: "Pedido já registrado anteriormente com sucesso (idempotência).",
-        }, 200);
+      console.log(`[POST /api/pedidos] [2] Verificando D1 para idempotência: ${cleanKey}`);
+      try {
+        const checkPromise = db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+        const existingOrder = await Promise.race([checkPromise, timeoutPromise]);
+        if (existingOrder) {
+          console.log(`[POST /api/pedidos] [2.1] Pedido existente encontrado (${existingOrder.id}) para chave: ${cleanKey}`);
+          return c.json({
+            success: true,
+            orderId: existingOrder.id,
+            id: existingOrder.id,
+            duplicated: true,
+            order: existingOrder,
+            pedido: {
+              ...existingOrder,
+              statusPt: STATUS_MAP_EN_TO_PT[existingOrder.status] || existingOrder.status,
+            },
+            message: "Pedido já registrado anteriormente com sucesso (idempotência).",
+          }, 200);
+        }
+      } catch (idempErr) {
+        console.warn("[POST /api/pedidos] Verificação de idempotência demorou ou falhou, ignorando para prosseguir:", idempErr);
       }
     }
 
@@ -1494,6 +1514,7 @@ api.post("/pedidos", async (c) => {
     const detalhesPgto = body.paymentDetails || body.payment_details || undefined;
     const locationUrl = body.location_url || body.locationUrl || undefined;
 
+    console.log("[POST /api/pedidos] [2.5] Inserindo pedido no banco D1...");
     const novoPedido = await db.createOrder(loja.id, {
       customerName: cliente.trim(),
       customerPhone: telefone.trim(),
@@ -1529,14 +1550,24 @@ api.post("/pedidos", async (c) => {
       }, 500);
     }
 
-    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
-    sendNewOrderPushNotification(loja.id, novoPedido, c.env, () => db).catch((pushErr) => {
-      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
-    });
+    console.log("[POST /api/pedidos] [3] Inserido com sucesso! Order ID:", novoPedido.id);
 
+    // Dispara notificação push de alta prioridade para o lojista em segundo plano sem bloquear a resposta
+    try {
+      const pushPromise = sendNewOrderPushNotification(loja.id, novoPedido, c.env, () => db).catch((pushErr) => {
+        console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+      });
+      if ((c.executionCtx as any)?.waitUntil) {
+        c.executionCtx.waitUntil(pushPromise);
+      }
+    } catch {
+      // Background context error ignored
+    }
+
+    console.log("[POST /api/pedidos] [4] Resposta 200 enviada ao cliente com sucesso.");
     return c.json({
       success: true,
-      message: "Pedido registrado com sucesso no Cloudflare D1/KV!",
+      message: "Pedido registrado com sucesso!",
       orderId: novoPedido.id,
       id: novoPedido.id,
       duplicated: false,
@@ -1546,8 +1577,9 @@ api.post("/pedidos", async (c) => {
         statusPt: STATUS_MAP_EN_TO_PT[novoPedido.status] || "Pendente",
         loja: { id: loja.id, nome: loja.name, slug: loja.slug },
       },
-    }, 201);
+    }, 200);
   } catch (err: any) {
+    console.error("[POST /api/pedidos] Erro fatal:", err);
     return c.json({ success: false, error: err.message || "Erro interno ao processar pedido." }, 500);
   }
 });
@@ -3235,17 +3267,23 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
 
     if (rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()) {
       const cleanKey = rawIdempotency.trim();
-      const existing = await db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
-      if (existing) {
-        return c.json({
-          success: true,
-          orderId: existing.id,
-          id: existing.id,
-          duplicated: true,
-          order: existing,
-          pedido: existing,
-          message: "Pedido já registrado anteriormente com sucesso (idempotência).",
-        }, 200);
+      try {
+        const checkPromise = db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+        const existing = await Promise.race([checkPromise, timeoutPromise]);
+        if (existing) {
+          return c.json({
+            success: true,
+            orderId: existing.id,
+            id: existing.id,
+            duplicated: true,
+            order: existing,
+            pedido: existing,
+            message: "Pedido já registrado anteriormente com sucesso (idempotência).",
+          }, 200);
+        }
+      } catch (idempErr) {
+        console.warn("[tenants/orders] Idempotency check error/timeout, proceeding:", idempErr);
       }
       body.idempotencyKey = cleanKey;
       body.idempotency_key = cleanKey;
@@ -3267,12 +3305,19 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
       }, 500);
     }
 
-    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
-    sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
-      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
-    });
+    // Dispara notificação push de alta prioridade para o lojista em segundo plano
+    try {
+      const pushPromise = sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
+        console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+      });
+      if ((c.executionCtx as any)?.waitUntil) {
+        c.executionCtx.waitUntil(pushPromise);
+      }
+    } catch {
+      // Ignora erro de contexto
+    }
 
-    return c.json({ success: true, order }, 201);
+    return c.json({ success: true, orderId: order.id, id: order.id, order }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao criar pedido" }, 500);
   }
@@ -3327,6 +3372,11 @@ api.post("/orders", async (c) => {
     const db = getDb(c);
     const body = await parseIncomingOrderPayload(c);
 
+    // Identifica o tenant
+    const tenantRef = body.tenantId || body.tenant_id || body.lojaId || body.lojaSlug || "marcelino";
+    const tenant = await db.getTenantByIdOrSlug(tenantRef);
+    const targetTenantId = tenant ? tenant.id : tenantRef;
+
     // Verificação de idempotência (Prevenção de duplicidade após timeout)
     const rawIdempotency =
       c.req.header("x-idempotency-key") ||
@@ -3339,17 +3389,23 @@ api.post("/orders", async (c) => {
 
     if (rawIdempotency && typeof rawIdempotency === "string" && rawIdempotency.trim()) {
       const cleanKey = rawIdempotency.trim();
-      const existing = await db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
-      if (existing) {
-        return c.json({
-          success: true,
-          orderId: existing.id,
-          id: existing.id,
-          duplicated: true,
-          order: existing,
-          pedido: existing,
-          message: "Pedido já registrado anteriormente com sucesso (idempotência).",
-        }, 200);
+      try {
+        const checkPromise = db.getOrderByIdempotencyKey(cleanKey, 5 * 60 * 1000);
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+        const existing = await Promise.race([checkPromise, timeoutPromise]);
+        if (existing) {
+          return c.json({
+            success: true,
+            orderId: existing.id,
+            id: existing.id,
+            duplicated: true,
+            order: existing,
+            pedido: existing,
+            message: "Pedido já registrado anteriormente com sucesso (idempotência).",
+          }, 200);
+        }
+      } catch (idempErr) {
+        console.warn("[/orders] Idempotency check error/timeout, proceeding:", idempErr);
       }
       body.idempotencyKey = cleanKey;
       body.idempotency_key = cleanKey;
@@ -3363,7 +3419,7 @@ api.post("/orders", async (c) => {
     body.mesa = cleanTable;
     body.table = cleanTable;
 
-    const order = await db.createOrder(tenant.id, body);
+    const order = await db.createOrder(targetTenantId, body);
     if (!order || !order.id) {
       return c.json({
         success: false,
@@ -3371,12 +3427,19 @@ api.post("/orders", async (c) => {
       }, 500);
     }
 
-    // Dispara notificação push de alta prioridade para o lojista (apenas se estiver logado)
-    sendNewOrderPushNotification(tenant.id, order, c.env, () => db).catch((pushErr) => {
-      console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
-    });
+    // Dispara notificação push de alta prioridade para o lojista em segundo plano
+    try {
+      const pushPromise = sendNewOrderPushNotification(targetTenantId, order, c.env, () => db).catch((pushErr) => {
+        console.warn("[Push] Erro assíncrono ao disparar notificação:", pushErr);
+      });
+      if ((c.executionCtx as any)?.waitUntil) {
+        c.executionCtx.waitUntil(pushPromise);
+      }
+    } catch {
+      // Ignora erro de contexto
+    }
 
-    return c.json({ success: true, order }, 201);
+    return c.json({ success: true, orderId: order.id, id: order.id, order }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao registrar pedido" }, 500);
   }
