@@ -216,6 +216,9 @@ export interface Order {
   deliveryFee: number;
   total: number;
   status: OrderStatus;
+  statusDb?: string;
+  status_db?: string;
+  statusPt?: string;
   customerName: string;
   customerPhone: string;
   createdAt: number;
