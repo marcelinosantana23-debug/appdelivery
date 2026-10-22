@@ -444,7 +444,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
 
       {/* Banner de instalação PWA discreto (oculta automaticamente se já instalado) */}
       <div className="mx-auto max-w-2xl px-4 mt-8">
-        <PWAInstallButton variant="banner" />
+        <PWAInstallButton variant="banner" storeName={config.name} />
       </div>
 
       {/* Rodapé institucional com identidade isolada da vitrine */}
@@ -516,6 +516,32 @@ function AppContent() {
     // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+      try {
+        const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
+        if (!isExplicitPortal) {
+          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
+          if (
+            savedStoreRoute &&
+            savedStoreRoute.startsWith("/") &&
+            savedStoreRoute !== "/" &&
+            savedStoreRoute !== "/portal" &&
+            savedStoreRoute !== "/topfood"
+          ) {
+            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
+            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
+              try {
+                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
+              } catch (_err) {
+                // ignore history state error
+              }
+              return "menu";
+            }
+          }
+        }
+      } catch (_err) {
+        // ignore
+      }
       return "portal";
     }
 
@@ -524,6 +550,42 @@ function AppContent() {
   };
 
   const [view, setView] = useState<View>(getInitialView);
+
+  // Redirecionamento automático ao reabrir o app na raiz caso o usuário tenha baixado o app na vitrine de uma loja
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const path = window.location.pathname.toLowerCase();
+    const clean = path.replace(/\/+$/, "");
+    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+      try {
+        const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
+        if (!isExplicitPortal) {
+          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
+          if (
+            savedStoreRoute &&
+            savedStoreRoute.startsWith("/") &&
+            savedStoreRoute !== "/" &&
+            savedStoreRoute !== "/portal" &&
+            savedStoreRoute !== "/topfood"
+          ) {
+            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
+            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
+              selectTenant(savedSlug);
+              setView("menu");
+              try {
+                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
+              } catch (_err) {
+                // ignore history state error
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao redirecionar para loja salva:", err);
+      }
+    }
+  }, [selectTenant]);
 
   // Sync with browser URL history using standard HTML5 History API
   const navigateTo = useCallback(
@@ -536,8 +598,10 @@ function AppContent() {
             window.history.pushState({ view: "admin" }, "", "/painel");
           } else if (targetView === "portal") {
             window.history.pushState({ view: "portal" }, "", "/");
+            sessionStorage.setItem("topfood_explicit_portal_nav", "true");
             resetToPortalTheme();
           } else {
+            sessionStorage.removeItem("topfood_explicit_portal_nav");
             const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
             window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
           }

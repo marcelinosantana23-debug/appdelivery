@@ -11,6 +11,39 @@ declare global {
   }
 }
 
+function getDeviceState() {
+  if (typeof window === "undefined") {
+    return {
+      isIOS: false,
+      isAndroid: false,
+      isXiaomi: false,
+      isDesktop: false,
+      isStandalone: false,
+    };
+  }
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  const isIOSDevice =
+    (/iphone|ipad|ipod/.test(userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) ||
+      (userAgent.includes("macintosh") && navigator.maxTouchPoints > 1)) &&
+    !(window as unknown as { MSStream?: unknown }).MSStream;
+  const isAndroidDevice = /android/.test(userAgent);
+  const isXiaomiDevice = /miuibrowser|xiaomi|redmi|poco/i.test(userAgent);
+  const isDesktopDevice = !isIOSDevice && !isAndroidDevice;
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+    document.referrer.includes("android-app://");
+
+  return {
+    isIOS: isIOSDevice,
+    isAndroid: isAndroidDevice,
+    isXiaomi: isXiaomiDevice,
+    isDesktop: isDesktopDevice,
+    isStandalone,
+  };
+}
+
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => {
     if (typeof window !== "undefined" && window.__pwaInstallPrompt) {
@@ -18,40 +51,21 @@ export function usePWAInstall() {
     }
     return null;
   });
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isAndroid, setIsAndroid] = useState(false);
-  const [isXiaomi, setIsXiaomi] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(() => getDeviceState().isStandalone);
+  const [isIOS, setIsIOS] = useState(() => getDeviceState().isIOS);
+  const [isAndroid, setIsAndroid] = useState(() => getDeviceState().isAndroid);
+  const [isXiaomi, setIsXiaomi] = useState(() => getDeviceState().isXiaomi);
+  const [isDesktop, setIsDesktop] = useState(() => getDeviceState().isDesktop);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Checar se já foi capturado previamente pelo listener em index.html
-    if (window.__pwaInstallPrompt) {
-      setDeferredPrompt(window.__pwaInstallPrompt);
-    }
-
-    // Detecta se a aplicação já está rodando em modo standalone (PWA instalado)
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      document.referrer.includes("android-app://");
-
-    setIsInstalled(isStandalone);
-
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIOSDevice =
-      /iphone|ipad|ipod/.test(userAgent) &&
-      !(window as unknown as { MSStream?: unknown }).MSStream;
-    const isAndroidDevice = /android/.test(userAgent);
-    const isXiaomiDevice = /miuibrowser|xiaomi|redmi|poco/i.test(userAgent);
-    const isDesktopDevice = !isIOSDevice && !isAndroidDevice;
-
-    setIsIOS(isIOSDevice);
-    setIsAndroid(isAndroidDevice);
-    setIsXiaomi(isXiaomiDevice);
-    setIsDesktop(isDesktopDevice);
+    const device = getDeviceState();
+    setIsInstalled(device.isStandalone);
+    setIsIOS(device.isIOS);
+    setIsAndroid(device.isAndroid);
+    setIsXiaomi(device.isXiaomi);
+    setIsDesktop(device.isDesktop);
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault(); // Impede o banner padrão do navegador

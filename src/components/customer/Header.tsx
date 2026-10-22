@@ -100,6 +100,7 @@ export function Header(props: HeaderProps = {}) {
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
               <PWAInstallButton
                 variant="header"
+                storeName={config.name}
                 className="h-7 px-2 py-1 text-[10px] sm:text-xs"
               />
               <GlobalReloadButton

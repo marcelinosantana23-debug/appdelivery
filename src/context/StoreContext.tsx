@@ -459,6 +459,27 @@ function getInitialUrlSlug(): string {
   // 5. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
   const clean = path.replace(/\/+$/, "").toLowerCase();
   if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+    try {
+      const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
+      if (!isExplicitPortal) {
+        const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
+        if (
+          savedStoreRoute &&
+          savedStoreRoute.startsWith("/") &&
+          savedStoreRoute !== "/" &&
+          savedStoreRoute !== "/portal" &&
+          savedStoreRoute !== "/topfood"
+        ) {
+          const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
+          const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+          if (savedSlug && !RESERVED_SLUGS.has(savedSlug.toLowerCase())) {
+            return decodeURIComponent(savedSlug).toLowerCase();
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
     return "";
   }
 
