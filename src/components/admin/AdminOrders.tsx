@@ -56,13 +56,6 @@ const nextStatusMap: Record<string, OrderStatus> = {
   received: "preparing",
   preparing: "delivering",
   delivering: "done",
-  PENDENTE: "preparing",
-  EM_PREPARO: "delivering",
-  PRONTO: "done",
-  SAIU_PARA_ENTREGA: "done",
-  pendente: "preparing",
-  em_preparo: "delivering",
-  saiu_para_entrega: "done",
 };
 
 export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
