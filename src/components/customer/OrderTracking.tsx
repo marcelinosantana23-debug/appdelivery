@@ -47,6 +47,78 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     { status: "done", label: isDineIn ? "Servido" : isPickup ? "Retirado" : "Finalizado", icon: CheckCircle2 },
   ];
 
+  // Helper para mapear qualquer variante de status do D1/KV para a etapa visual (0 a 3) e porcentagem
+  const mapOrderStatusToStep = useCallback((rawStatus: string | undefined | null) => {
+    if (!rawStatus) {
+      return { stepIndex: 0, progressPercent: 25, isCancelled: false, statusLabel: "Recebido", canonicalStatus: "received" as OrderStatus };
+    }
+    const s = String(rawStatus).toUpperCase().trim().replace(/[\s-]+/g, "_");
+
+    if (s === "CANCELADO" || s === "CANCELLED" || s === "CANCELED") {
+      return { stepIndex: -1, progressPercent: 0, isCancelled: true, statusLabel: "Cancelado", canonicalStatus: "cancelled" as OrderStatus };
+    }
+
+    // 1. PENDENTE / RECEBIDO
+    if (s === "PENDENTE" || s === "RECEBIDO" || s === "RECEIVED" || s === "PENDING" || s === "NOVO") {
+      return { stepIndex: 0, progressPercent: 25, isCancelled: false, statusLabel: "Recebido", canonicalStatus: "received" as OrderStatus };
+    }
+
+    // 2. EM PREPARO / PRODUÇÃO
+    if (
+      s === "EM_PREPARO" ||
+      s === "PREPARING" ||
+      s === "PREPARO" ||
+      s === "PRODUCAO" ||
+      s === "EM_PRODUCAO" ||
+      s === "ACEITO"
+    ) {
+      return { stepIndex: 1, progressPercent: 50, isCancelled: false, statusLabel: "Em Preparo", canonicalStatus: "preparing" as OrderStatus };
+    }
+
+    // 3. PRONTO / SAIU PARA ENTREGA
+    if (
+      s === "PRONTO" ||
+      s === "SAIU_PARA_ENTREGA" ||
+      s === "DELIVERING" ||
+      s === "A_CAMINHO" ||
+      s === "EM_ENTREGA" ||
+      s === "PRONTO_BALCAO" ||
+      s === "PRONTO_P/_RETIRADA" ||
+      s === "PRONTO_PARA_RETIRADA" ||
+      s === "PRONTO_PARA_ENTREGA"
+    ) {
+      return {
+        stepIndex: 2,
+        progressPercent: 75,
+        isCancelled: false,
+        statusLabel: isDineIn ? "Pronto para Servir" : isPickup ? "Pronto p/ Retirada" : "Saiu para Entrega",
+        canonicalStatus: "delivering" as OrderStatus,
+      };
+    }
+
+    // 4. ENTREGUE / FINALIZADO
+    if (
+      s === "ENTREGUE" ||
+      s === "DONE" ||
+      s === "COMPLETED" ||
+      s === "CONCLUIDO" ||
+      s === "CONCLUÍDO" ||
+      s === "FINALIZADO" ||
+      s === "RETIRADO" ||
+      s === "SERVIDO"
+    ) {
+      return {
+        stepIndex: 3,
+        progressPercent: 100,
+        isCancelled: false,
+        statusLabel: isDineIn ? "Servido" : isPickup ? "Retirado" : "Entregue",
+        canonicalStatus: "done" as OrderStatus,
+      };
+    }
+
+    return { stepIndex: 0, progressPercent: 25, isCancelled: false, statusLabel: "Recebido", canonicalStatus: "received" as OrderStatus };
+  }, [isDineIn, isPickup]);
+
   // Desbloqueia automaticamente o áudio na primeira interação do cliente na tela de rastreio
   useEffect(() => {
     const handleCustomerInteraction = async () => {
@@ -65,12 +137,19 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
   }, []);
 
   // Aplica atualização de status em tempo real por eventos (sem loops de polling)
-  const applyStatus = useCallback((newStatus: OrderStatus, updatedOrder?: Order | null) => {
+  const applyStatus = useCallback((rawStatus: OrderStatus | string, updatedOrder?: Order | null) => {
+    const stepInfo = mapOrderStatusToStep(rawStatus);
+    const newStatus = stepInfo.canonicalStatus;
     const prevStatus = prevStatusRef.current;
+
     if (updatedOrder) {
-      setOrder(updatedOrder);
+      setOrder({
+        ...updatedOrder,
+        status: newStatus,
+        statusDb: (updatedOrder as any).statusDb || String(rawStatus),
+      });
     } else {
-      setOrder((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      setOrder((prev) => (prev ? { ...prev, status: newStatus, statusDb: String(rawStatus) } : prev));
     }
 
     // Dispara efeito sonoro suave ("tricks") quando o status do pedido é atualizado e NÃO é o carregamento inicial
@@ -83,7 +162,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       statusRef.current = newStatus;
       updateActiveOrderStatus(newStatus);
     }
-  }, []);
+  }, [mapOrderStatusToStep]);
 
   // Busca manual sob demanda no banco D1 ao clicar no botão "Atualizar Status"
   const handleRefreshStatus = useCallback(async () => {
@@ -100,8 +179,9 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       const now = new Date();
       setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
 
-      if (res.success && res.order) {
-        applyStatus(res.order.status, res.order);
+      const resolved = res.order || (res as any).pedido;
+      if (res.success && resolved) {
+        applyStatus(resolved.status || (resolved as any).statusDb || res.status, resolved);
       }
       setRefreshSuccess(true);
       setTimeout(() => setRefreshSuccess(false), 3000);
@@ -121,8 +201,9 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     const loadInitialStatus = async () => {
       try {
         const res = await fetchOrderDetailsApi(cleanId, config.slug);
-        if (isMounted && res.success && res.order) {
-          applyStatus(res.order.status, res.order);
+        const resolved = res.order || (res as any).pedido;
+        if (isMounted && res.success && resolved) {
+          applyStatus(resolved.status || (resolved as any).statusDb || res.status, resolved);
           const now = new Date();
           setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
         }
@@ -150,24 +231,31 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       }
     }, 600);
 
-    // Conexão Server-Sent Events (SSE) para entrega instantânea baseada em eventos
+    // Conexão Server-Sent Events (SSE) para entrega instantânea baseada no evento 'STATUS_PEDIDO'
     let eventSource: EventSource | null = null;
     try {
       const sseUrl = `/api/orders/${encodeURIComponent(cleanId)}/stream`;
       eventSource = new EventSource(sseUrl);
 
-      eventSource.addEventListener("status_update", (e: MessageEvent) => {
+      const handleIncomingStatusEvent = (e: MessageEvent) => {
         try {
           const payload = JSON.parse(e.data);
-          if (payload && payload.status) {
-            applyStatus(payload.status, payload.order);
+          const incomingStatus = payload?.status || payload?.novoStatus || payload?.order?.status || payload?.order?.statusDb;
+          if (incomingStatus) {
+            applyStatus(incomingStatus, payload.order || payload.pedido || null);
             const now = new Date();
             setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
           }
         } catch (err) {
           console.warn("Erro ao ler evento SSE em OrderTracking:", err);
         }
-      });
+      };
+
+      // Escuta os eventos SSE: 'STATUS_PEDIDO' (conforme solicitado), 'status_update' e onmessage
+      eventSource.addEventListener("STATUS_PEDIDO", handleIncomingStatusEvent);
+      eventSource.addEventListener("status_update", handleIncomingStatusEvent);
+      eventSource.addEventListener("status", handleIncomingStatusEvent);
+      eventSource.onmessage = handleIncomingStatusEvent;
 
       eventSource.onerror = () => {
         // SSE error handled silently
@@ -183,7 +271,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
         bc = new BroadcastChannel("topfood_order_events");
         bc.onmessage = (e) => {
           const data = e.data;
-          if (data && (data.type === "ORDER_STATUS_CHANGED" || data.type === "ACTIVE_ORDER_UPDATED")) {
+          if (data && (data.type === "ORDER_STATUS_CHANGED" || data.type === "ACTIVE_ORDER_UPDATED" || data.type === "STATUS_PEDIDO")) {
             const incomingId = (data.orderId || "").replace(/^#/, "");
             if (incomingId === cleanId && data.status) {
               applyStatus(data.status, data.order || data.orderData);
@@ -228,8 +316,10 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     };
   }, [initialOrder?.id, config.slug, applyStatus]);
 
-  const currentIndex = statusSteps.findIndex((s) => s.status === order?.status);
-  const isCancelled = order?.status === "cancelled";
+  const currentRawStatus = order?.status || (order as any)?.statusDb || (order as any)?.statusPt;
+  const statusInfo = mapOrderStatusToStep(currentRawStatus);
+  const currentIndex = statusInfo.stepIndex;
+  const isCancelled = statusInfo.isCancelled;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50">
@@ -328,6 +418,37 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
                   <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
                   <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
                 </button>
+              </div>
+
+              {/* Barra de Progresso do Pedido em Destaque */}
+              <div className="mb-6 rounded-2xl bg-amber-50/70 border border-amber-200/60 p-4 shadow-2xs">
+                <div className="flex justify-between items-center text-xs font-bold text-gray-800 mb-2">
+                  <span className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    </span>
+                    <span>Status Atual: <strong className="text-amber-800 font-extrabold">{statusInfo.statusLabel}</strong></span>
+                  </span>
+                  <span className="text-amber-800 font-extrabold text-sm">
+                    {statusInfo.progressPercent}%
+                  </span>
+                </div>
+                {/* Trilho e Barra de Progresso */}
+                <div className="w-full bg-gray-200/90 rounded-full h-3 overflow-hidden shadow-inner">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-700 ease-out ${
+                      statusInfo.progressPercent === 100
+                        ? "bg-emerald-500"
+                        : statusInfo.progressPercent >= 75
+                        ? "bg-purple-600"
+                        : statusInfo.progressPercent >= 50
+                        ? "bg-orange-500"
+                        : "bg-amber-500"
+                    }`}
+                    style={{ width: `${statusInfo.progressPercent}%` }}
+                  />
+                </div>
               </div>
 
               <div className="relative">

@@ -352,7 +352,9 @@ export function FloatingOrderTracker({
         }
       };
 
+      eventSource.addEventListener("STATUS_PEDIDO", handleEventMessage);
       eventSource.addEventListener("status_update", handleEventMessage);
+      eventSource.addEventListener("status", handleEventMessage);
       eventSource.onmessage = handleEventMessage;
     } catch (err) {
       console.warn("EventSource SSE não suportado:", err);

@@ -228,6 +228,24 @@ async function startServer() {
     res.redirect(`/api/manifest/${req.params.slug}`);
   });
 
+  // Rota dedicada para download do instalador Android (Top Food.apk)
+  app.get(["/Top%20Food.apk", "/Top Food.apk"], (_req, res) => {
+    const primaryPath = path.join(
+      process.cwd(),
+      process.env.NODE_ENV === "production" ? "dist" : "public",
+      "Top Food.apk"
+    );
+    const fallbackPath = path.join(process.cwd(), "public", "Top Food.apk");
+    const targetFile = fs.existsSync(primaryPath) ? primaryPath : fs.existsSync(fallbackPath) ? fallbackPath : null;
+
+    if (targetFile) {
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      res.setHeader("Content-Disposition", 'attachment; filename="Top Food.apk"');
+      return res.sendFile(targetFile);
+    }
+    return res.status(404).send("APK não encontrado.");
+  });
+
   const db = new Database();
 
   // Vite middleware for development

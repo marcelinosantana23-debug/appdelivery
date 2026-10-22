@@ -5865,7 +5865,52 @@ export class Database {
     return newOrder;
   }
 
-  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order | null> {
+  mapStatusToFrontendDb(status: string | undefined | null): string {
+    if (!status) return "PENDENTE";
+    const s = String(status).toUpperCase().trim().replace(/[\s-]+/g, "_");
+    if (s === "PENDENTE" || s === "RECEIVED" || s === "RECEBIDO" || s === "PENDING" || s === "NOVO") {
+      return "PENDENTE";
+    }
+    if (s === "EM_PREPARO" || s === "PREPARING" || s === "PREPARO" || s === "EM_PRODUCAO" || s === "PRODUCAO" || s === "ACEITO") {
+      return "EM_PREPARO";
+    }
+    if (s === "PRONTO" || s === "PRONTO_BALCAO" || s === "PRONTO_P/_RETIRADA" || s === "PRONTO_PARA_RETIRADA" || s === "PRONTO_PARA_ENTREGA") {
+      return "PRONTO";
+    }
+    if (s === "SAIU_PARA_ENTREGA" || s === "DELIVERING" || s === "A_CAMINHO" || s === "EM_ENTREGA") {
+      return "SAIU_PARA_ENTREGA";
+    }
+    if (s === "ENTREGUE" || s === "DONE" || s === "COMPLETED" || s === "CONCLUIDO" || s === "CONCLUÍDO" || s === "FINALIZADO" || s === "RETIRADO" || s === "SERVIDO") {
+      return "ENTREGUE";
+    }
+    if (s === "CANCELADO" || s === "CANCELLED" || s === "CANCELED") {
+      return "CANCELADO";
+    }
+    return "PENDENTE";
+  }
+
+  normalizeOrderStatusCanonical(status: string | undefined | null): OrderStatus {
+    if (!status) return "received";
+    const s = String(status).toLowerCase().trim().replace(/[\s-]+/g, "_");
+    if (s === "pending" || s === "received" || s === "recebido" || s === "pendente" || s === "novo") {
+      return "received";
+    }
+    if (s === "preparing" || s === "em_preparo" || s === "preparo" || s === "producao" || s === "em_producao" || s === "aceito") {
+      return "preparing";
+    }
+    if (s === "delivering" || s === "saiu_para_entrega" || s === "a_caminho" || s === "entrega" || s === "pronto" || s === "pronto_balcao") {
+      return "delivering";
+    }
+    if (s === "completed" || s === "done" || s === "entregue" || s === "concluido" || s === "concluído" || s === "finalizado" || s === "retirado" || s === "servido") {
+      return "done";
+    }
+    if (s === "cancelled" || s === "cancelado" || s === "cancel") {
+      return "cancelled";
+    }
+    return "received";
+  }
+
+  async updateOrderStatus(orderId: string, status: OrderStatus | string, dbStatusValue?: string): Promise<Order | null> {
     if (!orderId) return null;
     const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
     const rawId = orderId.replace(/^#/, "");
@@ -5874,21 +5919,31 @@ export class Database {
     const order = await this.getOrderById(orderId);
     if (!order) return null;
 
-    order.status = status;
+    const canonicalStatus = this.normalizeOrderStatusCanonical(status);
+    const d1Status = dbStatusValue || this.mapStatusToFrontendDb(status);
+
+    order.status = canonicalStatus;
+    (order as any).statusDb = d1Status;
+    (order as any).status_db = d1Status;
+
     if (!order.statusHistory) {
       order.statusHistory = [];
     }
-    order.statusHistory.push({ status, timestamp: Date.now() });
+    order.statusHistory.push({ status: canonicalStatus, timestamp: Date.now() });
 
-    // 2. Persiste imediatamente no Cloudflare D1
+    // 2. Persiste imediatamente no Cloudflare D1 com o status esperado ('PENDENTE', 'EM_PREPARO', 'PRONTO', 'SAIU_PARA_ENTREGA', 'ENTREGUE')
     if (this.env?.DB) {
       try {
-        await this.ensureTables();
-        await this.env.DB.prepare(
+        const d1UpdatePromise = this.env.DB.prepare(
           "UPDATE orders SET status = ?, status_history_json = ? WHERE id = ? OR id = ? OR id = ?"
         )
-          .bind(status, JSON.stringify(order.statusHistory), order.id, cleanId, rawId)
+          .bind(d1Status, JSON.stringify(order.statusHistory), order.id, cleanId, rawId)
           .run();
+
+        const updateTimeout = new Promise<{ timeout: true }>((resolve) =>
+          setTimeout(() => resolve({ timeout: true }), 3500)
+        );
+        await Promise.race([d1UpdatePromise, updateTimeout]);
       } catch (e) {
         console.warn("D1 updateOrderStatus error:", e);
       }
@@ -5904,23 +5959,38 @@ export class Database {
       globalStore.orders.unshift(order);
     }
 
-    // 4. Atualiza Cloudflare KV
-    const kv = this.getKv();
-    if (kv) {
-      try {
-        await kv.put(`order:${order.id}`, JSON.stringify(order));
-        await kv.put(`order:${cleanId}`, JSON.stringify(order));
-      } catch (e) {
-        console.warn("KV update order error:", e);
+    // 4. Executa tarefas secundárias em segundo plano (KV e emissão SSE)
+    const runBackground = async () => {
+      const kv = this.getKv();
+      if (kv) {
+        try {
+          await kv.put(`order:${order.id}`, JSON.stringify(order));
+          await kv.put(`order:${cleanId}`, JSON.stringify(order));
+          await kv.put(`order_status:${cleanId}`, JSON.stringify({
+            orderId: cleanId,
+            status: d1Status,
+            canonicalStatus,
+            updatedAt: Date.now(),
+          }));
+          if (order.tenantId) {
+            await kv.put(`tenant_orders_version:${order.tenantId}`, Date.now().toString());
+          }
+        } catch (e) {
+          console.warn("KV update order background warning:", e);
+        }
       }
-    }
 
-    // 5. Emite evento em tempo real para os clientes conectados
-    try {
-      orderEvents.emit(order);
-    } catch (e) {
-      console.warn("Error emitting order event:", e);
-    }
+      // Emite evento em tempo real para os clientes conectados
+      try {
+        orderEvents.emit(order);
+      } catch (e) {
+        console.warn("Error emitting order event:", e);
+      }
+    };
+
+    runBackground().catch((bgErr) => {
+      console.warn("updateOrderStatus background error:", bgErr);
+    });
 
     return order;
   }
@@ -6409,7 +6479,9 @@ export class Database {
       subtotal: Number(row.subtotal),
       deliveryFee: Number(row.delivery_fee),
       total: Number(row.total),
-      status: row.status,
+      status: this.normalizeOrderStatusCanonical(row.status),
+      statusDb: row.status,
+      status_db: row.status,
       items: this.safeJsonParse(row.items_json, []),
       statusHistory: this.safeJsonParse(row.status_history_json, []),
       idempotencyKey: row.idempotency_key || (row as any).idempotencyKey || undefined,
