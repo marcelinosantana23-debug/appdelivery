@@ -229,16 +229,18 @@ async function startServer() {
   });
 
   // Dedicated Android APK download route with official MIME type
-  app.get(["/Top Food.apk", "/Top%20Food.apk"], (_req, res, next) => {
-    const publicApk = path.join(process.cwd(), "public", "Top Food.apk");
-    const distApk = path.join(process.cwd(), "dist", "Top Food.apk");
-    if (fs.existsSync(publicApk)) {
-      res.setHeader("Content-Type", "application/vnd.android.package-archive");
-      return res.sendFile(publicApk);
-    }
-    if (fs.existsSync(distApk)) {
-      res.setHeader("Content-Type", "application/vnd.android.package-archive");
-      return res.sendFile(distApk);
+  app.get(["/top-food.apk", "/Top Food.apk", "/Top%20Food.apk"], (_req, res, next) => {
+    const candidates = [
+      path.join(process.cwd(), "public", "top-food.apk"),
+      path.join(process.cwd(), "dist", "top-food.apk"),
+      path.join(process.cwd(), "public", "Top Food.apk"),
+      path.join(process.cwd(), "dist", "Top Food.apk"),
+    ];
+    for (const file of candidates) {
+      if (fs.existsSync(file)) {
+        res.setHeader("Content-Type", "application/vnd.android.package-archive");
+        return res.sendFile(file);
+      }
     }
     next();
   });

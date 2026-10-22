@@ -113,7 +113,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
     setIsPrompting(true);
     const link = document.createElement("a");
-    link.href = "/Top Food.apk";
+    link.href = "/top-food.apk";
     link.setAttribute("download", downloadFileName);
     link.style.display = "none";
     document.body.appendChild(link);
@@ -368,7 +368,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                       ? "Baixando..."
                       : isStore && currentStoreName
                       ? `Baixar APK (${currentStoreName})`
-                      : "Baixar Top Food.apk"}
+                      : "Baixar top-food.apk"}
                   </span>
                 </button>
                 <div className="pt-1 text-[11px] text-gray-500 dark:text-gray-400">
@@ -404,7 +404,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                         onClick={() => triggerApkDownload(isStore, currentStoreName)}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:text-white transition cursor-pointer"
                       >
-                        <Download className="h-3.5 w-3.5" /> Baixar Top Food.apk
+                        <Download className="h-3.5 w-3.5" /> Baixar top-food.apk
                       </button>
                     </div>
                   </div>
