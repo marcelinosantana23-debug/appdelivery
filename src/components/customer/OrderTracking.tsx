@@ -5,7 +5,6 @@ import { formatPrice, formatTableDisplay, formatTableNumberOnly } from "@/utils/
 import { useStore } from "@/context/StoreContext";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus } from "@/utils/orderStorage";
-import { normalizeProductImage, handleImageError } from "@/utils/imageUtils";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { playOrderStatusUpdateChime, unlockAudioContext } from "@/utils/audio";
 
@@ -18,9 +17,6 @@ interface OrderTrackingProps {
 export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrackingProps) {
   const { config } = useStore();
   const [order, setOrder] = useState<Order>(initialOrder);
-  const [isLoadingOrderDetails, setIsLoadingOrderDetails] = useState<boolean>(() => {
-    return !initialOrder?.items || initialOrder.items.length === 0;
-  });
   const [lastCheckTime, setLastCheckTime] = useState<string>(() => {
     return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   });
@@ -136,7 +132,6 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
         console.warn("Aviso na carga inicial de status:", err);
       } finally {
         if (isMounted) {
-          setIsLoadingOrderDetails(false);
           // Libera para tocar áudio apenas em transições subsequentes
           setTimeout(() => {
             if (isMounted) {
@@ -364,50 +359,68 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
 
         {/* Order items */}
         <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-sm font-bold text-gray-700">Itens do pedido</h2>
+          <h2 className="mb-3 text-sm font-bold text-gray-700">Itens do pedido</h2>
 
-          {isLoadingOrderDetails && (!order?.items || order.items.length === 0) ? (
-            <div className="py-8 flex flex-col items-center justify-center gap-2.5 text-gray-400">
-              <RefreshCw className="h-6 w-6 animate-spin text-amber-500" />
-              <span className="text-xs font-medium">Carregando itens do pedido...</span>
-            </div>
-          ) : !Array.isArray(order?.items) || order.items.length === 0 ? (
-            <div className="py-6 text-center text-xs text-gray-400 bg-gray-50/50 rounded-xl">
+          {!Array.isArray(order?.items) || order.items.length === 0 ? (
+            <div className="py-4 text-center text-xs text-gray-400 bg-gray-50/50 rounded-xl">
               Nenhum item listado neste pedido
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="divide-y divide-gray-100">
               {(order?.items || []).map((item, idx) => {
+                const quantity = item?.quantity || 1;
                 const productName = item?.product?.name || (item as any)?.name || "Item do pedido";
-                const productImage = item?.product?.image || (item as any)?.image;
-                const productCategory = item?.product?.category || (item as any)?.category || "lanches";
-                const selectedOptions = Array.isArray(item?.selectedOptions) ? item.selectedOptions : [];
+                const selectedOptions = Array.isArray(item?.selectedOptions)
+                  ? item.selectedOptions
+                  : Array.isArray((item as any)?.options)
+                  ? (item as any)?.options
+                  : [];
+
+                const basePrice = Number(item?.product?.price ?? (item as any)?.price ?? (item as any)?.unit_price ?? 0);
+                const optionsPrice = selectedOptions.reduce(
+                  (acc: number, opt: any) => acc + (Number(opt?.price) || 0),
+                  0
+                );
+                const itemTotal = (item as any)?.totalPrice ?? (item as any)?.total_price ?? ((basePrice + optionsPrice) * quantity);
 
                 return (
-                  <div key={item?.id || idx} className="flex gap-3">
-                    <img
-                      src={normalizeProductImage(productImage, productCategory, productName)}
-                      alt={productName}
-                      onError={(e) => handleImageError(e, productCategory, productName)}
-                      className="h-14 w-14 rounded-lg object-cover bg-gray-100 shrink-0"
-                    />
+                  <div key={item?.id || idx} className="py-2.5 first:pt-0 last:pb-0 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-800 truncate">
-                        {item?.quantity || 1}x {productName}
+                      <p className="text-sm font-medium text-gray-800 break-words leading-snug">
+                        <span className="font-bold text-gray-900 mr-1.5">{quantity}x</span>
+                        {productName}
                       </p>
                       {selectedOptions.length > 0 && (
-                        <ul className="mt-0.5 space-y-0.5">
-                          {selectedOptions.map((opt, optIdx) => (
-                            <li key={opt?.id || optIdx} className="text-xs text-gray-400 truncate">
-                              {opt?.name || String(opt)}
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="mt-1 space-y-0.5">
+                          {selectedOptions.map((opt: any, optIdx: number) => {
+                            const optName = opt?.name || String(opt);
+                            const optPrice = Number(opt?.price) || 0;
+                            return (
+                              <p key={opt?.id || optIdx} className="text-xs text-gray-500 leading-tight">
+                                • {optName}{optPrice > 0 ? ` (+${formatPrice(optPrice, config)})` : ""}
+                              </p>
+                            );
+                          })}
+                        </div>
                       )}
                       {item?.notes && (
-                        <p className="mt-0.5 text-xs italic text-gray-400 break-words">"{item.notes}"</p>
+                        <p className="mt-1 text-xs italic text-gray-500 break-words leading-tight">
+                          Obs: {item.notes}
+                        </p>
                       )}
                     </div>
+                    {itemTotal > 0 && (
+                      <div className="text-right shrink-0 pt-0.5">
+                        <span className="text-sm font-semibold text-gray-800">
+                          {formatPrice(itemTotal, config)}
+                        </span>
+                        {quantity > 1 && basePrice > 0 && (
+                          <p className="text-[10px] text-gray-400">
+                            {formatPrice(basePrice + optionsPrice, config)} un.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
