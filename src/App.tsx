@@ -517,29 +517,25 @@ function AppContent() {
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       try {
-        const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
-        if (!isExplicitPortal) {
-          // 3. REDIRECIONAMENTO AO ABRIR O APLICATIVO:
-          // Ao iniciar o app no celular, verifique o 'loja_salva' no localStorage:
-          // * Se existir o ID de uma loja, redirecione imediatamente para a página dessa loja (/loja/ID).
-          // * Se estiver vazio/nulo, mantenha o usuário na vitrine principal do Top Food (/).
-          const lojaSalva = (
-            localStorage.getItem("loja_salva") ||
-            ""
-          ).trim();
+        // Ao iniciar o app no celular, verifica o 'loja_salva' no localStorage:
+        // * Se existir o ID de uma loja, redireciona imediatamente para a página dessa loja (/loja/ID).
+        // * Se estiver vazio/nulo, mantém o usuário na vitrine principal do Top Food (/).
+        const lojaSalva = (
+          localStorage.getItem("loja_salva") ||
+          ""
+        ).trim();
 
-          if (
-            lojaSalva &&
-            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
-          ) {
-            const targetRoute = `/loja/${lojaSalva}`;
-            try {
-              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", targetRoute);
-            } catch (_err) {
-              // ignore history state error
-            }
-            return "menu";
+        if (
+          lojaSalva &&
+          !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
+        ) {
+          const targetRoute = localStorage.getItem("loja_salva_link") || `/loja/${lojaSalva}`;
+          try {
+            window.history.replaceState({ view: "menu", slug: lojaSalva }, "", targetRoute);
+          } catch (_err) {
+            // ignore history state error
           }
+          return "menu";
         }
       } catch (_err) {
         // ignore
@@ -553,34 +549,30 @@ function AppContent() {
 
   const [view, setView] = useState<View>(getInitialView);
 
-  // 3. REDIRECIONAMENTO AO ABRIR O APLICATIVO:
-  // Ao iniciar o app no celular, verifique o 'loja_salva' no localStorage:
-  // * Se existir o ID de uma loja, redirecione imediatamente para a página dessa loja (/loja/ID).
-  // * Se estiver vazio/nulo, mantenha o usuário na vitrine principal do Top Food (/).
+  // Redirecionamento ao abrir o aplicativo:
+  // Se existir 'loja_salva' no localStorage e o app abriu na raiz, abre direto na loja salva
   useEffect(() => {
     if (typeof window === "undefined") return;
     const path = window.location.pathname.toLowerCase();
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       try {
-        const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
-        if (!isExplicitPortal) {
-          const lojaSalva = (
-            localStorage.getItem("loja_salva") ||
-            ""
-          ).trim();
+        const lojaSalva = (
+          localStorage.getItem("loja_salva") ||
+          ""
+        ).trim();
 
-          if (
-            lojaSalva &&
-            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
-          ) {
-            selectTenant(lojaSalva);
-            setView("menu");
-            try {
-              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", `/loja/${lojaSalva}`);
-            } catch (_err) {
-              // ignore history state error
-            }
+        if (
+          lojaSalva &&
+          !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
+        ) {
+          selectTenant(lojaSalva);
+          setView("menu");
+          const targetRoute = localStorage.getItem("loja_salva_link") || `/loja/${lojaSalva}`;
+          try {
+            window.history.replaceState({ view: "menu", slug: lojaSalva }, "", targetRoute);
+          } catch (_err) {
+            // ignore history state error
           }
         }
       } catch (err) {
@@ -601,6 +593,17 @@ function AppContent() {
           } else if (targetView === "portal") {
             window.history.pushState({ view: "portal" }, "", "/");
             sessionStorage.setItem("topfood_explicit_portal_nav", "true");
+            // Ao navegar/clicar na Home, limpa o localStorage para abrir na vitrine principal do Top Food
+            try {
+              localStorage.setItem("loja_salva", "");
+              localStorage.removeItem("loja_salva");
+              localStorage.setItem("loja_salva_link", "");
+              localStorage.removeItem("loja_salva_link");
+              localStorage.removeItem("topfood_saved_store_route");
+              localStorage.removeItem("topfood_last_store_slug");
+            } catch (_storageErr) {
+              // ignore
+            }
             resetToPortalTheme();
           } else {
             sessionStorage.removeItem("topfood_explicit_portal_nav");

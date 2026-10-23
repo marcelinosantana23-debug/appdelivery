@@ -101,6 +101,8 @@ export function Header(props: HeaderProps = {}) {
               <PWAInstallButton
                 variant="header"
                 storeName={config.name}
+                storeSlug={config.slug || currentTenant?.slug}
+                storeId={config.slug || config.id || currentTenant?.slug || currentTenant?.id}
                 className="h-7 px-2 py-1 text-[10px] sm:text-xs"
               />
               <GlobalReloadButton

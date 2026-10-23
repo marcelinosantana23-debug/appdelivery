@@ -166,16 +166,20 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     if (typeof window !== "undefined") {
       try {
         if (isStore && idDaLoja) {
-          // Se o usuário clicar em "Instalar" DENTRO de uma loja específica:
-          // Salva o ID/slug dessa loja no localStorage
+          // Ao clicar no botão de instalar dentro de uma loja:
+          // Salva o ID e o link dessa loja no localStorage para que, quando o app for instalado e aberto,
+          // ele redirecione e abra direto nessa mesma loja.
           localStorage.setItem("loja_salva", idDaLoja);
+          localStorage.setItem("loja_salva_link", `/loja/${idDaLoja}`);
           localStorage.setItem("topfood_last_store_slug", idDaLoja);
           localStorage.setItem("topfood_saved_store_route", `/loja/${idDaLoja}`);
           sessionStorage.removeItem("topfood_explicit_portal_nav");
         } else {
-          // Se o usuário clicar em "Instalar" na TELA INICIAL (Home do Top Food):
-          // Limpa qualquer loja salva
+          // Ao clicar na Home, limpa o localStorage para abrir na vitrine principal do Top Food
           localStorage.setItem("loja_salva", "");
+          localStorage.removeItem("loja_salva");
+          localStorage.setItem("loja_salva_link", "");
+          localStorage.removeItem("loja_salva_link");
           localStorage.removeItem("topfood_saved_store_route");
           localStorage.removeItem("topfood_last_store_slug");
         }
