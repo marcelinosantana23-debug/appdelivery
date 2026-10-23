@@ -1,6 +1,6 @@
 /**
  * Top Food Delivery - Componente Oficial do Botão de Instalação PWA / APK
- * Atualizado para download direto: /top-food.apk com nome dinâmico da loja
+ * Suporte a APK dinâmico de loja (/${idDaLoja}.apk) com fallback seguro para /top-food.apk
  */
 
 import React, { useState, useEffect } from "react";
@@ -65,19 +65,17 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     return null;
   }
 
-  // Identifica se está navegando na vitrine de um lojista e extrai o nome
-  const getStoreInfo = (): { isStore: boolean; storeName: string } => {
+  // 1 & 2. Identifica se está navegando na vitrine de um lojista e extrai ID e Nome
+  const getStoreInfo = (): { isStore: boolean; storeName: string; storeId: string } => {
     if (typeof window === "undefined") {
-      return { isStore: false, storeName: "" };
+      return { isStore: false, storeName: "", storeId: "" };
     }
 
-    if (propStoreName && propStoreName.trim()) {
-      return { isStore: true, storeName: propStoreName.trim() };
-    }
+    const path = window.location.pathname;
+    const lowerPath = path.toLowerCase();
+    const cleanPath = lowerPath.replace(/\/+$/, "");
 
-    const path = window.location.pathname.toLowerCase();
-    const cleanPath = path.replace(/\/+$/, "");
-
+    // Rotas gerais que NÃO pertencem a uma loja específica (Portal e Painéis Administrativos)
     const isPortalRoute =
       cleanPath === "" ||
       cleanPath === "/" ||
@@ -85,41 +83,91 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       cleanPath === "/topfood";
 
     const isAdminRoute =
-      path.startsWith("/admin") ||
-      path.startsWith("/painel") ||
-      path.startsWith("/superadmin") ||
-      path.startsWith("/super-admin") ||
-      path.startsWith("/api");
+      lowerPath.startsWith("/admin") ||
+      lowerPath.startsWith("/painel") ||
+      lowerPath.startsWith("/superadmin") ||
+      lowerPath.startsWith("/super-admin") ||
+      lowerPath.startsWith("/api") ||
+      lowerPath.startsWith("/health");
 
     if (isPortalRoute || isAdminRoute) {
-      return { isStore: false, storeName: "" };
+      return { isStore: false, storeName: "", storeId: "" };
     }
 
+    // Extrai o slug/ID da loja a partir do caminho /loja/:slug ou /:slug
+    let extractedSlug = "";
+    const match = path.match(/^\/loja\/([^/?#]+)/i);
+    if (match && match[1]) {
+      extractedSlug = decodeURIComponent(match[1]).toLowerCase().trim();
+    } else {
+      const firstSegment = path.replace(/^\/+|\/+$/g, "").split("/")[0];
+      if (
+        firstSegment &&
+        !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "carrinho", "checkout", "rastreio"].includes(firstSegment.toLowerCase())
+      ) {
+        extractedSlug = decodeURIComponent(firstSegment).toLowerCase().trim();
+      }
+    }
+
+    const finalId =
+      extractedSlug ||
+      (currentTenant?.slug && currentTenant.slug.trim()) ||
+      (config?.slug && config.slug.trim() !== "topfood" && config.slug.trim()) ||
+      "";
+
     const detectedName =
+      (propStoreName && propStoreName.trim()) ||
       (currentTenant?.name && currentTenant.name.trim()) ||
       (config?.name && config.name.trim() !== "Top Food" && config.name.trim()) ||
       "";
 
-    if (detectedName) {
-      return { isStore: true, storeName: detectedName };
+    if (finalId || detectedName) {
+      return {
+        isStore: true,
+        storeName: detectedName || finalId,
+        storeId: finalId,
+      };
     }
 
-    return { isStore: false, storeName: "" };
+    return { isStore: false, storeName: "", storeId: "" };
   };
 
-  const { isStore, storeName: currentStoreName } = getStoreInfo();
-  const nomeDaLoja = isStore ? currentStoreName : "";
+  const { isStore, storeName, storeId: idDaLoja } = getStoreInfo();
+  const nomeDaLoja = isStore ? storeName : "";
 
-  // Manipulador de clique: salva rota no localStorage e trata iOS
+  // 1 & 2. Define o link dinâmico: se em loja específica aponta para /${idDaLoja}.apk; na inicial para /top-food.apk
+  const targetHref = isStore && idDaLoja ? `/${idDaLoja}.apk` : "/top-food.apk";
+
+  // Função auxiliar para disparar o download nativo via elemento <a> invisível
+  const triggerApkDownload = (apkUrl: string, fileName: string) => {
+    setIsPrompting(true);
+    const link = document.createElement("a");
+    link.href = apkUrl;
+    link.setAttribute("download", fileName);
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      try {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+      } catch (_err) {
+        // ignore
+      }
+      setIsPrompting(false);
+    }, 1500);
+  };
+
+  // Manipulador de clique com Regra de Segurança (Fallback para erro 404)
   const handleInstallClick = async (e?: React.MouseEvent) => {
     // Salva a rota atual no localStorage para redirecionar ao reabrir o app
     if (isStore && typeof window !== "undefined") {
       try {
         const currentRoute = window.location.pathname + window.location.search;
         localStorage.setItem("topfood_saved_store_route", currentRoute);
-        const storeSlug = config?.slug || currentTenant?.slug || "";
-        if (storeSlug) {
-          localStorage.setItem("topfood_last_store_slug", storeSlug);
+        if (idDaLoja) {
+          localStorage.setItem("topfood_last_store_slug", idDaLoja);
         }
         sessionStorage.removeItem("topfood_explicit_portal_nav");
       } catch (err) {
@@ -138,11 +186,38 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       return;
     }
 
-    // Feedback visual breve durante o download nativo do arquivo
-    setIsPrompting(true);
-    setTimeout(() => {
-      setIsPrompting(false);
-    }, 1500);
+    // 4. ATRIBUTO DE DOWNLOAD
+    const downloadFileName = nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk";
+
+    // 2 & 3. Se estiver em uma loja específica, checa se o APK existe; se der 404, faz fallback para /top-food.apk
+    if (isStore && idDaLoja) {
+      if (e) {
+        e.preventDefault();
+      }
+      setIsPrompting(true);
+      const storeApkUrl = `/${idDaLoja}.apk`;
+
+      try {
+        const checkRes = await fetch(storeApkUrl, { method: "HEAD", cache: "no-store" });
+        // Se retornar 404 ou erro, faz fallback automático para o APK padrão
+        if (checkRes.status === 404 || !checkRes.ok) {
+          console.warn(`APK da loja '${storeApkUrl}' não encontrado (404). Baixando APK padrão /top-food.apk.`);
+          triggerApkDownload("/top-food.apk", downloadFileName);
+        } else {
+          triggerApkDownload(storeApkUrl, downloadFileName);
+        }
+      } catch {
+        // Fallback em caso de falha de conexão
+        triggerApkDownload("/top-food.apk", downloadFileName);
+      }
+      return;
+    }
+
+    // 1. CLIENTE NA TELA INICIAL (TOP FOOD)
+    if (e) {
+      e.preventDefault();
+    }
+    triggerApkDownload("/top-food.apk", "top-food.apk");
   };
 
   return (
@@ -151,8 +226,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       {variant === "header" && (
         <a
           id="btn-pwa-install-header"
-          href="/top-food.apk"
-          download="top-food.apk"
+          href={targetHref}
+          download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
           onClick={handleInstallClick}
           className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer whitespace-nowrap h-7 sm:h-7.5 ${className}`}
           title="Instalar Top Food no seu dispositivo"
@@ -196,8 +271,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             </div>
             <a
               id="btn-pwa-install-banner"
-              href="/top-food.apk"
-              download="top-food.apk"
+              href={targetHref}
+              download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
               onClick={handleInstallClick}
               className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
             >
@@ -338,25 +413,16 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   No Android, você pode baixar o aplicativo diretamente em formato APK para instalar no seu aparelho:
                 </p>
                 <a
-                  href="/top-food.apk"
-                  download="top-food.apk"
-                  onClick={() => {
-                    if (isStore && typeof window !== "undefined") {
-                      try {
-                        localStorage.setItem(
-                          "topfood_saved_store_route",
-                          window.location.pathname + window.location.search
-                        );
-                      } catch (_err) {
-                        // ignore
-                      }
-                    }
-                  }}
+                  href={targetHref}
+                  download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
+                  onClick={handleInstallClick}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-4 shadow-sm transition active:scale-95 cursor-pointer"
                 >
                   <Download className="h-4 w-4" />
                   <span>
-                    {nomeDaLoja
+                    {isPrompting
+                      ? "Baixando..."
+                      : nomeDaLoja
                       ? `Baixar APK (${nomeDaLoja})`
                       : "Baixar top-food.apk"}
                   </span>
@@ -390,11 +456,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     Ou baixe o arquivo APK diretamente para o seu aparelho Android:
                     <div className="mt-2">
                       <a
-                        href="/top-food.apk"
-                        download="top-food.apk"
+                        href={targetHref}
+                        download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
+                        onClick={handleInstallClick}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:text-white transition cursor-pointer"
                       >
-                        <Download className="h-3.5 w-3.5" /> Baixar top-food.apk
+                        <Download className="h-3.5 w-3.5" /> Baixar APK
                       </a>
                     </div>
                   </div>
