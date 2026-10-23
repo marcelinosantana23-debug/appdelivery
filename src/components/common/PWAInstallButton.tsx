@@ -54,11 +54,62 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     return null;
   }
 
-  // 1. Tenta acionar primeiramente o evento nativo beforeinstallprompt
-  // 2. Se o navegador bloquear ou não suportar (Mi Browser, Safari, embedded webviews), abre o modal com instruções precisas
+  // Detecção precisa em tempo de execução
+  const isAndroidDevice = isAndroid || isXiaomi;
+  const isIOSDevice = isIOS;
+
+  // Função utilitária para garantir download direto do APK no Android
+  const triggerApkDownload = () => {
+    if (typeof document !== "undefined") {
+      const link = document.createElement("a");
+      link.href = "/top-food.apk";
+      link.setAttribute("download", "top-food.apk");
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   const handleInstallClick = async (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
+    }
+
+    // 3. CELULARES ANDROID:
+    // Ao clicar no botão de instalação, inicie o download direto do arquivo existente na raiz:
+    // href="/top-food.apk" download="top-food.apk"
+    if (isAndroidDevice) {
+      const target = e?.currentTarget as HTMLElement | undefined;
+      const isAnchorWithHref =
+        target?.tagName.toLowerCase() === "a" &&
+        target.getAttribute("href") === "/top-food.apk";
+
+      // Se for acionado por botão ou evento sintético, dispara o download via DOM
+      if (!isAnchorWithHref) {
+        if (e) {
+          e.preventDefault();
+        }
+        triggerApkDownload();
+      }
+      return;
+    }
+
+    // 2. IPHONE / IPAD (iOS):
+    // Mantenha a exibição do tutorial nativo orientando o usuário a "Compartilhar > Adicionar à Tela Inicial".
+    if (isIOSDevice) {
+      if (e) {
+        e.preventDefault();
+      }
+      setActiveTab("ios");
+      setShowModal(true);
+      return;
+    }
+
+    // 1. COMPUTADOR (Desktop):
+    // Mantenha o fluxo nativo do PWA intacto (exiba o prompt nativo de instalação do navegador antes do clique ou abra a instalação nativa do PWA). Não force download de APK no PC.
+    if (e) {
+      e.preventDefault();
     }
 
     const promptEvent =
@@ -86,42 +137,58 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       }
     }
 
-    // Fallback inteligente: exibe o modal discreto centralizado com o passo a passo
-    if (isIOS) {
-      setActiveTab("ios");
-    } else if (isAndroid || isXiaomi) {
-      setActiveTab("android");
-    } else {
-      setActiveTab("desktop");
-    }
+    // Fallback no Desktop: se o navegador ainda não exibiu o prompt nativo ou já expirou,
+    // exibe o passo a passo nativo de instalação no Computador (barra de endereço ou menu)
+    setActiveTab("desktop");
     setShowModal(true);
   };
 
   return (
     <>
       {variant === "header" && (
-        <button
-          id="btn-pwa-install-header"
-          type="button"
-          onClick={handleInstallClick}
-          disabled={isPrompting}
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer disabled:opacity-75 whitespace-nowrap h-7 sm:h-7.5 ${className}`}
-          title="Instalar Top Food no seu dispositivo"
-        >
-          <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
-          {label ? (
-            <span>{isPrompting ? "Instalando..." : label}</span>
-          ) : (
-            <>
-              <span className="hidden xs:inline">
-                {isPrompting ? "Instalando..." : "Instalar App"}
-              </span>
-              <span className="xs:hidden">
-                {isPrompting ? "..." : "Instalar"}
-              </span>
-            </>
-          )}
-        </button>
+        isAndroidDevice ? (
+          <a
+            id="btn-pwa-install-header"
+            href="/top-food.apk"
+            download="top-food.apk"
+            onClick={handleInstallClick}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer whitespace-nowrap h-7 sm:h-7.5 ${className}`}
+            title="Baixar Top Food para Android"
+          >
+            <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
+            {label ? (
+              <span>{label}</span>
+            ) : (
+              <>
+                <span className="hidden xs:inline">Instalar App</span>
+                <span className="xs:hidden">Instalar</span>
+              </>
+            )}
+          </a>
+        ) : (
+          <button
+            id="btn-pwa-install-header"
+            type="button"
+            onClick={handleInstallClick}
+            disabled={isPrompting}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer disabled:opacity-75 whitespace-nowrap h-7 sm:h-7.5 ${className}`}
+            title="Instalar Top Food no seu dispositivo"
+          >
+            <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
+            {label ? (
+              <span>{isPrompting ? "Instalando..." : label}</span>
+            ) : (
+              <>
+                <span className="hidden xs:inline">
+                  {isPrompting ? "Instalando..." : "Instalar App"}
+                </span>
+                <span className="xs:hidden">
+                  {isPrompting ? "..." : "Instalar"}
+                </span>
+              </>
+            )}
+          </button>
+        )
       )}
 
       {variant === "banner" && (
@@ -142,16 +209,29 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              id="btn-pwa-install-banner"
-              type="button"
-              onClick={handleInstallClick}
-              disabled={isPrompting}
-              className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-75"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>{isPrompting ? "Instalando..." : "Instalar App"}</span>
-            </button>
+            {isAndroidDevice ? (
+              <a
+                id="btn-pwa-install-banner"
+                href="/top-food.apk"
+                download="top-food.apk"
+                onClick={handleInstallClick}
+                className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Instalar App</span>
+              </a>
+            ) : (
+              <button
+                id="btn-pwa-install-banner"
+                type="button"
+                onClick={handleInstallClick}
+                disabled={isPrompting}
+                className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-75"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>{isPrompting ? "Instalando..." : "Instalar App"}</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -268,6 +348,17 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   <div className="pt-0.5 leading-relaxed">
                     Toque em <strong>Adicionar</strong> ou <strong>Instalar</strong>. Pronto! O ícone do Top Food estará na sua tela inicial.
                   </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-200 dark:border-slate-700">
+                  <a
+                    href="/top-food.apk"
+                    download="top-food.apk"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary py-2 px-3 text-xs font-bold text-white shadow hover:bg-primary-dark transition active:scale-98 cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Baixar APK Direto (top-food.apk)</span>
+                  </a>
                 </div>
               </div>
             )}

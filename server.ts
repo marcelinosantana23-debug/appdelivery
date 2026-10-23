@@ -9,7 +9,7 @@ import { ASSET_LINKS_CONTENT } from "./src/server/pwaAssets";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Carrega credenciais do Super Admin e alterações de lojas persistidas em disco (para ambiente Node.js / preview)
   try {
@@ -226,6 +226,38 @@ async function startServer() {
   // Dynamic manifest redirect for stores: /manifest/:slug.json -> /api/manifest/:slug.json
   app.get("/manifest/:slug", (req, res) => {
     res.redirect(`/api/manifest/${req.params.slug}`);
+  });
+
+  // Dedicated Android APK download route: specific store APK (/:storeSlug.apk) with automatic fallback to /top-food.apk
+  app.get(["/top-food.apk", "/:storeSlug.apk"], (req, res, next) => {
+    const rawSlug = req.params.storeSlug || "top-food";
+
+    // 1. Procura o arquivo específico da loja (ex: /pizzaria-vip.apk)
+    if (rawSlug !== "top-food") {
+      const storeCandidates = [
+        path.join(process.cwd(), "public", `${rawSlug}.apk`),
+        path.join(process.cwd(), "dist", `${rawSlug}.apk`),
+      ];
+      for (const file of storeCandidates) {
+        if (fs.existsSync(file)) {
+          res.setHeader("Content-Type", "application/vnd.android.package-archive");
+          return res.sendFile(file);
+        }
+      }
+    }
+
+    // 2. REGRA DE SEGURANÇA (FALLBACK): Se o APK da loja não existir ou for a rota oficial, entrega /top-food.apk
+    const defaultCandidates = [
+      path.join(process.cwd(), "public", "top-food.apk"),
+      path.join(process.cwd(), "dist", "top-food.apk"),
+    ];
+    for (const file of defaultCandidates) {
+      if (fs.existsSync(file)) {
+        res.setHeader("Content-Type", "application/vnd.android.package-archive");
+        return res.sendFile(file);
+      }
+    }
+    next();
   });
 
   const db = new Database();

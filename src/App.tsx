@@ -21,6 +21,7 @@ import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
 import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
 import { getActiveOrderData } from "@/utils/orderStorage";
+import { processSessionNavigation, clearWebStoreSession } from "@/utils/sessionNavigation";
 
 type View = "portal" | "menu" | "checkout" | "tracking" | "admin" | "superadmin";
 
@@ -487,8 +488,22 @@ function AppContent() {
     if (typeof window === "undefined") return "portal";
     const path = window.location.pathname.toLowerCase();
 
-    // SEPARAÇÃO CRÍTICA DE ROTAS:
-    // Apenas rotas administrativas explícitas podem ativar as telas de login administrativo.
+    // 1. Processa regras estritas de sessão e navegação Web vs PWA Standalone
+    const sessionNav = processSessionNavigation();
+
+    // MODO STANDALONE / PWA INSTALADO:
+    // Se abriu na raiz e tem loja salva no app instalado, permite o redirecionamento automático
+    if (sessionNav.isStandalone && sessionNav.pwaRedirectSlug) {
+      return "menu";
+    }
+
+    // NAVEGAÇÃO WEB:
+    // Se a regra determinou forçar a Home ('/') no reset de sessão ou acesso à raiz
+    if (sessionNav.shouldForceHome) {
+      return "portal";
+    }
+
+    // 2. SEPARAÇÃO CRÍTICA DE ROTAS ADMINISTRATIVAS:
     if (
       path === "/super-admin" ||
       path === "/superadmin" ||
@@ -507,20 +522,25 @@ function AppContent() {
       return "admin";
     }
 
-    // Se houver query param explícito (?loja= ou ?store= ou ?tenant=)
+    // 3. Query params explícitos (?loja= ou ?store= ou ?tenant=)
     const params = new URLSearchParams(window.location.search);
     if (params.get("loja") || params.get("store") || params.get("tenant")) {
       return "menu";
     }
 
-    // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
+    // 4. Se a rota for raiz ou /topfood ou /portal -> SEMPRE Home do Portal Top Food
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       return "portal";
     }
 
-    // Caso contrário, é uma rota de vitrine (ex: /ms-preparacoes, /loja/:slug, /carrinho, /checkout, /rastreio)
-    return "menu";
+    // 5. Link direto de vitrine acessado pelo usuário (/loja/:slug)
+    if (path.startsWith("/loja/")) {
+      return "menu";
+    }
+
+    // Fallback padrão seguro é SEMPRE Home
+    return "portal";
   };
 
   const [view, setView] = useState<View>(getInitialView);
@@ -536,6 +556,7 @@ function AppContent() {
             window.history.pushState({ view: "admin" }, "", "/painel");
           } else if (targetView === "portal") {
             window.history.pushState({ view: "portal" }, "", "/");
+            clearWebStoreSession();
             resetToPortalTheme();
           } else {
             const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
@@ -549,6 +570,24 @@ function AppContent() {
     },
     [currentTenant?.slug, config.slug, resetToPortalTheme]
   );
+
+  // Sincronização inicial de rotas e garantia de Home na Web ao reabrir navegador
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sessionNav = processSessionNavigation();
+    if (sessionNav.isStandalone && sessionNav.pwaRedirectSlug && (window.location.pathname === "/" || window.location.pathname === "")) {
+      navigateTo("menu", sessionNav.pwaRedirectSlug);
+    } else if (sessionNav.shouldForceHome && window.location.pathname !== "/") {
+      try {
+        window.history.replaceState({ view: "portal" }, "", "/");
+      } catch {
+        // ignore
+      }
+      clearWebStoreSession();
+      resetToPortalTheme();
+      setView("portal");
+    }
+  }, [navigateTo, resetToPortalTheme]);
 
   // Transição direta e unificada do Super Admin para gerenciamento da loja (1 único clique)
   const handleSuperAdminManageStore = useCallback(
@@ -600,27 +639,24 @@ function AppContent() {
             selectTenant(qSlug);
             setView("menu");
           } else {
+            clearWebStoreSession();
             resetToPortalTheme();
             setView("portal");
           }
         } else {
-          // É uma rota de loja direta (ex: /loja/:slug ou /ms-preparacoes)
+          // É uma rota de loja direta (ex: /loja/:slug)
           let slug = "";
           const match = path.match(/^\/loja\/([^/?#]+)/i);
           if (match && match[1]) {
             slug = decodeURIComponent(match[1]).toLowerCase();
-          } else {
-            const firstSeg = path.replace(/^\/+|\/+$/g, "").split("/")[0];
-            if (
-              firstSeg &&
-              !["admin", "painel", "superadmin", "super-admin", "api", "health", "carrinho", "checkout", "rastreio"].includes(firstSeg)
-            ) {
-              slug = firstSeg;
-            }
           }
           if (slug) {
             selectTenant(slug);
             setView("menu");
+          } else {
+            clearWebStoreSession();
+            resetToPortalTheme();
+            setView("portal");
           }
         }
       }

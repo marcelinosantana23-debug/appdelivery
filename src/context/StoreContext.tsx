@@ -4,6 +4,13 @@ import { defaultStoreConfig, type StoreConfig } from "@/config/store";
 import { categories as defaultMockCategories } from "@/data/mockData";
 import { extraTenants, extraProducts, extraAddonGroups } from "@/server/seedData";
 import {
+  isStandaloneApp,
+  saveActiveStore,
+  clearWebStoreSession,
+  PWA_LAST_STORE_KEY,
+  SESSION_STORE_KEY,
+} from "@/utils/sessionNavigation";
+import {
   loadCachedHomeData,
   saveCachedHomeData,
   loadCachedStoreData,
@@ -399,9 +406,59 @@ function loadSavedCart(storeSlug?: string): CartItem[] {
   return [];
 }
 
+function getSavedTenantSession(): Tenant | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const fromSession = sessionStorage.getItem("topfood_tenant_session");
+    if (fromSession) return JSON.parse(fromSession);
+    if (isStandaloneApp()) {
+      const fromLocal = localStorage.getItem("delivery_tenant_session");
+      if (fromLocal) return JSON.parse(fromLocal);
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function persistTenantSession(tenant: Tenant | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (!tenant) {
+      sessionStorage.removeItem("topfood_tenant_session");
+      localStorage.removeItem("delivery_tenant_session");
+      return;
+    }
+    const str = JSON.stringify(tenant);
+    if (isStandaloneApp()) {
+      localStorage.setItem("delivery_tenant_session", str);
+    } else {
+      sessionStorage.setItem("topfood_tenant_session", str);
+      localStorage.removeItem("delivery_tenant_session");
+      localStorage.removeItem("topfood_last_store_slug");
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function getInitialUrlSlug(): string {
   if (typeof window === "undefined") return "";
   const path = window.location.pathname;
+
+  // Em modo Standalone PWA: se abrir na raiz e tiver loja salva no app instalado, carrega ela
+  if (isStandaloneApp()) {
+    const clean = path.replace(/\/+$/, "").toLowerCase();
+    if (clean === "" || clean === "/" || clean === "/portal" || clean === "/topfood") {
+      const pwaSlug =
+        localStorage.getItem(PWA_LAST_STORE_KEY) ||
+        localStorage.getItem("topfood_last_store_slug") ||
+        "";
+      if (pwaSlug && !RESERVED_SLUGS.has(pwaSlug.toLowerCase())) {
+        return pwaSlug.toLowerCase();
+      }
+    }
+  }
 
   // 1. /loja/:slug (incluindo sub-rotas como /loja/:slug/carrinho, /loja/:slug/checkout, /loja/:slug/rastreio)
   const match = path.match(/^\/loja\/([^/?#]+)/i);
@@ -429,34 +486,25 @@ function getInitialUrlSlug(): string {
     if (!RESERVED_SLUGS.has(rawSlug)) return rawSlug;
   }
 
-  // 4. Se o lojista estiver logado ou recarregando (F5) no painel /admin ou /painel, recupera a loja da sessão
+  // 4. Se o lojista estiver logado no painel /admin ou /painel, recupera a loja da sessão
   if (path.startsWith("/admin") || path.startsWith("/painel")) {
     try {
-      const savedTenant =
-        sessionStorage.getItem("topfood_tenant_session") ||
-        localStorage.getItem("delivery_tenant_session");
-      if (savedTenant) {
-        const parsed = JSON.parse(savedTenant);
-        if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug)) return parsed.slug;
-      }
-      const savedUser =
-        sessionStorage.getItem("topfood_admin_session") ||
-        localStorage.getItem("delivery_user_session");
+      const savedTenant = getSavedTenantSession();
+      if (savedTenant?.slug && !RESERVED_SLUGS.has(savedTenant.slug)) return savedTenant.slug;
+      const savedUser = sessionStorage.getItem("topfood_admin_session");
       if (savedUser) {
         const user = JSON.parse(savedUser);
         if (user?.tenantId === "tenant-ms-preparacoes" || user?.email?.includes("marcelino")) {
           return "ms-preparacoes";
         }
       }
-      const last = localStorage.getItem("topfood_last_store_slug");
-      if (last && !RESERVED_SLUGS.has(last)) return last;
     } catch {
       // ignore
     }
     return "";
   }
 
-  // 5. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
+  // 5. Rota principal do Portal Top Food (/ ou /topfood ou /portal) -> SEMPRE VAZIO na Web (Home)
   const clean = path.replace(/\/+$/, "").toLowerCase();
   if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
     return "";
@@ -471,33 +519,11 @@ function getInitialUrlSlug(): string {
     clean === "acompanhamento" ||
     clean === "tracking"
   ) {
-    try {
-      const last = localStorage.getItem("topfood_last_store_slug");
-      if (last && !RESERVED_SLUGS.has(last)) return last;
-      const savedTenant =
-        sessionStorage.getItem("topfood_tenant_session") ||
-        localStorage.getItem("delivery_tenant_session");
-      if (savedTenant) {
-        const parsed = JSON.parse(savedTenant);
-        if (parsed?.slug && !RESERVED_SLUGS.has(parsed.slug)) return parsed.slug;
-      }
-    } catch {
-      // ignore
-    }
-    return "ms-preparacoes";
-  }
-
-  // 7. Direct single-segment path /:slug (quando não for rota reservada)
-  if (
-    path &&
-    path !== "/" &&
-    !path.startsWith("/api") &&
-    !path.startsWith("/health")
-  ) {
-    const direct = path.replace(/^\/+|\/+$/g, "");
-    if (direct && !direct.includes("/") && !RESERVED_SLUGS.has(direct.toLowerCase())) {
-      return decodeURIComponent(direct).toLowerCase();
-    }
+    const sessionStore = sessionStorage.getItem(SESSION_STORE_KEY);
+    if (sessionStore && !RESERVED_SLUGS.has(sessionStore)) return sessionStore;
+    const savedTenant = getSavedTenantSession();
+    if (savedTenant?.slug && !RESERVED_SLUGS.has(savedTenant.slug)) return savedTenant.slug;
+    return "";
   }
 
   return "";
@@ -518,20 +544,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return initialStoreCache.tenant;
     }
     try {
-      const saved =
-        sessionStorage.getItem("topfood_tenant_session") ||
-        localStorage.getItem("delivery_tenant_session");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (
-          parsed &&
-          (parsed.slug === initialSlug ||
-            parsed.id === initialSlug ||
-            (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
-            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
-        ) {
-          return parsed;
-        }
+      const saved = getSavedTenantSession();
+      if (
+        saved &&
+        (saved.slug === initialSlug ||
+          saved.id === initialSlug ||
+          (initialSlug === "ms-preparacoes" && saved.slug === "marcelino") ||
+          (initialSlug === "marcelino" && saved.slug === "ms-preparacoes"))
+      ) {
+        return saved;
       }
       const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
         (t) =>
@@ -557,21 +578,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return tenantToStoreConfig(initialStoreCache.tenant);
     }
     try {
-      const savedTenant =
-        sessionStorage.getItem("topfood_tenant_session") ||
-        localStorage.getItem("delivery_tenant_session");
-      if (savedTenant) {
-        const parsed = JSON.parse(savedTenant);
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          (parsed.slug === initialSlug ||
-            parsed.id === initialSlug ||
-            (initialSlug === "ms-preparacoes" && parsed.slug === "marcelino") ||
-            (initialSlug === "marcelino" && parsed.slug === "ms-preparacoes"))
-        ) {
-          return tenantToStoreConfig(parsed);
-        }
+      const savedTenant = getSavedTenantSession();
+      if (
+        savedTenant &&
+        typeof savedTenant === "object" &&
+        (savedTenant.slug === initialSlug ||
+          savedTenant.id === initialSlug ||
+          (initialSlug === "ms-preparacoes" && savedTenant.slug === "marcelino") ||
+          (initialSlug === "marcelino" && savedTenant.slug === "ms-preparacoes"))
+      ) {
+        return tenantToStoreConfig(savedTenant);
       }
       const fromList = (initialHomeCache?.tenants || loadCachedTenants()).find(
         (t) =>
@@ -1194,11 +1210,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (tenantRes.success && tenantRes.tenant) {
           const t = tenantRes.tenant;
           setCurrentTenant(t);
-          try {
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(t));
-          } catch {
-            // ignore
-          }
+          persistTenantSession(t);
           const storeCfg = tenantToStoreConfig(t);
           setConfig(storeCfg);
           applyThemeColors(storeCfg);
@@ -1387,6 +1399,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [platformSettings.primaryColor, currentTenant, currentSlug]);
 
   const resetToPortalTheme = useCallback(() => {
+    clearWebStoreSession();
     const portalPrimary = platformSettings?.primaryColor?.trim() || PORTAL_DEFAULT_THEME.primaryColor;
     applyPortalDefaultTheme(portalPrimary);
     setCurrentSlug("");
@@ -1447,26 +1460,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [cart, currentTenant?.slug, config?.slug, initialSlug]);
 
-  // Salva última loja visualizada para manter a rota após refresh
+  // Salva loja ativa respeitando rigorosamente a separação Web vs Standalone PWA
   useEffect(() => {
     const slug = currentTenant?.slug || config?.slug || currentSlug;
     if (slug && !RESERVED_SLUGS.has(slug)) {
-      try {
-        localStorage.setItem("topfood_last_store_slug", slug);
-      } catch {
-        // ignore
-      }
+      saveActiveStore(slug);
     }
   }, [currentTenant?.slug, config?.slug, currentSlug]);
 
   const selectTenant = useCallback(
     async (slugOrId: string, preloadedTenant?: Tenant) => {
       setCurrentSlug(slugOrId);
-      try {
-        localStorage.setItem("topfood_last_store_slug", slugOrId);
-      } catch {
-        // ignore
-      }
+      saveActiveStore(slugOrId);
       setCart(loadSavedCart(slugOrId));
 
       // 1. Verifica primeiro se existe `cache_store_[storeSlug]` VÁLIDO (com products.length > 0)
@@ -1499,11 +1504,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setAddonGroups(cachedStore.addonGroups);
         }
         setStoreNotFound(false);
-        try {
-          localStorage.setItem("delivery_tenant_session", JSON.stringify(targetTenant));
-        } catch {
-          // ignore
-        }
+        persistTenantSession(targetTenant);
       } else {
         setProducts([]);
         setIsLoadingStore(true);
@@ -1767,12 +1768,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             saveCachedFeaturedStores(next);
             return next;
           });
-          try {
-            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated.tenant));
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated.tenant));
-          } catch {
-            // ignore
-          }
+          persistTenantSession(updated.tenant);
           await Promise.all([
             refreshTenants(),
             refreshEstablishmentCategories(),
@@ -2670,12 +2666,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrentTenant((prev) => {
         if (prev && (prev.id === slugOrId || prev.slug === slugOrId)) {
           const updated = { ...prev, ...payload, updatedAt: Date.now() };
-          try {
-            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-          } catch {
-            // ignore
-          }
+          persistTenantSession(updated);
           return updated;
         }
         return prev;
@@ -2714,12 +2705,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               prev.slug === slugOrId)
           ) {
             const updated = { ...prev, ...savedTenant };
-            try {
-              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
+            persistTenantSession(updated);
             return updated;
           }
           return prev;
@@ -2798,12 +2784,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             nextDueDate,
             status: "active" as const,
           };
-          try {
-            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-          } catch {
-            // ignore
-          }
+          persistTenantSession(updated);
           return updated;
         }
         return prev;
@@ -2842,12 +2823,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               nextDueDate: resolvedNextDueDate,
               status: "active" as const,
             };
-            try {
-              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
+            persistTenantSession(updated);
             return updated;
           }
           return prev;
@@ -2878,12 +2854,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ...prev,
             monthlyFee,
           };
-          try {
-            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-          } catch {
-            // ignore
-          }
+          persistTenantSession(updated);
           return updated;
         }
         return prev;
@@ -2911,12 +2882,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ...res.tenant!,
               monthlyFee: resolvedFee,
             };
-            try {
-              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
+            persistTenantSession(updated);
             return updated;
           }
           return prev;
@@ -2974,12 +2940,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             nextDueDate: optimisticNextDueDate,
             status: "active" as const,
           };
-          try {
-            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-          } catch {
-            // ignore
-          }
+          persistTenantSession(updated);
           return updated;
         }
         return prev;
@@ -3015,12 +2976,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               nextDueDate: resolvedNextDueDate,
               status: "active" as const,
             };
-            try {
-              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
+            persistTenantSession(updated);
             return updated;
           }
           return prev;
@@ -3059,12 +3015,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             paidUntil: undefined,
             nextDueDate: undefined,
           };
-          try {
-            sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-            localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-          } catch {
-            // ignore
-          }
+          persistTenantSession(updated);
           return updated;
         }
         return prev;
@@ -3099,12 +3050,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               paidUntil: undefined,
               nextDueDate: undefined,
             };
-            try {
-              sessionStorage.setItem("topfood_tenant_session", JSON.stringify(updated));
-              localStorage.setItem("delivery_tenant_session", JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
+            persistTenantSession(updated);
             return updated;
           }
           return prev;

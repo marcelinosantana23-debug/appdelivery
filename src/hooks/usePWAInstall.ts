@@ -11,7 +11,34 @@ declare global {
   }
 }
 
+export function detectDevice() {
+  if (typeof window === "undefined" || !window.navigator) {
+    return {
+      isIOS: false,
+      isAndroid: false,
+      isXiaomi: false,
+      isDesktop: true,
+    };
+  }
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  const isIOSDevice =
+    (/iphone|ipad|ipod/.test(userAgent) ||
+      (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1)) &&
+    !(window as unknown as { MSStream?: unknown }).MSStream;
+  const isAndroidDevice = /android/.test(userAgent);
+  const isXiaomiDevice = /miuibrowser|xiaomi|redmi|poco/i.test(userAgent);
+  const isDesktopDevice = !isIOSDevice && !isAndroidDevice;
+
+  return {
+    isIOS: isIOSDevice,
+    isAndroid: isAndroidDevice,
+    isXiaomi: isXiaomiDevice,
+    isDesktop: isDesktopDevice,
+  };
+}
+
 export function usePWAInstall() {
+  const initialDevice = detectDevice();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => {
     if (typeof window !== "undefined" && window.__pwaInstallPrompt) {
       return window.__pwaInstallPrompt;
@@ -19,10 +46,10 @@ export function usePWAInstall() {
     return null;
   });
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isAndroid, setIsAndroid] = useState(false);
-  const [isXiaomi, setIsXiaomi] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
+  const [isIOS, setIsIOS] = useState(initialDevice.isIOS);
+  const [isAndroid, setIsAndroid] = useState(initialDevice.isAndroid);
+  const [isXiaomi, setIsXiaomi] = useState(initialDevice.isXiaomi);
+  const [isDesktop, setIsDesktop] = useState(initialDevice.isDesktop);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -40,13 +67,12 @@ export function usePWAInstall() {
 
     setIsInstalled(isStandalone);
 
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIOSDevice =
-      /iphone|ipad|ipod/.test(userAgent) &&
-      !(window as unknown as { MSStream?: unknown }).MSStream;
-    const isAndroidDevice = /android/.test(userAgent);
-    const isXiaomiDevice = /miuibrowser|xiaomi|redmi|poco/i.test(userAgent);
-    const isDesktopDevice = !isIOSDevice && !isAndroidDevice;
+    const {
+      isIOS: isIOSDevice,
+      isAndroid: isAndroidDevice,
+      isXiaomi: isXiaomiDevice,
+      isDesktop: isDesktopDevice,
+    } = detectDevice();
 
     setIsIOS(isIOSDevice);
     setIsAndroid(isAndroidDevice);
@@ -85,6 +111,29 @@ export function usePWAInstall() {
   }, []);
 
   const install = async () => {
+    const { isAndroid: isAndroidDev, isIOS: isIOSDev } = detectDevice();
+
+    // Em celulares Android: inicia o download direto do APK na raiz
+    if (isAndroidDev) {
+      if (typeof document !== "undefined") {
+        const link = document.createElement("a");
+        link.href = "/top-food.apk";
+        link.setAttribute("download", "top-food.apk");
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return true;
+      }
+      return false;
+    }
+
+    // Em iPhone/iPad: PWA não possui prompt nativo de instalação, orienta pelo tutorial
+    if (isIOSDev) {
+      return false;
+    }
+
+    // Em Computador (Desktop): mantém fluxo nativo do PWA intacto
     const promptToUse = deferredPrompt || (typeof window !== "undefined" ? window.__pwaInstallPrompt : null);
     if (!promptToUse) return false;
     try {
