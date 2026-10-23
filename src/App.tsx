@@ -491,14 +491,22 @@ function AppContent() {
     // 1. Processa regras estritas de sessão e navegação Web vs PWA Standalone
     const sessionNav = processSessionNavigation();
 
-    // MODO STANDALONE / PWA INSTALADO:
-    // Se abriu na raiz e tem loja salva no app instalado, permite o redirecionamento automático
-    if (sessionNav.isStandalone && sessionNav.pwaRedirectSlug) {
-      return "menu";
+    // MODO STANDALONE / APLICATIVO INSTALADO (PWA / APK):
+    // Se estiver em modo aplicativo, redireciona automaticamente para a 'rota_instalação_pwa' salva
+    if (sessionNav.isStandalone) {
+      if (sessionNav.pwaRedirectRoute) {
+        if (sessionNav.pwaRedirectRoute === "/" || sessionNav.pwaRedirectRoute === "/portal") {
+          return "portal";
+        }
+        if (sessionNav.pwaRedirectRoute.startsWith("/loja/")) {
+          return "menu";
+        }
+      } else if (sessionNav.pwaRedirectSlug) {
+        return "menu";
+      }
     }
 
-    // NAVEGAÇÃO WEB:
-    // Se a regra determinou forçar a Home ('/') no reset de sessão ou acesso à raiz
+    // NAVEGAÇÃO WEB: desconsidera essa rota salva e segue a regra padrão
     if (sessionNav.shouldForceHome) {
       return "portal";
     }
@@ -559,7 +567,7 @@ function AppContent() {
             clearWebStoreSession();
             resetToPortalTheme();
           } else {
-            const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
+            const slug = targetSlug || currentTenant?.slug || config.slug;
             window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
           }
         } catch (err) {
@@ -571,13 +579,47 @@ function AppContent() {
     [currentTenant?.slug, config.slug, resetToPortalTheme]
   );
 
-  // Sincronização inicial de rotas e garantia de Home na Web ao reabrir navegador
+  // Sincronização inicial de rotas e abertura inteligente do app (PWA / APK vs Web)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sessionNav = processSessionNavigation();
-    if (sessionNav.isStandalone && sessionNav.pwaRedirectSlug && (window.location.pathname === "/" || window.location.pathname === "")) {
-      navigateTo("menu", sessionNav.pwaRedirectSlug);
+
+    // 3. ABERTURA INTELIGENTE DO APP:
+    // Se estiver em modo aplicativo (standalone), redireciona automaticamente para a 'rota_instalação_pwa' salva
+    if (sessionNav.isStandalone) {
+      const savedRoute = sessionNav.pwaRedirectRoute;
+      if (savedRoute) {
+        if (savedRoute === "/" || savedRoute === "/portal") {
+          if (window.location.pathname !== "/") {
+            try {
+              window.history.replaceState({ view: "portal" }, "", "/");
+            } catch {
+              // ignore
+            }
+          }
+          resetToPortalTheme();
+          setView("portal");
+        } else if (savedRoute.startsWith("/loja/")) {
+          const match = savedRoute.match(/^\/loja\/([^/?#]+)/i);
+          const dynamicSlug = match && match[1] ? decodeURIComponent(match[1]).toLowerCase() : "";
+          if (dynamicSlug) {
+            selectTenant(dynamicSlug);
+            if (window.location.pathname !== savedRoute) {
+              try {
+                window.history.replaceState({ view: "menu", slug: dynamicSlug }, "", savedRoute);
+              } catch {
+                // ignore
+              }
+            }
+            setView("menu");
+          }
+        }
+      } else if (sessionNav.pwaRedirectSlug && (window.location.pathname === "/" || window.location.pathname === "")) {
+        selectTenant(sessionNav.pwaRedirectSlug);
+        navigateTo("menu", sessionNav.pwaRedirectSlug);
+      }
     } else if (sessionNav.shouldForceHome && window.location.pathname !== "/") {
+      // Se for um acesso normal pelo navegador web, desconsidere essa rota salva e siga a regra padrão
       try {
         window.history.replaceState({ view: "portal" }, "", "/");
       } catch {
@@ -587,7 +629,7 @@ function AppContent() {
       resetToPortalTheme();
       setView("portal");
     }
-  }, [navigateTo, resetToPortalTheme]);
+  }, [navigateTo, resetToPortalTheme, selectTenant]);
 
   // Transição direta e unificada do Super Admin para gerenciamento da loja (1 único clique)
   const handleSuperAdminManageStore = useCallback(

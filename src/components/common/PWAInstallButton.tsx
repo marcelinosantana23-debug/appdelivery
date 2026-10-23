@@ -11,6 +11,7 @@ import {
   Apple,
 } from "lucide-react";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
+import { savePWAInstallRoute } from "@/utils/sessionNavigation";
 
 interface PWAInstallButtonProps {
   className?: string;
@@ -75,6 +76,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     if (e) {
       e.stopPropagation();
     }
+
+    // 1 & 2. CAPTURA DINÂMICA DA ROTA NO CLIQUE DE INSTALAÇÃO:
+    // Captura a rota atual da página no momento exato do clique (window.location.pathname)
+    // e salva em 'rota_instalação_pwa' no localStorage. NUNCA usa ID ou Slug fixo.
+    savePWAInstallRoute();
 
     // 3. CELULARES ANDROID:
     // Ao clicar no botão de instalação, inicie o download direto do arquivo existente na raiz:
@@ -354,6 +360,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   <a
                     href="/top-food.apk"
                     download="top-food.apk"
+                    onClick={handleInstallClick}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary py-2 px-3 text-xs font-bold text-white shadow hover:bg-primary-dark transition active:scale-98 cursor-pointer"
                   >
                     <Download className="h-4 w-4" />

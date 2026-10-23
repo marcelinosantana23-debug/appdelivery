@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { savePWAInstallRoute } from "@/utils/sessionNavigation";
 
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -111,6 +112,9 @@ export function usePWAInstall() {
   }, []);
 
   const install = async () => {
+    // Captura dinamicamente a rota atual no momento da instalação
+    savePWAInstallRoute();
+
     const { isAndroid: isAndroidDev, isIOS: isIOSDev } = detectDevice();
 
     // Em celulares Android: inicia o download direto do APK na raiz
