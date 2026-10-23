@@ -67,25 +67,6 @@
     <meta name="twitter:description" content="O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes." />
     <meta name="twitter:image" content="https://top-food-delivery.marcelinosantana23.workers.dev/icon-512.png" />
 
-    <!-- Redirecionamento Imediato ao Iniciar o App caso exista loja_salva -->
-    <script>
-      (function() {
-        try {
-          var p = window.location.pathname.toLowerCase().replace(/\/+$/, '');
-          if (p === '' || p === '/' || p === '/topfood' || p === '/portal') {
-            var lojaSalva = (localStorage.getItem('loja_salva') || '').trim();
-            var reserved = ['admin', 'painel', 'superadmin', 'super-admin', 'api', 'health', 'portal', 'topfood'];
-            if (lojaSalva && reserved.indexOf(lojaSalva.toLowerCase()) === -1) {
-              var target = '/loja/' + encodeURIComponent(lojaSalva);
-              if (window.location.pathname !== target) {
-                window.history.replaceState({ view: 'menu', slug: lojaSalva }, '', target);
-              }
-            }
-          }
-        } catch (_e) {}
-      })();
-    </script>
-
   </head>
   <body>
     <div id="root"></div>
