@@ -2,7 +2,7 @@ import type { Order, OrderStatus } from "../types";
 
 export interface OrderEventPayload {
   orderId: string;
-  status: OrderStatus | string;
+  status: OrderStatus;
   order: Order;
   timestamp: number;
   tenantId?: string;
@@ -26,7 +26,7 @@ class OrderEventManager {
     const cleanId = order.id.replace(/^#/, "");
     const payload: OrderEventPayload = {
       orderId: cleanId,
-      status: (order as any).statusDb || order.status,
+      status: order.status,
       order,
       timestamp: Date.now(),
       tenantId: order.tenantId,
