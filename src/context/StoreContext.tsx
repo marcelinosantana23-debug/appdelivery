@@ -460,13 +460,16 @@ function getInitialUrlSlug(): string {
   const clean = path.replace(/\/+$/, "").toLowerCase();
   if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
     try {
-      // Redirecionamento unificado: verifica loja_salva no localStorage
-      const lojaSalva = (
-        localStorage.getItem("loja_salva") ||
-        ""
-      ).trim();
-      if (lojaSalva && !RESERVED_SLUGS.has(lojaSalva.toLowerCase())) {
-        return decodeURIComponent(lojaSalva).toLowerCase();
+      const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
+      if (!isExplicitPortal) {
+        // Redirecionamento unificado: verifica loja_salva no localStorage
+        const lojaSalva = (
+          localStorage.getItem("loja_salva") ||
+          ""
+        ).trim();
+        if (lojaSalva && !RESERVED_SLUGS.has(lojaSalva.toLowerCase())) {
+          return decodeURIComponent(lojaSalva).toLowerCase();
+        }
       }
     } catch {
       // ignore
