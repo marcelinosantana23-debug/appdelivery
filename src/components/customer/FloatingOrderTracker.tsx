@@ -48,6 +48,7 @@ export function FloatingOrderTracker({
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshSuccess, setRefreshSuccess] = useState(false);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Referência para controlar alterações reais de status e evitar alertas repetidos
   const statusRef = useRef<OrderStatus>(status);
@@ -280,7 +281,10 @@ export function FloatingOrderTracker({
           applyStatusUpdate(res.order.status, res.order);
         }
         setRefreshSuccess(true);
-        setTimeout(() => setRefreshSuccess(false), 3000);
+        if (refreshTimerRef.current) {
+          clearTimeout(refreshTimerRef.current);
+        }
+        refreshTimerRef.current = setTimeout(() => setRefreshSuccess(false), 2500);
       } catch (err) {
         console.warn("Erro ao buscar status mais recente no banco:", err);
       } finally {
@@ -339,6 +343,9 @@ export function FloatingOrderTracker({
     window.addEventListener("topfood-active-order-updated", handleActiveOrderUpdate);
 
     return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("topfood-active-order-cleared", handleOrderCleared);
       window.removeEventListener("topfood-active-order-updated", handleActiveOrderUpdate);

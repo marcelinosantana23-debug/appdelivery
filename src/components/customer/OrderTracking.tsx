@@ -83,18 +83,18 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     updateActiveOrderStatus(newStatus);
   }, []);
 
-  // Busca manual sob demanda no banco ao clicar no botão "Atualizar Status"
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Busca manual sob demanda no banco ao clicar no único botão "Atualizar Status"
+  // Otimizado para iOS Safari: requisição direta async/await sem timers concorrentes ou atrasos
   const handleRefreshStatus = useCallback(async () => {
     if (isRefreshing) return;
-    // Garante que o áudio esteja ativo após a interação do toque
-    unlockAudioContext().catch(() => {});
 
     const targetId = order?.id || initialOrder?.id || "";
     const cleanId = String(targetId).trim().replace(/^#/, "");
     if (!cleanId) return;
 
     setIsRefreshing(true);
-    setRefreshSuccess(false);
 
     try {
       const res = await fetchOrderDetailsApi(cleanId, config.slug);
@@ -105,7 +105,12 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
         applyStatus(res.order.status, res.order);
       }
       setRefreshSuccess(true);
-      setTimeout(() => setRefreshSuccess(false), 3000);
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+      refreshTimeoutRef.current = setTimeout(() => {
+        setRefreshSuccess(false);
+      }, 2500);
     } catch (err) {
       console.warn("Erro ao buscar status mais recente no banco:", err);
     } finally {
@@ -219,6 +224,9 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     return () => {
       isMounted = false;
       clearTimeout(safetyTimer);
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
       if (eventSource) {
         eventSource.close();
       }
@@ -255,19 +263,6 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
 
         <div className="flex items-center gap-2 shrink-0">
           <GlobalReloadButton variant="light" />
-
-          {/* Botão Atualizar Status no Topo */}
-          <button
-            id="btn-refresh-order-status-header"
-            type="button"
-            onClick={handleRefreshStatus}
-            disabled={isRefreshing}
-            className="flex items-center gap-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-500/30 px-3 py-1.5 text-xs font-bold transition shadow-xs disabled:opacity-60 cursor-pointer shrink-0"
-            title="Clique para buscar o status mais recente do pedido no banco D1"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} />
-            <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
-          </button>
         </div>
       </div>
 
@@ -283,15 +278,6 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
               <p className="text-sm text-gray-400">O pedido foi cancelado pela loja.</p>
 
               <div className="mt-2 flex flex-col items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleRefreshStatus}
-                  disabled={isRefreshing}
-                  className="flex items-center gap-2 rounded-xl bg-gray-100 hover:bg-gray-200 px-4 py-2 text-xs font-bold text-gray-700 transition cursor-pointer"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} />
-                  <span>{isRefreshing ? "Atualizando..." : "Atualizar Status"}</span>
-                </button>
                 <span className="text-[11px] text-gray-500 font-medium">
                   Última atualização às <strong>{lastCheckTime}</strong>
                 </span>
