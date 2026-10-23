@@ -7,7 +7,6 @@ import {
   isStandaloneApp,
   saveActiveStore,
   clearWebStoreSession,
-  PWA_LAST_STORE_KEY,
   SESSION_STORE_KEY,
   getSavedPWAInstallRoute,
   PWA_ALREADY_BOOTED_KEY,
@@ -495,14 +494,6 @@ function getInitialUrlSlug(): string {
               return dynamicSlug;
             }
           }
-        }
-
-        const pwaSlug =
-          localStorage.getItem(PWA_LAST_STORE_KEY) ||
-          localStorage.getItem("topfood_last_store_slug") ||
-          "";
-        if (pwaSlug && !RESERVED_SLUGS.has(pwaSlug.toLowerCase())) {
-          return pwaSlug.toLowerCase();
         }
       }
     }

@@ -54,20 +54,14 @@ export function savePWAInstallRoute(): string {
     const rawPath = window.location.pathname;
     const currentPath = rawPath && rawPath.trim() !== "" ? rawPath : "/";
 
-    // Salva a chave requisitada com acento e uma versão sem acento para garantia de compatibilidade
-    localStorage.setItem(PWA_INSTALL_ROUTE_KEY, currentPath);
-    localStorage.setItem(PWA_INSTALL_ROUTE_KEY_FALLBACK, currentPath);
+    // 1. GRAVAÇÃO ÚNICA E FIXA:
+    // Salva exclusivamente no momento do clique no botão de instalação
+    localStorage.setItem(PWA_INSTALL_ROUTE_KEY_FALLBACK, currentPath); // 'rota_instalacao_pwa'
+    localStorage.setItem(PWA_INSTALL_ROUTE_KEY, currentPath); // 'rota_instalação_pwa'
 
-    // Se estiver na vitrine de uma loja (/loja/:slug), captura o slug dinâmico via regex
-    const match = currentPath.match(/^\/loja\/([^/?#]+)/i);
-    if (match && match[1]) {
-      const dynamicSlug = decodeURIComponent(match[1]).toLowerCase();
-      localStorage.setItem(PWA_LAST_STORE_KEY, dynamicSlug);
-    } else {
-      // Se clicou em instalar na Home ('/'), limpa lojas prévias para abrir sempre no Portal/Home
-      localStorage.removeItem(PWA_LAST_STORE_KEY);
-      localStorage.removeItem("topfood_last_store_slug");
-    }
+    // Remove chaves residuais legadas para garantir fidelidade à rota de instalação
+    localStorage.removeItem(PWA_LAST_STORE_KEY);
+    localStorage.removeItem("topfood_last_store_slug");
 
     return currentPath;
   } catch (err) {
@@ -77,14 +71,14 @@ export function savePWAInstallRoute(): string {
 }
 
 /**
- * Obtém a rota de instalação salva no momento em que a instalação foi feita ('rota_instalação_pwa').
+ * Obtém a rota de instalação salva no momento em que a instalação foi feita ('rota_instalacao_pwa').
  */
 export function getSavedPWAInstallRoute(): string | null {
   if (typeof window === "undefined") return null;
   try {
     return (
-      localStorage.getItem(PWA_INSTALL_ROUTE_KEY) ||
       localStorage.getItem(PWA_INSTALL_ROUTE_KEY_FALLBACK) ||
+      localStorage.getItem(PWA_INSTALL_ROUTE_KEY) ||
       null
     );
   } catch {
@@ -133,21 +127,13 @@ export function isStandaloneApp(): boolean {
 }
 
 /**
- * Salva a loja atual respeitando rigorosamente a separação Web vs Standalone PWA.
- * - PWA instalado: persiste no localStorage para reabertura direta do app instalado.
- * - Web comum: persiste APENAS no sessionStorage para durar enquanto a aba/sessão atual estiver ativa.
+ * Salva a loja atual em memória/sessão durante a navegação.
+ * NUNCA atualiza ou sobrescreve a rota de instalação no localStorage durante a navegação do usuário.
  */
 export function saveActiveStore(slug: string): void {
   if (typeof window === "undefined" || !slug) return;
   try {
-    if (isStandaloneApp()) {
-      localStorage.setItem(PWA_LAST_STORE_KEY, slug);
-    } else {
-      sessionStorage.setItem(SESSION_STORE_KEY, slug);
-      // Garante que o localStorage da web não retenha loja salva entre fechamento do navegador
-      localStorage.removeItem("topfood_last_store_slug");
-      localStorage.removeItem("delivery_tenant_session");
-    }
+    sessionStorage.setItem(SESSION_STORE_KEY, slug);
   } catch {
     // ignore
   }
@@ -161,28 +147,17 @@ export function clearWebStoreSession(): void {
   try {
     sessionStorage.removeItem(SESSION_STORE_KEY);
     sessionStorage.removeItem("topfood_tenant_session");
-    localStorage.removeItem("topfood_last_store_slug");
-    localStorage.removeItem("delivery_tenant_session");
   } catch {
     // ignore
   }
 }
 
 /**
- * Retorna a loja salva permitida:
- * - Em modo PWA standalone: pode vir do localStorage (PWA_LAST_STORE_KEY).
- * - Na Web: NUNCA vem do localStorage, vem estritamente do sessionStorage da aba atual.
+ * Retorna a loja ativa permitida da sessão atual.
  */
 export function getSavedStoreSlug(): string {
   if (typeof window === "undefined") return "";
   try {
-    if (isStandaloneApp()) {
-      return (
-        localStorage.getItem(PWA_LAST_STORE_KEY) ||
-        localStorage.getItem("topfood_last_store_slug") ||
-        ""
-      );
-    }
     return sessionStorage.getItem(SESSION_STORE_KEY) || "";
   } catch {
     return "";
@@ -276,24 +251,6 @@ export function processSessionNavigation(): {
         pwaRedirectSlug: dynamicSlug,
         pwaRedirectRoute: savedRoute,
       };
-    }
-
-    // Fallback legado se apenas PWA_LAST_STORE_KEY estava presente na raiz no primeiro boot
-    if (isRootPath) {
-      const pwaSlug =
-        localStorage.getItem(PWA_LAST_STORE_KEY) ||
-        localStorage.getItem("topfood_last_store_slug") ||
-        null;
-      if (pwaSlug) {
-        return {
-          isNewSession,
-          isStandalone: true,
-          shouldForceHome: false,
-          appAlreadyBooted: false,
-          pwaRedirectSlug: pwaSlug,
-          pwaRedirectRoute: `/loja/${pwaSlug}`,
-        };
-      }
     }
 
     return {
