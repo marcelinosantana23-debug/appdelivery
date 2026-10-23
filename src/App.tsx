@@ -21,7 +21,7 @@ import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
 import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
 import { getActiveOrderData } from "@/utils/orderStorage";
-import { processSessionNavigation, clearWebStoreSession } from "@/utils/sessionNavigation";
+import { processSessionNavigation, clearWebStoreSession, markAppAsBooted } from "@/utils/sessionNavigation";
 
 type View = "portal" | "menu" | "checkout" | "tracking" | "admin" | "superadmin";
 
@@ -492,8 +492,8 @@ function AppContent() {
     const sessionNav = processSessionNavigation();
 
     // MODO STANDALONE / APLICATIVO INSTALADO (PWA / APK):
-    // Se estiver em modo aplicativo, redireciona automaticamente para a 'rota_instalação_pwa' salva
-    if (sessionNav.isStandalone) {
+    // A rota salva de instalação é usada EXCLUSIVAMENTE no primeiro carregamento do aplicativo
+    if (sessionNav.isStandalone && !sessionNav.appAlreadyBooted) {
       if (sessionNav.pwaRedirectRoute) {
         if (sessionNav.pwaRedirectRoute === "/" || sessionNav.pwaRedirectRoute === "/portal") {
           return "portal";
@@ -584,9 +584,12 @@ function AppContent() {
     if (typeof window === "undefined") return;
     const sessionNav = processSessionNavigation();
 
-    // 3. ABERTURA INTELIGENTE DO APP:
-    // Se estiver em modo aplicativo (standalone), redireciona automaticamente para a 'rota_instalação_pwa' salva
-    if (sessionNav.isStandalone) {
+    // 1. APENAS NO CARREGAMENTO INICIAL (PÁGINA D'ENTRADA):
+    // A 'rota_instalação_pwa' salva é usada EXCLUSIVAMENTE no primeiro carregamento do aplicativo
+    if (sessionNav.isStandalone && !sessionNav.appAlreadyBooted) {
+      // Assim que o aplicativo abrir na loja ou Home salva, marca esse redirecionamento inicial como CONCLUÍDO durante a sessão atual
+      markAppAsBooted();
+
       const savedRoute = sessionNav.pwaRedirectRoute;
       if (savedRoute) {
         if (savedRoute === "/" || savedRoute === "/portal") {
@@ -618,7 +621,7 @@ function AppContent() {
         selectTenant(sessionNav.pwaRedirectSlug);
         navigateTo("menu", sessionNav.pwaRedirectSlug);
       }
-    } else if (sessionNav.shouldForceHome && window.location.pathname !== "/") {
+    } else if (!sessionNav.isStandalone && sessionNav.shouldForceHome && window.location.pathname !== "/") {
       // Se for um acesso normal pelo navegador web, desconsidere essa rota salva e siga a regra padrão
       try {
         window.history.replaceState({ view: "portal" }, "", "/");

@@ -14,8 +14,34 @@
 export const PWA_LAST_STORE_KEY = "topfood_pwa_last_store";
 export const PWA_INSTALL_ROUTE_KEY = "rota_instalação_pwa";
 export const PWA_INSTALL_ROUTE_KEY_FALLBACK = "rota_instalacao_pwa";
+export const PWA_ALREADY_BOOTED_KEY = "app_ja_iniciado";
 export const SESSION_STORE_KEY = "topfood_session_store_slug";
 export const SESSION_ACTIVE_KEY = "topfood_session_active";
+
+/**
+ * Verifica se o aplicativo já concluiu o redirecionamento inicial nesta sessão (sessionStorage).
+ */
+export function isAppAlreadyBooted(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(PWA_ALREADY_BOOTED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Marca o redirecionamento inicial de abertura como CONCLUÍDO durante a sessão atual.
+ * Permite navegação livre subsequente sem nunca redirecionar o usuário de volta à força.
+ */
+export function markAppAsBooted(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(PWA_ALREADY_BOOTED_KEY, "true");
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * Captura dinamicamente a rota atual (window.location.pathname) no momento exato do clique de instalação
@@ -172,6 +198,7 @@ export function processSessionNavigation(): {
   isNewSession: boolean;
   isStandalone: boolean;
   shouldForceHome: boolean;
+  appAlreadyBooted: boolean;
   pwaRedirectSlug: string | null;
   pwaRedirectRoute: string | null;
 } {
@@ -180,6 +207,7 @@ export function processSessionNavigation(): {
       isNewSession: false,
       isStandalone: false,
       shouldForceHome: false,
+      appAlreadyBooted: false,
       pwaRedirectSlug: null,
       pwaRedirectRoute: null,
     };
@@ -188,6 +216,7 @@ export function processSessionNavigation(): {
   const isStandalone = isStandaloneApp();
   const sessionActive = sessionStorage.getItem(SESSION_ACTIVE_KEY);
   const isNewSession = !sessionActive;
+  const appAlreadyBooted = sessionStorage.getItem(PWA_ALREADY_BOOTED_KEY) === "true";
 
   const path = window.location.pathname.toLowerCase();
   const cleanPath = path.replace(/\/+$/, "");
@@ -202,16 +231,34 @@ export function processSessionNavigation(): {
   // ABERTURA INTELIGENTE DO APP: Modo Standalone / Aplicativo Instalado (PWA ou APK)
   if (isStandalone) {
     sessionStorage.setItem(SESSION_ACTIVE_KEY, "true");
+
+    // 2. LIBERDADE DE NAVEGAÇÃO:
+    // Se o aplicativo já foi iniciado nesta sessão, NUNCA force o redirecionamento de volta
+    // para a loja de instalação. O usuário navega 100% livremente no app.
+    if (appAlreadyBooted) {
+      return {
+        isNewSession: false,
+        isStandalone: true,
+        shouldForceHome: false,
+        appAlreadyBooted: true,
+        pwaRedirectSlug: null,
+        pwaRedirectRoute: null,
+      };
+    }
+
+    // 1. APENAS NO CARREGAMENTO INICIAL (PÁGINA D'ENTRADA):
+    // A 'rota_instalação_pwa' salva é usada EXCLUSIVAMENTE no primeiro carregamento do aplicativo
     const savedRoute = getSavedPWAInstallRoute();
 
     if (savedRoute) {
       const cleanSaved = savedRoute.replace(/\/+$/, "").toLowerCase();
-      // Se instalou estando na Home ('/'), salva a rota padrão e abre no Portal/Home
+      // Se instalou estando na Home ('/'), abre no Portal/Home
       if (cleanSaved === "" || cleanSaved === "/" || cleanSaved === "/portal" || cleanSaved === "/topfood") {
         return {
           isNewSession,
           isStandalone: true,
           shouldForceHome: false,
+          appAlreadyBooted: false,
           pwaRedirectSlug: null,
           pwaRedirectRoute: "/",
         };
@@ -225,12 +272,13 @@ export function processSessionNavigation(): {
         isNewSession,
         isStandalone: true,
         shouldForceHome: false,
+        appAlreadyBooted: false,
         pwaRedirectSlug: dynamicSlug,
         pwaRedirectRoute: savedRoute,
       };
     }
 
-    // Fallback legado se apenas PWA_LAST_STORE_KEY estava presente na raiz
+    // Fallback legado se apenas PWA_LAST_STORE_KEY estava presente na raiz no primeiro boot
     if (isRootPath) {
       const pwaSlug =
         localStorage.getItem(PWA_LAST_STORE_KEY) ||
@@ -241,6 +289,7 @@ export function processSessionNavigation(): {
           isNewSession,
           isStandalone: true,
           shouldForceHome: false,
+          appAlreadyBooted: false,
           pwaRedirectSlug: pwaSlug,
           pwaRedirectRoute: `/loja/${pwaSlug}`,
         };
@@ -251,6 +300,7 @@ export function processSessionNavigation(): {
       isNewSession,
       isStandalone: true,
       shouldForceHome: false,
+      appAlreadyBooted: false,
       pwaRedirectSlug: null,
       pwaRedirectRoute: null,
     };

@@ -10,6 +10,7 @@ import {
   PWA_LAST_STORE_KEY,
   SESSION_STORE_KEY,
   getSavedPWAInstallRoute,
+  PWA_ALREADY_BOOTED_KEY,
 } from "@/utils/sessionNavigation";
 import {
   loadCachedHomeData,
@@ -447,37 +448,6 @@ function getInitialUrlSlug(): string {
   if (typeof window === "undefined") return "";
   const path = window.location.pathname;
 
-  // Em modo Standalone PWA/APK: se abrir na raiz e tiver rota salva no app instalado, carrega ela dinamicamente
-  if (isStandaloneApp()) {
-    const clean = path.replace(/\/+$/, "").toLowerCase();
-    if (clean === "" || clean === "/" || clean === "/portal" || clean === "/topfood") {
-      const savedRoute = getSavedPWAInstallRoute();
-      if (savedRoute) {
-        const cleanSaved = savedRoute.replace(/\/+$/, "").toLowerCase();
-        // Se a instalação foi feita na Home ('/'), não define slug de loja
-        if (cleanSaved === "" || cleanSaved === "/" || cleanSaved === "/portal" || cleanSaved === "/topfood") {
-          return "";
-        }
-        // Se a instalação foi feita na vitrine (/loja/:slug), captura o slug dinâmico
-        const match = savedRoute.match(/^\/loja\/([^/?#]+)/i);
-        if (match && match[1]) {
-          const dynamicSlug = decodeURIComponent(match[1]).toLowerCase();
-          if (!RESERVED_SLUGS.has(dynamicSlug)) {
-            return dynamicSlug;
-          }
-        }
-      }
-
-      const pwaSlug =
-        localStorage.getItem(PWA_LAST_STORE_KEY) ||
-        localStorage.getItem("topfood_last_store_slug") ||
-        "";
-      if (pwaSlug && !RESERVED_SLUGS.has(pwaSlug.toLowerCase())) {
-        return pwaSlug.toLowerCase();
-      }
-    }
-  }
-
   // 1. /loja/:slug (incluindo sub-rotas como /loja/:slug/carrinho, /loja/:slug/checkout, /loja/:slug/rastreio)
   const match = path.match(/^\/loja\/([^/?#]+)/i);
   if (match && match[1]) {
@@ -502,6 +472,40 @@ function getInitialUrlSlug(): string {
   if (qSlug) {
     const rawSlug = decodeURIComponent(qSlug).toLowerCase();
     if (!RESERVED_SLUGS.has(rawSlug)) return rawSlug;
+  }
+
+  // 4. Em modo Standalone PWA/APK: APENAS no carregamento inicial da aplicação se ainda não foi iniciada nesta sessão
+  if (isStandaloneApp()) {
+    const appAlreadyBooted = sessionStorage.getItem(PWA_ALREADY_BOOTED_KEY) === "true";
+    if (!appAlreadyBooted) {
+      const clean = path.replace(/\/+$/, "").toLowerCase();
+      if (clean === "" || clean === "/" || clean === "/portal" || clean === "/topfood") {
+        const savedRoute = getSavedPWAInstallRoute();
+        if (savedRoute) {
+          const cleanSaved = savedRoute.replace(/\/+$/, "").toLowerCase();
+          // Se a instalação foi feita na Home ('/'), não define slug de loja
+          if (cleanSaved === "" || cleanSaved === "/" || cleanSaved === "/portal" || cleanSaved === "/topfood") {
+            return "";
+          }
+          // Se a instalação foi feita na vitrine (/loja/:slug), captura o slug dinâmico
+          const savedMatch = savedRoute.match(/^\/loja\/([^/?#]+)/i);
+          if (savedMatch && savedMatch[1]) {
+            const dynamicSlug = decodeURIComponent(savedMatch[1]).toLowerCase();
+            if (!RESERVED_SLUGS.has(dynamicSlug)) {
+              return dynamicSlug;
+            }
+          }
+        }
+
+        const pwaSlug =
+          localStorage.getItem(PWA_LAST_STORE_KEY) ||
+          localStorage.getItem("topfood_last_store_slug") ||
+          "";
+        if (pwaSlug && !RESERVED_SLUGS.has(pwaSlug.toLowerCase())) {
+          return pwaSlug.toLowerCase();
+        }
+      }
+    }
   }
 
   // 4. Se o lojista estiver logado no painel /admin ou /painel, recupera a loja da sessão
