@@ -1,8 +1,3 @@
-/**
- * Top Food Delivery - Componente Oficial do Botão de Instalação PWA / APK
- * Suporte a APK dinâmico de loja (/${idDaLoja}.apk) com fallback seguro para /top-food.apk
- */
-
 import React, { useState, useEffect } from "react";
 import {
   Download,
@@ -11,45 +6,39 @@ import {
   X,
   CheckCircle,
   Smartphone,
+  MoreVertical,
   Laptop,
   Apple,
 } from "lucide-react";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
-import { useStore } from "@/context/StoreContext";
 
 interface PWAInstallButtonProps {
   className?: string;
   variant?: "header" | "floating" | "banner";
   label?: string;
-  storeName?: string;
 }
 
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   className = "",
   variant = "header",
   label,
-  storeName: propStoreName,
 }) => {
   const {
+    deferredPrompt,
+    setDeferredPrompt,
     isInstalled,
+    setIsInstalled,
     isIOS,
     isAndroid,
     isXiaomi,
     isDesktop,
   } = usePWAInstall();
 
-  // Contexto da loja para obter os dados do estabelecimento atual
-  const storeContext = useStore();
-  const config = storeContext?.config;
-  const currentTenant = storeContext?.currentTenant;
-
   const [showModal, setShowModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"android" | "ios" | "desktop">(
-    isIOS ? "ios" : isAndroid || isXiaomi ? "android" : "desktop"
-  );
+  const [activeTab, setActiveTab] = useState<"android" | "ios" | "desktop">("android");
   const [isPrompting, setIsPrompting] = useState(false);
 
-  // Sincroniza a aba ativa com o sistema operacional detectado
+  // Inicializa a aba conforme o dispositivo detectado
   useEffect(() => {
     if (isIOS) {
       setActiveTab("ios");
@@ -60,181 +49,81 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     }
   }, [isIOS, isAndroid, isXiaomi, isDesktop]);
 
-  // Se já estiver rodando em modo standalone (aplicativo instalado), oculta o botão
+  // Se já estiver rodando em modo standalone (app instalado), não renderiza
   if (isInstalled) {
     return null;
   }
 
-  // 1 & 2. Identifica se está navegando na vitrine de um lojista e extrai ID e Nome
-  const getStoreInfo = (): { isStore: boolean; storeName: string; storeId: string } => {
-    if (typeof window === "undefined") {
-      return { isStore: false, storeName: "", storeId: "" };
-    }
-
-    const path = window.location.pathname;
-    const lowerPath = path.toLowerCase();
-    const cleanPath = lowerPath.replace(/\/+$/, "");
-
-    // Rotas gerais que NÃO pertencem a uma loja específica (Portal e Painéis Administrativos)
-    const isPortalRoute =
-      cleanPath === "" ||
-      cleanPath === "/" ||
-      cleanPath === "/portal" ||
-      cleanPath === "/topfood";
-
-    const isAdminRoute =
-      lowerPath.startsWith("/admin") ||
-      lowerPath.startsWith("/painel") ||
-      lowerPath.startsWith("/superadmin") ||
-      lowerPath.startsWith("/super-admin") ||
-      lowerPath.startsWith("/api") ||
-      lowerPath.startsWith("/health");
-
-    if (isPortalRoute || isAdminRoute) {
-      return { isStore: false, storeName: "", storeId: "" };
-    }
-
-    // Extrai o slug/ID da loja a partir do caminho /loja/:slug ou /:slug
-    let extractedSlug = "";
-    const match = path.match(/^\/loja\/([^/?#]+)/i);
-    if (match && match[1]) {
-      extractedSlug = decodeURIComponent(match[1]).toLowerCase().trim();
-    } else {
-      const firstSegment = path.replace(/^\/+|\/+$/g, "").split("/")[0];
-      if (
-        firstSegment &&
-        !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "carrinho", "checkout", "rastreio"].includes(firstSegment.toLowerCase())
-      ) {
-        extractedSlug = decodeURIComponent(firstSegment).toLowerCase().trim();
-      }
-    }
-
-    const finalId =
-      extractedSlug ||
-      (currentTenant?.slug && currentTenant.slug.trim()) ||
-      (config?.slug && config.slug.trim() !== "topfood" && config.slug.trim()) ||
-      "";
-
-    const detectedName =
-      (propStoreName && propStoreName.trim()) ||
-      (currentTenant?.name && currentTenant.name.trim()) ||
-      (config?.name && config.name.trim() !== "Top Food" && config.name.trim()) ||
-      "";
-
-    if (finalId || detectedName) {
-      return {
-        isStore: true,
-        storeName: detectedName || finalId,
-        storeId: finalId,
-      };
-    }
-
-    return { isStore: false, storeName: "", storeId: "" };
-  };
-
-  const { isStore, storeName, storeId: idDaLoja } = getStoreInfo();
-  const nomeDaLoja = isStore ? storeName : "";
-
-  // 1. ARQUIVO DE DOWNLOAD ÚNICO: Aponta SEMPRE para o APK principal da raiz: /top-food.apk
-  const APK_HREF = "/top-food.apk";
-  const APK_DOWNLOAD_NAME = "top-food.apk";
-
-  // Função auxiliar para disparar o download nativo via elemento <a> invisível
-  const triggerApkDownload = (apkUrl: string = APK_HREF, fileName: string = APK_DOWNLOAD_NAME) => {
-    setIsPrompting(true);
-    const link = document.createElement("a");
-    // Garante que a barra '/' inicial esteja sempre presente
-    link.href = apkUrl.startsWith("/") ? apkUrl : `/${apkUrl}`;
-    link.setAttribute("download", fileName);
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      try {
-        if (link.parentNode) {
-          link.parentNode.removeChild(link);
-        }
-      } catch (_err) {
-        // ignore
-      }
-      setIsPrompting(false);
-    }, 1500);
-  };
-
-  // 2. SALVAMENTO DA ROTA/LOJA (No clique do botão "Instalar")
-  const handleInstallClick = (e?: React.MouseEvent) => {
-    if (typeof window !== "undefined") {
-      try {
-        if (isStore && idDaLoja) {
-          // Ao clicar no botão de instalar dentro de uma loja:
-          // Salva o ID e o link dessa loja no localStorage para que, quando o app for instalado e aberto,
-          // ele redirecione e abra direto nessa mesma loja.
-          localStorage.setItem("loja_salva", idDaLoja);
-          localStorage.setItem("loja_salva_link", `/loja/${idDaLoja}`);
-          localStorage.setItem("topfood_last_store_slug", idDaLoja);
-          localStorage.setItem("topfood_saved_store_route", `/loja/${idDaLoja}`);
-          sessionStorage.removeItem("topfood_explicit_portal_nav");
-        } else {
-          // Ao clicar na Home, limpa o localStorage para abrir na vitrine principal do Top Food
-          localStorage.setItem("loja_salva", "");
-          localStorage.removeItem("loja_salva");
-          localStorage.setItem("loja_salva_link", "");
-          localStorage.removeItem("loja_salva_link");
-          localStorage.removeItem("topfood_saved_store_route");
-          localStorage.removeItem("topfood_last_store_slug");
-        }
-      } catch (err) {
-        console.warn("Erro ao salvar loja_salva no localStorage:", err);
-      }
-    }
-
-    // No iPhone/iOS, previne o download do APK e abre o modal explicativo do Safari
-    if (isIOS) {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      setActiveTab("ios");
-      setShowModal(true);
-      return;
-    }
-
-    // Dispara o download imediato do arquivo único /top-food.apk
+  // 1. Tenta acionar primeiramente o evento nativo beforeinstallprompt
+  // 2. Se o navegador bloquear ou não suportar (Mi Browser, Safari, embedded webviews), abre o modal com instruções precisas
+  const handleInstallClick = async (e?: React.MouseEvent) => {
     if (e) {
-      e.preventDefault();
+      e.stopPropagation();
     }
-    triggerApkDownload(APK_HREF, APK_DOWNLOAD_NAME);
+
+    const promptEvent =
+      deferredPrompt ||
+      (typeof window !== "undefined" ? window.__pwaInstallPrompt : null);
+
+    if (promptEvent && typeof promptEvent.prompt === "function") {
+      try {
+        setIsPrompting(true);
+        await promptEvent.prompt();
+        const choiceResult = await promptEvent.userChoice;
+        if (choiceResult && choiceResult.outcome === "accepted") {
+          setIsInstalled(true);
+          setShowModal(false);
+        }
+        setDeferredPrompt(null);
+        if (typeof window !== "undefined") {
+          window.__pwaInstallPrompt = null;
+        }
+        setIsPrompting(false);
+        return;
+      } catch (err) {
+        console.warn("Instalação automática nativa não permitida ou bloqueada:", err);
+        setIsPrompting(false);
+      }
+    }
+
+    // Fallback inteligente: exibe o modal discreto centralizado com o passo a passo
+    if (isIOS) {
+      setActiveTab("ios");
+    } else if (isAndroid || isXiaomi) {
+      setActiveTab("android");
+    } else {
+      setActiveTab("desktop");
+    }
+    setShowModal(true);
   };
 
   return (
     <>
-      {/* 1. Botão de Cabeçalho / Navbar */}
       {variant === "header" && (
-        <a
+        <button
           id="btn-pwa-install-header"
-          href={APK_HREF}
-          download={APK_DOWNLOAD_NAME}
+          type="button"
           onClick={handleInstallClick}
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer whitespace-nowrap h-7 sm:h-7.5 ${className}`}
+          disabled={isPrompting}
+          className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer disabled:opacity-75 whitespace-nowrap h-7 sm:h-7.5 ${className}`}
           title="Instalar Top Food no seu dispositivo"
         >
           <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
           {label ? (
-            <span>{isPrompting ? "Baixando..." : label}</span>
+            <span>{isPrompting ? "Instalando..." : label}</span>
           ) : (
             <>
               <span className="hidden xs:inline">
-                {isPrompting ? "Baixando..." : "Instalar App"}
+                {isPrompting ? "Instalando..." : "Instalar App"}
               </span>
               <span className="xs:hidden">
                 {isPrompting ? "..." : "Instalar"}
               </span>
             </>
           )}
-        </a>
+        </button>
       )}
 
-      {/* 2. Banner de Instalação na Página */}
       {variant === "banner" && (
         <div
           className={`rounded-2xl border border-amber-200/80 dark:border-amber-900/40 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-slate-900 dark:to-slate-800 p-3.5 sm:p-4 shadow-sm ${className}`}
@@ -246,30 +135,28 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
               <div className="min-w-0">
                 <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">
-                  {nomeDaLoja
-                    ? `Instale o aplicativo de ${nomeDaLoja}`
-                    : "Instale o Top Food no seu aparelho"}
+                  Instale o Top Food no seu aparelho
                 </h4>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">
                   Acesse com 1 toque, em tela cheia e sem barras de navegação!
                 </p>
               </div>
             </div>
-            <a
+            <button
               id="btn-pwa-install-banner"
-              href={APK_HREF}
-              download={APK_DOWNLOAD_NAME}
+              type="button"
               onClick={handleInstallClick}
-              className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+              disabled={isPrompting}
+              className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-75"
             >
               <Download className="h-3.5 w-3.5" />
-              <span>{isPrompting ? "Baixando..." : "Instalar App"}</span>
-            </a>
+              <span>{isPrompting ? "Instalando..." : "Instalar App"}</span>
+            </button>
           </div>
         </div>
       )}
 
-      {/* 3. Modal Informativo para Safari no iOS */}
+      {/* Modal Centralizado e Discreto com Instruções de Instalação */}
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in"
@@ -291,29 +178,17 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             {/* Cabeçalho do Modal */}
             <div className="text-center mb-4">
               <div className="mx-auto mb-2.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-primary">
-                {activeTab === "ios" ? (
-                  <Apple className="h-6 w-6 text-primary" />
-                ) : (
-                  <Download className="h-6 w-6 text-primary" />
-                )}
+                <Download className="h-6 w-6 text-primary" />
               </div>
               <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                {activeTab === "ios"
-                  ? nomeDaLoja
-                    ? `Adicionar ${nomeDaLoja} ao iPhone`
-                    : "Instalar no iPhone (Safari)"
-                  : nomeDaLoja
-                  ? `Instalar ${nomeDaLoja}`
-                  : "Instalar Top Food"}
+                Instalar Top Food
               </h3>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                {activeTab === "ios"
-                  ? "Adicione o app diretamente à sua Tela de Início usando o Safari."
-                  : "Adicione o aplicativo ao seu aparelho para acesso rápido e direto."}
+                Adicione o aplicativo à tela de início para acesso rápido e direto.
               </p>
             </div>
 
-            {/* Abas de Navegação de Plataforma */}
+            {/* Seletor de Plataforma (Android/Xiaomi, iOS, PC) */}
             <div className="flex rounded-xl bg-gray-100 dark:bg-slate-800 p-1 mb-4 text-xs font-semibold">
               <button
                 type="button"
@@ -325,7 +200,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 }`}
               >
                 <Smartphone className="h-3.5 w-3.5" />
-                <span>Android</span>
+                <span>Android / Xiaomi</span>
               </button>
               <button
                 type="button"
@@ -353,19 +228,24 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </button>
             </div>
 
-            {/* Conteúdo: iPhone / iPad (Safari) */}
-            {activeTab === "ios" && (
+            {/* Conteúdo: Android / Xiaomi (Chrome, Mi Browser, etc.) */}
+            {activeTab === "android" && (
               <div className="space-y-3 bg-gray-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-xs text-gray-700 dark:text-gray-300">
                 <div className="flex items-start gap-3">
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-white font-bold text-xs shadow-xs">
                     1
                   </div>
                   <div className="pt-0.5 leading-relaxed">
-                    No <strong>Safari</strong> do iPhone, toque no botão de{" "}
-                    <strong className="font-semibold text-gray-900 dark:text-white inline-flex items-center gap-1">
-                      <Share className="h-3.5 w-3.5 inline text-blue-500" /> Compartilhar
-                    </strong>{" "}
-                    localizado na barra inferior.
+                    Toque no menu do seu navegador:
+                    <div className="mt-1 font-semibold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center gap-0.5 bg-gray-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                        <MoreVertical className="h-3 w-3 inline text-gray-700 dark:text-gray-300" /> 3 pontos (topo)
+                      </span>
+                      <span>ou</span>
+                      <span className="inline-flex items-center gap-0.5 bg-gray-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                        3 traços no rodapé (Xiaomi/Mi Browser)
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -374,7 +254,46 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     2
                   </div>
                   <div className="pt-0.5 leading-relaxed">
-                    Role a lista de ações para baixo e toque na opção:
+                    Procure e selecione a opção:
+                    <div className="mt-1 font-bold text-primary dark:text-amber-400">
+                      "Adicionar à tela de início" ou "Instalar aplicativo"
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-white font-bold text-xs shadow-xs">
+                    3
+                  </div>
+                  <div className="pt-0.5 leading-relaxed">
+                    Toque em <strong>Adicionar</strong> ou <strong>Instalar</strong>. Pronto! O ícone do Top Food estará na sua tela inicial.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Conteúdo: iPhone / iPad (Safari) */}
+            {activeTab === "ios" && (
+              <div className="space-y-3 bg-gray-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-xs text-gray-700 dark:text-gray-300">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-white font-bold text-xs shadow-xs">
+                    1
+                  </div>
+                  <div className="pt-0.5 leading-relaxed">
+                    No Safari, toque no botão de{" "}
+                    <strong className="font-semibold text-gray-900 dark:text-white inline-flex items-center gap-1">
+                      <Share className="h-3.5 w-3.5 inline text-blue-500" /> Compartilhar
+                    </strong>{" "}
+                    na barra inferior do iPhone.
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-white font-bold text-xs shadow-xs">
+                    2
+                  </div>
+                  <div className="pt-0.5 leading-relaxed">
+                    Role a lista de ações para baixo e toque em:
                     <div className="mt-1 font-bold text-primary dark:text-amber-400 inline-flex items-center gap-1">
                       <PlusSquare className="h-3.5 w-3.5 text-primary dark:text-amber-400" /> Adicionar à Tela de Início
                     </div>
@@ -386,36 +305,13 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     3
                   </div>
                   <div className="pt-0.5 leading-relaxed">
-                    Toque em <strong>Adicionar</strong> no canto superior direito. Pronto! O ícone estará salvo na tela do seu iPhone.
+                    Toque em <strong>Adicionar</strong> no canto superior direito para confirmar.
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Conteúdo: Android (APK Download) */}
-            {activeTab === "android" && (
-              <div className="space-y-3 bg-gray-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-xs text-gray-700 dark:text-gray-300">
-                <p className="leading-relaxed">
-                  No Android, você pode baixar o aplicativo diretamente em formato APK para instalar no seu aparelho:
-                </p>
-                <a
-                  href={APK_HREF}
-                  download={APK_DOWNLOAD_NAME}
-                  onClick={handleInstallClick}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-4 shadow-sm transition active:scale-95 cursor-pointer"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>
-                    {isPrompting ? "Baixando..." : "Baixar top-food.apk"}
-                  </span>
-                </a>
-                <div className="pt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                  Dica: Ao concluir o download, abra a notificação ou a pasta "Downloads" e toque em <strong>Instalar</strong>.
-                </div>
-              </div>
-            )}
-
-            {/* Conteúdo: Computador / PC */}
+            {/* Conteúdo: Computador / PC (Chrome, Edge, etc.) */}
             {activeTab === "desktop" && (
               <div className="space-y-3 bg-gray-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-xs text-gray-700 dark:text-gray-300">
                 <div className="flex items-start gap-3">
@@ -435,17 +331,16 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     2
                   </div>
                   <div className="pt-0.5 leading-relaxed">
-                    Ou baixe o arquivo APK diretamente para o seu aparelho Android:
-                    <div className="mt-2">
-                      <a
-                        href={APK_HREF}
-                        download={APK_DOWNLOAD_NAME}
-                        onClick={handleInstallClick}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:text-white transition cursor-pointer"
-                      >
-                        <Download className="h-3.5 w-3.5" /> Baixar top-food.apk
-                      </a>
-                    </div>
+                    Ou clique no menu do navegador <strong>(⋮ 3 pontos)</strong> &rarr; <strong>"Salvar e compartilhar"</strong> &rarr; <strong>"Instalar Top Food..."</strong>.
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-white font-bold text-xs shadow-xs">
+                    3
+                  </div>
+                  <div className="pt-0.5 leading-relaxed">
+                    Clique em <strong>Instalar</strong> para abrir em uma janela rápida sem barras de navegação.
                   </div>
                 </div>
               </div>

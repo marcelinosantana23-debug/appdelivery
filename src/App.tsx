@@ -21,7 +21,6 @@ import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
 import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
 import { getActiveOrderData } from "@/utils/orderStorage";
-import { isAppStandalone } from "@/hooks/usePWAInstall";
 
 type View = "portal" | "menu" | "checkout" | "tracking" | "admin" | "superadmin";
 
@@ -445,12 +444,7 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
 
       {/* Banner de instalação PWA discreto (oculta automaticamente se já instalado) */}
       <div className="mx-auto max-w-2xl px-4 mt-8">
-        <PWAInstallButton
-          variant="banner"
-          storeName={config.name}
-          storeSlug={config.slug}
-          storeId={config.slug || config.id}
-        />
+        <PWAInstallButton variant="banner" />
       </div>
 
       {/* Rodapé institucional com identidade isolada da vitrine */}
@@ -522,36 +516,6 @@ function AppContent() {
     // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
-      try {
-        const isStandalone = isAppStandalone();
-        if (isStandalone) {
-          // 3. REDIRECIONAMENTO APENAS NO APP INSTALADO:
-          const lojaSalva = (
-            localStorage.getItem("loja_salva") ||
-            ""
-          ).trim();
-
-          if (
-            lojaSalva &&
-            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
-          ) {
-            const targetRoute = `/loja/${lojaSalva}`;
-            try {
-              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", targetRoute);
-            } catch (_err) {
-              // ignore history state error
-            }
-            return "menu";
-          }
-        } else {
-          // 1 & 2. ACESSO À HOME NA WEB (/): NUNCA redireciona e limpa loja_salva
-          localStorage.removeItem("loja_salva");
-          localStorage.removeItem("topfood_saved_store_route");
-          localStorage.removeItem("topfood_last_store_slug");
-        }
-      } catch (_err) {
-        // ignore
-      }
       return "portal";
     }
 
@@ -560,45 +524,6 @@ function AppContent() {
   };
 
   const [view, setView] = useState<View>(getInitialView);
-
-  // 1, 2 & 3. Gerenciamento de inicialização e redirecionamento na Home
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const path = window.location.pathname.toLowerCase();
-    const clean = path.replace(/\/+$/, "");
-    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
-      try {
-        const isStandalone = isAppStandalone();
-        if (isStandalone) {
-          // 3. REDIRECIONAMENTO APENAS NO APP INSTALADO:
-          const lojaSalva = (
-            localStorage.getItem("loja_salva") ||
-            ""
-          ).trim();
-
-          if (
-            lojaSalva &&
-            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
-          ) {
-            selectTenant(lojaSalva);
-            setView("menu");
-            try {
-              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", `/loja/${lojaSalva}`);
-            } catch (_err) {
-              // ignore history state error
-            }
-          }
-        } else {
-          // 1 & 2. ACESSO À HOME NA WEB (/): NUNCA redireciona e limpa o localStorage
-          localStorage.removeItem("loja_salva");
-          localStorage.removeItem("topfood_saved_store_route");
-          localStorage.removeItem("topfood_last_store_slug");
-        }
-      } catch (err) {
-        console.warn("Erro ao processar inicialização da home:", err);
-      }
-    }
-  }, [selectTenant]);
 
   // Sync with browser URL history using standard HTML5 History API
   const navigateTo = useCallback(
@@ -611,10 +536,8 @@ function AppContent() {
             window.history.pushState({ view: "admin" }, "", "/painel");
           } else if (targetView === "portal") {
             window.history.pushState({ view: "portal" }, "", "/");
-            sessionStorage.setItem("topfood_explicit_portal_nav", "true");
             resetToPortalTheme();
           } else {
-            sessionStorage.removeItem("topfood_explicit_portal_nav");
             const slug = targetSlug || currentTenant?.slug || config.slug || "ms-preparacoes";
             window.history.pushState({ view: "menu", slug }, "", `/loja/${slug}`);
           }
