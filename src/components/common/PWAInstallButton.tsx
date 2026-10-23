@@ -172,18 +172,18 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
   // Manipulador de clique com Regra de Segurança (Fallback para erro 404)
   const handleInstallClick = async (e?: React.MouseEvent) => {
-    // 1. QUANDO O USUÁRIO ESTIVER NA TELA INICIAL (TOP FOOD):
-    // Se o usuário clicar em "Instalar" estando na Home/Tela Inicial (sem nenhuma loja selecionada),
-    // LIMPE qualquer identificador de loja salvo anteriormente no localStorage (ex: localStorage.removeItem('loja_salva')).
-    // Configure para que a rota padrão ao abrir o app instalado seja estritamente a página inicial ('/').
+    // 1. FORÇAR ROTA LIMPA NA HOME:
+    // Na página inicial (Home do Top Food), o evento de clique do botão de instalação DEVE explicitamente executar:
+    //   localStorage.setItem('loja_salva', ''); // Limpa o ID da loja
+    //   localStorage.setItem('rota_inicial', '/'); // Define a rota estritamente como a Home do Top Food
     if (!isStore || !idDaLoja) {
       if (typeof window !== "undefined") {
         try {
-          localStorage.removeItem("loja_salva");
+          localStorage.setItem("loja_salva", ""); // Limpa o ID da loja
+          localStorage.setItem("rota_inicial", "/"); // Define a rota estritamente como a Home do Top Food
           localStorage.removeItem("topfood_saved_store_route");
           localStorage.removeItem("topfood_last_store_slug");
           localStorage.removeItem("topfood_default_store");
-          localStorage.setItem("topfood_default_route", "/");
           sessionStorage.setItem("topfood_explicit_portal_nav", "true");
         } catch (err) {
           console.warn("Erro ao limpar loja do localStorage na tela inicial:", err);
@@ -215,6 +215,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem("loja_salva", idDaLoja);
+        localStorage.setItem("rota_inicial", `/loja/${idDaLoja}`);
         localStorage.setItem("topfood_saved_store_route", `/loja/${idDaLoja}`);
         localStorage.setItem("topfood_last_store_slug", idDaLoja);
         localStorage.setItem("topfood_default_store", `/loja/${idDaLoja}`);

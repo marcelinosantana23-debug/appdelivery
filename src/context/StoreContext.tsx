@@ -462,11 +462,21 @@ function getInitialUrlSlug(): string {
     try {
       const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
       if (!isExplicitPortal) {
-        // Redireciona para loja_salva se tiver sido salva via instalação dentro de uma loja
-        const savedLoja = localStorage.getItem("loja_salva");
-        if (savedLoja && !RESERVED_SLUGS.has(savedLoja.toLowerCase())) {
-          return decodeURIComponent(savedLoja).toLowerCase();
+        const lojaSalva = localStorage.getItem("loja_salva");
+        const rotaInicial = localStorage.getItem("rota_inicial");
+
+        // SE 'lojaSalva' estiver vazia ou for null (ou 'rota_inicial' for '/'), NÃO redirecione para nenhuma loja. Abra estritamente a vitrine principal do Top Food.
+        if (
+          !lojaSalva ||
+          lojaSalva.trim() === "" ||
+          rotaInicial === "/" ||
+          RESERVED_SLUGS.has(lojaSalva.toLowerCase().trim())
+        ) {
+          return "";
         }
+
+        // APENAS redirecione para uma loja se 'lojaSalva' contiver um ID válido de uma loja específica.
+        return decodeURIComponent(lojaSalva).toLowerCase().trim();
       }
     } catch {
       // ignore
