@@ -26,5 +26,3 @@ dist-ssr
 bun.lock
 bun.lockb
 
-# APK binaries in public directory
-public/*.apk
