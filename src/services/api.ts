@@ -716,14 +716,15 @@ export async function createTenantOrderApi(
 
 export async function updateOrderStatusApi(
   orderId: string,
-  status: OrderStatus,
+  status: OrderStatus | string,
   slugOrId?: string
-): Promise<{ success: boolean; order?: Order; error?: string }> {
+): Promise<{ success: boolean; order?: Order; pedido?: any; status?: string; error?: string }> {
   try {
+    const cleanId = encodeURIComponent(orderId.replace(/^#/, ""));
     const url = slugOrId
-      ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${encodeURIComponent(orderId)}/status`
-      : `${BASE_URL}/orders/${encodeURIComponent(orderId)}/status`;
-    const res = await fetch(url, {
+      ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${cleanId}/status`
+      : `${BASE_URL}/pedidos/${cleanId}/status`;
+    let res = await fetch(url, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -731,6 +732,19 @@ export async function updateOrderStatusApi(
       },
       body: JSON.stringify({ status }),
     });
+
+    if (!res.ok) {
+      const altUrl = `${BASE_URL}/orders/${cleanId}/status`;
+      const altRes = await fetch(altUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ status }),
+      });
+      if (altRes.ok) {
+        res = altRes;
+      }
+    }
+
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -740,7 +754,7 @@ export async function updateOrderStatusApi(
 export async function updateTenantOrderStatusApi(
   slugOrId: string,
   orderId: string,
-  status: OrderStatus
+  status: OrderStatus | string
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
   return updateOrderStatusApi(orderId, status, slugOrId);
 }
@@ -835,19 +849,38 @@ export async function updateTenantCredentialsApi(
 export async function fetchOrderDetailsApi(
   orderId: string,
   slugOrId?: string
-): Promise<{ success: boolean; order?: Order; error?: string }> {
+): Promise<{ success: boolean; order?: Order; pedido?: any; status?: string; error?: string }> {
   try {
-    const cleanId = encodeURIComponent(orderId);
-    const url = slugOrId
+    const cleanId = encodeURIComponent(orderId.replace(/^#/, ""));
+    const primaryUrl = slugOrId
       ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${cleanId}`
-      : `${BASE_URL}/orders/${cleanId}`;
-    const res = await fetch(url, {
+      : `${BASE_URL}/pedidos/${cleanId}`;
+    let res = await fetch(primaryUrl, {
       headers: {
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
       },
     });
-    return await res.json();
+
+    if (!res.ok) {
+      const fallbackUrl = `${BASE_URL}/orders/${cleanId}`;
+      const fbRes = await fetch(fallbackUrl, {
+        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      });
+      if (fbRes.ok) {
+        res = fbRes;
+      }
+    }
+
+    const data = await res.json();
+    const resolvedOrder = data.order || data.pedido;
+    return {
+      success: Boolean(data.success),
+      order: resolvedOrder,
+      pedido: resolvedOrder,
+      status: data.status || resolvedOrder?.statusDb || resolvedOrder?.status,
+      error: data.error,
+    };
   } catch (err: any) {
     return { success: false, error: err.message || "Erro ao consultar status do pedido" };
   }

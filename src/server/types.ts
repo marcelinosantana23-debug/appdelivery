@@ -215,6 +215,9 @@ export interface Order {
   deliveryFee: number;
   total: number;
   status: OrderStatus;
+  statusDb?: string;
+  status_db?: string;
+  statusPt?: string;
   items: OrderItem[];
   statusHistory: { status: OrderStatus; timestamp: number }[];
   createdAt: number;

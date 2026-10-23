@@ -9,7 +9,7 @@ import { ASSET_LINKS_CONTENT } from "./src/server/pwaAssets";
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
   // Carrega credenciais do Super Admin e alterações de lojas persistidas em disco (para ambiente Node.js / preview)
   try {

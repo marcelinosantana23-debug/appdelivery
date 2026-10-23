@@ -1649,11 +1649,26 @@ api.get("/pedidos/:id", async (c) => {
       return c.json({ success: false, error: "Pedido não encontrado." }, 404);
     }
 
+    const frontendStatus = db.mapStatusToFrontendDb(pedido.status || (pedido as any).statusDb);
+
     return c.json({
       success: true,
+      orderId: pedido.id,
+      id: pedido.id,
+      status: frontendStatus,
+      order: {
+        ...pedido,
+        status: frontendStatus as any,
+        canonicalStatus: pedido.status,
+        statusDb: frontendStatus,
+        statusPt: STATUS_MAP_EN_TO_PT[pedido.status] || frontendStatus,
+      },
       pedido: {
         ...pedido,
-        statusPt: STATUS_MAP_EN_TO_PT[pedido.status] || pedido.status,
+        status: frontendStatus as any,
+        canonicalStatus: pedido.status,
+        statusDb: frontendStatus,
+        statusPt: STATUS_MAP_EN_TO_PT[pedido.status] || frontendStatus,
       },
     }, 200);
   } catch (err: any) {
@@ -1672,7 +1687,7 @@ const handleStatusUpdate = async (c: any) => {
     if (!statusInput) {
       return c.json({
         success: false,
-        error: "O campo 'status' é obrigatório (ex: 'Pendente', 'Em Preparo', 'Saiu para Entrega', 'Concluído', 'Cancelado').",
+        error: "O campo 'status' é obrigatório (ex: 'PENDENTE', 'EM_PREPARO', 'PRONTO', 'SAIU_PARA_ENTREGA', 'ENTREGUE').",
       }, 400);
     }
 
@@ -1684,8 +1699,9 @@ const handleStatusUpdate = async (c: any) => {
       await verifyTokenSafely(rawToken, jwtSecret);
     }
 
-    const statusNormalizado = normalizeOrderStatus(statusInput);
-    const atualizado = await db.updateOrderStatus(pedidoId, statusNormalizado);
+    const frontendStatus = db.mapStatusToFrontendDb(statusInput);
+    const statusNormalizado = db.normalizeOrderStatusCanonical(statusInput);
+    const atualizado = await db.updateOrderStatus(pedidoId, statusNormalizado, frontendStatus);
 
     if (!atualizado) {
       return c.json({ success: false, error: "Pedido não encontrado para atualização." }, 404);
@@ -1700,7 +1716,8 @@ const handleStatusUpdate = async (c: any) => {
         await kv.put(`order:${cleanId}`, JSON.stringify(atualizado));
         await kv.put(`order_status:${cleanId}`, JSON.stringify({
           orderId: atualizado.id,
-          status: atualizado.status,
+          status: frontendStatus,
+          canonicalStatus: statusNormalizado,
           updatedAt: Date.now(),
         }));
         if (atualizado.tenantId) {
@@ -1711,14 +1728,25 @@ const handleStatusUpdate = async (c: any) => {
       }
     }
 
+    console.log(`[STATUS_PEDIDO] Pedido ${atualizado.id} atualizado para status '${frontendStatus}' no Cloudflare D1/KV`);
+
     return c.json({
       success: true,
-      message: `Status do pedido atualizado para '${STATUS_MAP_EN_TO_PT[statusNormalizado]}' no Cloudflare D1/KV!`,
+      message: `Status do pedido atualizado para '${frontendStatus}' no Cloudflare D1/KV!`,
+      status: frontendStatus,
+      orderId: atualizado.id,
       pedido: {
         ...atualizado,
-        statusPt: STATUS_MAP_EN_TO_PT[atualizado.status] || atualizado.status,
+        status: frontendStatus as any,
+        statusDb: frontendStatus,
+        statusPt: STATUS_MAP_EN_TO_PT[atualizado.status] || frontendStatus,
       },
-      order: atualizado,
+      order: {
+        ...atualizado,
+        status: frontendStatus as any,
+        statusDb: frontendStatus,
+        statusPt: STATUS_MAP_EN_TO_PT[atualizado.status] || frontendStatus,
+      },
     }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao atualizar status do pedido." }, 500);
@@ -3482,17 +3510,28 @@ api.get("/tenants/:slugOrId/orders/:orderId", async (c) => {
 });
 
 // SSE Stream público para rastreamento em tempo real do status do pedido no celular do cliente
+// SSE Stream público para rastreamento em tempo real do status do pedido no celular do cliente
 // 100% orientado a eventos (Zero polling / loops de banco de dados no Cloudflare D1)
-api.get("/orders/:orderId/stream", async (c) => {
+const handleOrderStream = async (c: any) => {
   const db = getDb(c);
-  const rawId = c.req.param("orderId");
-  const cleanId = rawId.replace(/^#/, "");
+  const rawId = c.req.param("orderId") || c.req.param("id");
+  const cleanId = (rawId || "").replace(/^#/, "");
 
   return streamSSE(c, async (stream) => {
     // 1. Envia estado inicial imediato
     try {
       const initialOrder = await db.getOrderById(rawId);
       if (initialOrder) {
+        const initialStatus = db.mapStatusToFrontendDb((initialOrder as any).statusDb || initialOrder.status);
+        await stream.writeSSE({
+          event: "STATUS_PEDIDO",
+          data: JSON.stringify({
+            orderId: cleanId,
+            status: initialStatus,
+            order: initialOrder,
+            timestamp: Date.now(),
+          }),
+        });
         await stream.writeSSE({
           event: "status_update",
           data: JSON.stringify({
@@ -3512,9 +3551,28 @@ api.get("/orders/:orderId/stream", async (c) => {
       const pClean = payload.orderId.replace(/^#/, "");
       if (pClean === cleanId || payload.order.id === rawId || payload.order.id === `#${cleanId}`) {
         try {
+          const currentFrontendStatus = db.mapStatusToFrontendDb(
+            (payload.order as any)?.statusDb || payload.status
+          );
+
+          // Transmite o evento 'STATUS_PEDIDO' exatamente conforme solicitado
+          await stream.writeSSE({
+            event: "STATUS_PEDIDO",
+            data: JSON.stringify({
+              orderId: cleanId,
+              status: currentFrontendStatus,
+              order: payload.order,
+              timestamp: Date.now(),
+            }),
+          });
+
+          // Compatibilidade com ouvintes anteriores
           await stream.writeSSE({
             event: "status_update",
-            data: JSON.stringify(payload),
+            data: JSON.stringify({
+              ...payload,
+              status: currentFrontendStatus,
+            }),
           });
         } catch (err) {
           console.warn("Failed to write order SSE event:", err);
@@ -3541,64 +3599,13 @@ api.get("/orders/:orderId/stream", async (c) => {
 
     unsubscribe();
   });
-});
+};
 
-api.get("/tenants/:slugOrId/orders/:orderId/stream", async (c) => {
-  const db = getDb(c);
-  const rawId = c.req.param("orderId");
-  const cleanId = rawId.replace(/^#/, "");
-
-  return streamSSE(c, async (stream) => {
-    try {
-      const initialOrder = await db.getOrderById(rawId);
-      if (initialOrder) {
-        await stream.writeSSE({
-          event: "status_update",
-          data: JSON.stringify({
-            orderId: cleanId,
-            status: initialOrder.status,
-            order: initialOrder,
-            timestamp: Date.now(),
-          }),
-        });
-      }
-    } catch (e) {
-      console.warn("SSE tenant initial order fetch error:", e);
-    }
-
-    const unsubscribe = orderEvents.subscribe(async (payload) => {
-      const pClean = payload.orderId.replace(/^#/, "");
-      if (pClean === cleanId || payload.order.id === rawId || payload.order.id === `#${cleanId}`) {
-        try {
-          await stream.writeSSE({
-            event: "status_update",
-            data: JSON.stringify(payload),
-          });
-        } catch (err) {
-          console.warn("Failed to write order SSE event:", err);
-        }
-      }
-    });
-
-    stream.onAbort(() => {
-      unsubscribe();
-    });
-
-    while (!stream.aborted) {
-      await stream.sleep(25000);
-      try {
-        await stream.writeSSE({
-          event: "ping",
-          data: "{}",
-        });
-      } catch {
-        break;
-      }
-    }
-
-    unsubscribe();
-  });
-});
+api.get("/orders/:orderId/stream", handleOrderStream);
+api.get("/pedidos/:orderId/stream", handleOrderStream);
+api.get("/pedidos/:id/stream", handleOrderStream);
+api.get("/tenants/:slugOrId/orders/:orderId/stream", handleOrderStream);
+api.get("/tenants/:slugOrId/pedidos/:orderId/stream", handleOrderStream);
 
 // ===================== RELATÓRIO FINANCEIRO E DESEMPENHO (CLOUDFLARE D1) =====================
 api.get("/tenants/:slugOrId/financial-report", async (c) => {
