@@ -104,40 +104,10 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     return { isStore: false, storeName: "" };
   };
 
-  // Dispara o download direto do arquivo APK para Android
-  const triggerApkDownload = (isStore: boolean, detectedName: string) => {
-    const rawName = (isStore && detectedName ? detectedName : "").trim();
-    // 3. Se estiver na página de um lojista, define o atributo download como `${nomeDaLoja} - Top Food.apk`
-    const safeName = rawName.replace(/[/\\?%*:|"<>]/g, "-").trim();
-    const downloadFileName = safeName ? `${safeName} - Top Food.apk` : "Top Food.apk";
-
-    setIsPrompting(true);
-    const link = document.createElement("a");
-    link.href = "/top-food.apk";
-    link.setAttribute("download", downloadFileName);
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-
-    setTimeout(() => {
-      try {
-        if (link.parentNode) {
-          link.parentNode.removeChild(link);
-        }
-      } catch {
-        // ignore
-      }
-      setIsPrompting(false);
-    }, 1200);
-  };
+  const { isStore, storeName: currentStoreName } = getStoreInfo();
+  const nomeDaLoja = isStore ? currentStoreName : "";
 
   const handleInstallClick = async (e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation();
-    }
-
-    const { isStore, storeName: currentStoreName } = getStoreInfo();
-
     // 4. Salva a rota atual no localStorage ao clicar em baixar na loja para redirecionar o usuário diretamente para ela ao reabrir o app
     if (isStore && typeof window !== "undefined") {
       try {
@@ -153,28 +123,33 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       }
     }
 
-    // 1. Se o usuário estiver no iPhone/iOS: ao clicar em instalar, abre um modal instrutivo explicando como adicionar à Tela de Início pelo Safari
+    // 1. Se o usuário estiver no iPhone/iOS: ao clicar em instalar, abre o modal instrutivo explicando como adicionar à Tela de Início pelo Safari
     if (isIOS) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       setActiveTab("ios");
       setShowModal(true);
       return;
     }
 
-    // 2. Se o usuário estiver no Android (ou desktop): faz o download do arquivo '/Top Food.apk'
-    triggerApkDownload(isStore, currentStoreName);
+    // No Android ou Desktop, aciona animação de feedback enquanto o download nativo ocorre pelo link
+    setIsPrompting(true);
+    setTimeout(() => {
+      setIsPrompting(false);
+    }, 1200);
   };
-
-  const { isStore, storeName: currentStoreName } = getStoreInfo();
 
   return (
     <>
       {variant === "header" && (
-        <button
+        <a
           id="btn-pwa-install-header"
-          type="button"
+          href="/top-food.apk"
+          download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "Top Food.apk"}
           onClick={handleInstallClick}
-          disabled={isPrompting}
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer disabled:opacity-75 whitespace-nowrap h-7 sm:h-7.5 ${className}`}
+          className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer whitespace-nowrap h-7 sm:h-7.5 ${className}`}
           title="Instalar Top Food no seu dispositivo"
         >
           <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
@@ -190,7 +165,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </span>
             </>
           )}
-        </button>
+        </a>
       )}
 
       {variant === "banner" && (
@@ -204,8 +179,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
               <div className="min-w-0">
                 <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">
-                  {isStore && currentStoreName
-                    ? `Instale o aplicativo de ${currentStoreName}`
+                  {nomeDaLoja
+                    ? `Instale o aplicativo de ${nomeDaLoja}`
                     : "Instale o Top Food no seu aparelho"}
                 </h4>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">
@@ -213,16 +188,16 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 </p>
               </div>
             </div>
-            <button
+            <a
               id="btn-pwa-install-banner"
-              type="button"
+              href="/top-food.apk"
+              download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "Top Food.apk"}
               onClick={handleInstallClick}
-              disabled={isPrompting}
-              className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-75"
+              className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
             >
               <Download className="h-3.5 w-3.5" />
               <span>{isPrompting ? "Baixando..." : "Instalar App"}</span>
-            </button>
+            </a>
           </div>
         </div>
       )}
@@ -257,11 +232,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
               <h3 className="text-lg font-black text-gray-900 dark:text-white">
                 {activeTab === "ios"
-                  ? isStore && currentStoreName
-                    ? `Adicionar ${currentStoreName} ao iPhone`
+                  ? nomeDaLoja
+                    ? `Adicionar ${nomeDaLoja} ao iPhone`
                     : "Instalar no iPhone (Safari)"
-                  : isStore && currentStoreName
-                  ? `Instalar ${currentStoreName}`
+                  : nomeDaLoja
+                  ? `Instalar ${nomeDaLoja}`
                   : "Instalar Top Food"}
               </h3>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -356,21 +331,30 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 <p className="leading-relaxed">
                   No Android, você pode baixar o aplicativo diretamente em formato APK para instalar no seu aparelho:
                 </p>
-                <button
-                  type="button"
-                  onClick={() => triggerApkDownload(isStore, currentStoreName)}
-                  disabled={isPrompting}
+                <a
+                  href="/top-food.apk"
+                  download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "Top Food.apk"}
+                  onClick={() => {
+                    if (isStore && typeof window !== "undefined") {
+                      try {
+                        localStorage.setItem(
+                          "topfood_saved_store_route",
+                          window.location.pathname + window.location.search
+                        );
+                      } catch (_err) {
+                        // ignore
+                      }
+                    }
+                  }}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-4 shadow-sm transition active:scale-95 cursor-pointer"
                 >
                   <Download className="h-4 w-4" />
                   <span>
-                    {isPrompting
-                      ? "Baixando..."
-                      : isStore && currentStoreName
-                      ? `Baixar APK (${currentStoreName})`
+                    {nomeDaLoja
+                      ? `Baixar APK (${nomeDaLoja})`
                       : "Baixar top-food.apk"}
                   </span>
-                </button>
+                </a>
                 <div className="pt-1 text-[11px] text-gray-500 dark:text-gray-400">
                   Dica: Ao concluir o download, abra a notificação ou a pasta "Downloads" e toque em <strong>Instalar</strong>.
                 </div>
@@ -399,13 +383,13 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   <div className="pt-0.5 leading-relaxed">
                     Ou baixe o arquivo APK diretamente para o seu aparelho Android:
                     <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() => triggerApkDownload(isStore, currentStoreName)}
+                      <a
+                        href="/top-food.apk"
+                        download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "Top Food.apk"}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:text-white transition cursor-pointer"
                       >
                         <Download className="h-3.5 w-3.5" /> Baixar top-food.apk
-                      </button>
+                      </a>
                     </div>
                   </div>
                 </div>
