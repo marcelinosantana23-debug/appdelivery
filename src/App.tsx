@@ -519,24 +519,26 @@ function AppContent() {
       try {
         const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
         if (!isExplicitPortal) {
-          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
+          // 3. REDIRECIONAMENTO AO ABRIR O APLICATIVO:
+          // Ao iniciar o app no celular, verifique o 'loja_salva' no localStorage:
+          // * Se existir o ID de uma loja, redirecione imediatamente para a página dessa loja (/loja/ID).
+          // * Se estiver vazio/nulo, mantenha o usuário na vitrine principal do Top Food (/).
+          const lojaSalva = (
+            localStorage.getItem("loja_salva") ||
+            ""
+          ).trim();
+
           if (
-            savedStoreRoute &&
-            savedStoreRoute.startsWith("/") &&
-            savedStoreRoute !== "/" &&
-            savedStoreRoute !== "/portal" &&
-            savedStoreRoute !== "/topfood"
+            lojaSalva &&
+            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
           ) {
-            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
-            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
-            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
-              try {
-                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
-              } catch (_err) {
-                // ignore history state error
-              }
-              return "menu";
+            const targetRoute = `/loja/${lojaSalva}`;
+            try {
+              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", targetRoute);
+            } catch (_err) {
+              // ignore history state error
             }
+            return "menu";
           }
         }
       } catch (_err) {
@@ -551,7 +553,10 @@ function AppContent() {
 
   const [view, setView] = useState<View>(getInitialView);
 
-  // Redirecionamento automático ao reabrir o app na raiz caso o usuário tenha baixado o app na vitrine de uma loja
+  // 3. REDIRECIONAMENTO AO ABRIR O APLICATIVO:
+  // Ao iniciar o app no celular, verifique o 'loja_salva' no localStorage:
+  // * Se existir o ID de uma loja, redirecione imediatamente para a página dessa loja (/loja/ID).
+  // * Se estiver vazio/nulo, mantenha o usuário na vitrine principal do Top Food (/).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const path = window.location.pathname.toLowerCase();
@@ -560,24 +565,21 @@ function AppContent() {
       try {
         const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
         if (!isExplicitPortal) {
-          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
+          const lojaSalva = (
+            localStorage.getItem("loja_salva") ||
+            ""
+          ).trim();
+
           if (
-            savedStoreRoute &&
-            savedStoreRoute.startsWith("/") &&
-            savedStoreRoute !== "/" &&
-            savedStoreRoute !== "/portal" &&
-            savedStoreRoute !== "/topfood"
+            lojaSalva &&
+            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
           ) {
-            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
-            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
-            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
-              selectTenant(savedSlug);
-              setView("menu");
-              try {
-                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
-              } catch (_err) {
-                // ignore history state error
-              }
+            selectTenant(lojaSalva);
+            setView("menu");
+            try {
+              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", `/loja/${lojaSalva}`);
+            } catch (_err) {
+              // ignore history state error
             }
           }
         }

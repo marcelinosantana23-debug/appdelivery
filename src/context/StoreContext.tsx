@@ -462,19 +462,13 @@ function getInitialUrlSlug(): string {
     try {
       const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
       if (!isExplicitPortal) {
-        const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
-        if (
-          savedStoreRoute &&
-          savedStoreRoute.startsWith("/") &&
-          savedStoreRoute !== "/" &&
-          savedStoreRoute !== "/portal" &&
-          savedStoreRoute !== "/topfood"
-        ) {
-          const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
-          const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
-          if (savedSlug && !RESERVED_SLUGS.has(savedSlug.toLowerCase())) {
-            return decodeURIComponent(savedSlug).toLowerCase();
-          }
+        // Redirecionamento unificado: verifica loja_salva no localStorage
+        const lojaSalva = (
+          localStorage.getItem("loja_salva") ||
+          ""
+        ).trim();
+        if (lojaSalva && !RESERVED_SLUGS.has(lojaSalva.toLowerCase())) {
+          return decodeURIComponent(lojaSalva).toLowerCase();
         }
       }
     } catch {
