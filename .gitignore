@@ -25,3 +25,6 @@ dist-ssr
 # Bun lock files
 bun.lock
 bun.lockb
+
+# APK binaries in public directory
+public/*.apk
