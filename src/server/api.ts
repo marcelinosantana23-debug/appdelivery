@@ -1649,8 +1649,16 @@ api.get("/pedidos/:id", async (c) => {
       return c.json({ success: false, error: "Pedido não encontrado." }, 404);
     }
 
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    c.header("Pragma", "no-cache");
+    c.header("Expires", "0");
+
     return c.json({
       success: true,
+      orderId: pedido.id,
+      status: pedido.status,
+      statusPt: STATUS_MAP_EN_TO_PT[pedido.status] || pedido.status,
+      order: pedido,
       pedido: {
         ...pedido,
         statusPt: STATUS_MAP_EN_TO_PT[pedido.status] || pedido.status,
@@ -3460,7 +3468,19 @@ api.get("/orders/:orderId", async (c) => {
     if (!order) {
       return c.json({ success: false, error: "Pedido não encontrado" }, 404);
     }
-    return c.json({ success: true, order }, 200);
+
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    c.header("Pragma", "no-cache");
+    c.header("Expires", "0");
+
+    return c.json({
+      success: true,
+      orderId: order.id,
+      status: order.status,
+      statusPt: STATUS_MAP_EN_TO_PT[order.status] || order.status,
+      order,
+      pedido: order,
+    }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao buscar pedido" }, 500);
   }
@@ -3475,7 +3495,19 @@ api.get("/tenants/:slugOrId/orders/:orderId", async (c) => {
     if (!order) {
       return c.json({ success: false, error: "Pedido não encontrado" }, 404);
     }
-    return c.json({ success: true, order }, 200);
+
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    c.header("Pragma", "no-cache");
+    c.header("Expires", "0");
+
+    return c.json({
+      success: true,
+      orderId: order.id,
+      status: order.status,
+      statusPt: STATUS_MAP_EN_TO_PT[order.status] || order.status,
+      order,
+      pedido: order,
+    }, 200);
   } catch (e: any) {
     return c.json({ success: false, error: e.message || "Erro ao buscar pedido" }, 500);
   }

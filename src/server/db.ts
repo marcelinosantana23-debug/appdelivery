@@ -5569,17 +5569,23 @@ export class Database {
 
   async getOrderById(orderId: string): Promise<Order | null> {
     if (!orderId) return null;
-    const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
-    const rawId = orderId.replace(/^#/, "");
+    let decoded = String(orderId).trim();
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch {
+      // ignore
+    }
+    const cleanId = decoded.startsWith("#") ? decoded : `#${decoded}`;
+    const rawId = decoded.replace(/^#/, "");
 
-    // 1. D1 Database query
+    // 1. D1 Database query estrita por ID
     if (this.env?.DB) {
       try {
         await this.ensureTables();
         const row = await this.env.DB.prepare(
-          "SELECT * FROM orders WHERE id = ? OR id = ? OR id = ? LIMIT 1"
+          "SELECT * FROM orders WHERE id = ? OR id = ? OR id = ? OR id = ? LIMIT 1"
         )
-          .bind(orderId, cleanId, rawId)
+          .bind(orderId, decoded, cleanId, rawId)
           .first<any>();
         if (row) {
           return this.mapOrderRow(row);
@@ -5593,16 +5599,25 @@ export class Database {
     const kv = this.getKv();
     if (kv) {
       try {
-        const cached = await kv.get(`order:${cleanId}`) || await kv.get(`order:${rawId}`);
+        const cached =
+          (await kv.get(`order:${cleanId}`)) ||
+          (await kv.get(`order:${rawId}`)) ||
+          (await kv.get(`order:${decoded}`)) ||
+          (await kv.get(`order:${orderId}`));
         if (cached) return JSON.parse(cached) as Order;
       } catch (e) {
         console.warn("KV get order error:", e);
       }
     }
 
-    // 3. Fallback memory query
+    // 3. Fallback memory query estrita por ID
     const found = globalStore.orders.find(
-      (o) => o.id === orderId || o.id === cleanId || o.id === rawId
+      (o) =>
+        o.id === orderId ||
+        o.id === decoded ||
+        o.id === cleanId ||
+        o.id === rawId ||
+        (o.id && o.id.replace(/^#/, "") === rawId)
     );
     return found || null;
   }
@@ -5633,7 +5648,7 @@ export class Database {
             return order;
           }
         }
-      } catch (e) {
+      } catch {
         // Silencioso
       }
     }
@@ -5695,7 +5710,7 @@ export class Database {
     globalStore.orders.unshift(newOrder);
 
     // 2. Gravação direta e atômica no Cloudflare D1 com timeout interno rígido (máx 3.5s)
-    let d1Saved = false;
+    let _d1Saved = false;
     if (this.env?.DB) {
       try {
         const d1InsertPromise = this.env.DB.prepare(
@@ -5737,7 +5752,7 @@ export class Database {
 
         const result: any = await Promise.race([d1InsertPromise, insertTimeoutPromise]);
         if (result && !result.timeout) {
-          d1Saved = true;
+          _d1Saved = true;
         } else if (result?.timeout) {
           console.warn("[D1] Timeout de 3.5s no INSERT primário de orders, prosseguindo com fallback de memória");
         }
@@ -5781,7 +5796,7 @@ export class Database {
           );
           const fbRes: any = await Promise.race([fallbackPromise, fbTimeout]);
           if (fbRes && !fbRes.timeout) {
-            d1Saved = true;
+            _d1Saved = true;
           }
         } catch (fbErr) {
           console.warn("[D1] Erro no fallback de insert:", fbErr);

@@ -139,7 +139,7 @@ export function FloatingOrderTracker({
     }
   }, [currentTenantSlug, isCompletedCelebration]);
 
-  // Aplica a alteração de status recebida em tempo real da cozinha/admin
+  // Aplica a alteração de status recebida em tempo real da cozinha/admin para este cliente individual
   const applyStatusUpdate = useCallback(
     (rawStatus: OrderStatus | string, updatedOrder?: Order | null) => {
       const normStatus = normalizeOrderStatus(rawStatus);
@@ -153,19 +153,19 @@ export function FloatingOrderTracker({
         );
       }
 
+      statusRef.current = normStatus;
+      setStatus(normStatus);
+      const now = new Date();
+      setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+
       // Se o status alterou de fato:
       if (normStatus !== prevStatus) {
-        statusRef.current = normStatus;
-        setStatus(normStatus);
-        const now = new Date();
-        setLastCheckTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-
         // Toca o efeito sonoro suave ("tricks") em cada avanço do status
         if (prevStatus) {
           playOrderStatusUpdateChime(normStatus);
         }
 
-        // Atualiza o estado no localStorage (mantém a barra visível nas etapas intermediárias)
+        // Atualiza o estado no localStorage individual daquele cliente
         updateActiveOrderStatus(normStatus);
 
         // Se o status for entregue/concluído
@@ -185,6 +185,8 @@ export function FloatingOrderTracker({
             setOrder(null);
           }, 3500);
         }
+      } else {
+        updateActiveOrderStatus(normStatus);
       }
     },
     []
@@ -203,12 +205,13 @@ export function FloatingOrderTracker({
     }
   }, [orders, orderId, applyStatusUpdate]);
 
-  // 3. Persistência: Carga pontual inicial no Cloudflare D1 (apenas uma vez na inicialização/recarregamento)
+  // 3. Persistência: Carga pontual inicial no banco (apenas uma vez na inicialização/recarregamento)
   useEffect(() => {
     if (!orderId) return;
     let isMounted = true;
+    const cleanId = orderId.replace(/^#/, "");
 
-    fetchOrderDetailsApi(orderId, currentTenantSlug)
+    fetchOrderDetailsApi(cleanId, currentTenantSlug)
       .then((res) => {
         if (!isMounted || !res.success || !res.order) return;
         const norm = normalizeOrderStatus(res.order.status);
@@ -252,14 +255,21 @@ export function FloatingOrderTracker({
     };
   }, [orderId, currentTenantSlug]);
 
-  // Busca manual no banco D1 ao clicar no botão "Atualizar Status" (economiza requisições Cloudflare/D1)
+  // Busca manual no banco de dados ao clicar no botão "Atualizar Status" (spinner)
+  // Filtrado estritamente pelo ID do pedido ativo daquele cliente específico
   const handleRefreshStatus = useCallback(
     async (e?: React.MouseEvent) => {
       if (e) e.stopPropagation();
-      if (!orderId || isRefreshing) return;
+
+      // Consulta estritamente pelo ID do pedido ativo daquele cliente específico
+      const activeData = getActiveOrderData(currentTenantSlug);
+      const activeId = activeData?.orderId || orderId;
+
+      if (!activeId || isRefreshing) return;
       setIsRefreshing(true);
       setRefreshSuccess(false);
-      const cleanId = orderId.replace(/^#/, "");
+
+      const cleanId = String(activeId).trim().replace(/^#/, "");
 
       try {
         const res = await fetchOrderDetailsApi(cleanId, currentTenantSlug);
@@ -272,7 +282,7 @@ export function FloatingOrderTracker({
         setRefreshSuccess(true);
         setTimeout(() => setRefreshSuccess(false), 3000);
       } catch (err) {
-        console.warn("Erro ao buscar status mais recente no D1:", err);
+        console.warn("Erro ao buscar status mais recente no banco:", err);
       } finally {
         setIsRefreshing(false);
       }
@@ -306,6 +316,13 @@ export function FloatingOrderTracker({
     const handleActiveOrderUpdate = (e: any) => {
       const detail = e.detail;
       if (!detail) return;
+
+      const incomingId = String(detail.orderId || "").trim().replace(/^#/, "");
+      const currentCleanId = String(orderId || "").trim().replace(/^#/, "");
+
+      if (incomingId && currentCleanId && incomingId !== currentCleanId) {
+        return;
+      }
 
       if (detail.orderId && !orderId) {
         setOrderId(detail.orderId);
@@ -369,7 +386,7 @@ export function FloatingOrderTracker({
             (data.type === "ORDER_STATUS_CHANGED" || data.type === "ACTIVE_ORDER_UPDATED")
           ) {
             const incomingId = (data.orderId || "").replace(/^#/, "");
-            if ((!incomingId || incomingId === cleanId) && data.status) {
+            if (incomingId && incomingId === cleanId && data.status) {
               applyStatusUpdate(data.status, data.order || data.orderData);
             }
           } else if (data && data.type === "ACTIVE_ORDER_CLEARED") {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useStore } from "@/context/StoreContext";
 import { PortalHeader } from "./PortalHeader";
 import { EstablishmentCategories } from "./EstablishmentCategories";
@@ -91,10 +91,10 @@ export function TopFoodPortal({
     );
   }, [selectedLocality]);
 
-  const matchesSelectedLocation = (loc?: string) => {
+  const matchesSelectedLocation = useCallback((loc?: string) => {
     if (isAllLocations) return true;
     return (loc || "Gargaú").trim().toLowerCase() === selectedLocality.trim().toLowerCase();
-  };
+  }, [isAllLocations, selectedLocality]);
 
   // FONTE DE DADOS REATIVA POR LOCALIDADE:
   // Unifica o array de lojas ativas e filtra pela localidade selecionada (ou mostra todas se "Todas as Localidades").
@@ -137,7 +137,7 @@ export function TopFoodPortal({
         matchesSelectedLocation(p.location || p.localidade) &&
         (activeIds.has(p.tenantId) || (p.tenantSlug && activeSlugs.has(p.tenantSlug)) || Boolean(p.location || p.localidade))
     );
-  }, [topSellingProducts, lojas, isAllLocations]);
+  }, [topSellingProducts, lojas, isAllLocations, matchesSelectedLocation]);
 
   const activeTenants = lojas;
 
@@ -411,7 +411,7 @@ export function TopFoodPortal({
   };
 
   // Filtra as seções exibidas caso o usuário tenha clicado em uma categoria específica no topo
-  const displayedGroups = useMemo(() => {
+  const _displayedGroups = useMemo(() => {
     if (!selectedCategory || selectedCategory === "todos") {
       return groupedTenants;
     }
@@ -456,7 +456,7 @@ export function TopFoodPortal({
 
   // Subtítulo dinâmico: soma de todas as lojas cadastradas (20 lojas parceiras disponíveis no Top Food)
   // ou o total da categoria quando uma categoria específica estiver filtrada
-  const totalAvailableStores = useMemo(() => {
+  const _totalAvailableStores = useMemo(() => {
     if (searchQuery.trim()) {
       return matchingStores.length;
     }

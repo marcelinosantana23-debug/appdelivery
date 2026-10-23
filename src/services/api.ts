@@ -835,21 +835,64 @@ export async function updateTenantCredentialsApi(
 export async function fetchOrderDetailsApi(
   orderId: string,
   slugOrId?: string
-): Promise<{ success: boolean; order?: Order; error?: string }> {
+): Promise<{ success: boolean; order?: Order; status?: OrderStatus; error?: string }> {
   try {
-    const cleanId = encodeURIComponent(orderId);
-    const url = slugOrId
-      ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${cleanId}`
-      : `${BASE_URL}/orders/${cleanId}`;
-    const res = await fetch(url, {
-      headers: {
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-      },
+    const rawId = String(orderId || "").trim();
+    if (!rawId) {
+      return { success: false, error: "ID do pedido não informado" };
+    }
+    const cleanId = rawId.replace(/^#/, "");
+    const timestamp = Date.now();
+    const antiCacheHeaders = {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    };
+
+    // 1. Tenta consulta direta individualizada em /api/orders/:orderId
+    const primaryUrl = `${BASE_URL}/orders/${encodeURIComponent(cleanId)}?_t=${timestamp}`;
+    let res = await fetch(primaryUrl, {
+      method: "GET",
+      cache: "no-store",
+      headers: antiCacheHeaders,
     });
-    return await res.json();
+
+    // 2. Fallback para /api/pedidos/:id
+    if (!res.ok && res.status === 404) {
+      const fallbackUrl = `${BASE_URL}/pedidos/${encodeURIComponent(cleanId)}?_t=${timestamp}`;
+      res = await fetch(fallbackUrl, {
+        method: "GET",
+        cache: "no-store",
+        headers: antiCacheHeaders,
+      });
+    }
+
+    // 3. Fallback com slug da loja /api/tenants/:slug/orders/:id se fornecido
+    if (!res.ok && res.status === 404 && slugOrId) {
+      const tenantUrl = `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${encodeURIComponent(cleanId)}?_t=${timestamp}`;
+      res = await fetch(tenantUrl, {
+        method: "GET",
+        cache: "no-store",
+        headers: antiCacheHeaders,
+      });
+    }
+
+    if (!res.ok) {
+      return { success: false, error: `Pedido #${cleanId} não encontrado no banco de dados.` };
+    }
+
+    const data = await res.json();
+    const resolvedOrder = data.order || data.pedido;
+    if (resolvedOrder) {
+      return {
+        success: true,
+        order: resolvedOrder,
+        status: data.status || resolvedOrder.status,
+      };
+    }
+    return { success: false, error: data.error || "Dados do pedido indisponíveis." };
   } catch (err: any) {
-    return { success: false, error: err.message || "Erro ao consultar status do pedido" };
+    return { success: false, error: err.message || "Erro de conexão ao consultar status do pedido." };
   }
 }
 
@@ -857,11 +900,17 @@ export async function fetchOrderStatusQuickApi(
   orderId: string
 ): Promise<{ success: boolean; status?: OrderStatus; order?: Order; error?: string }> {
   try {
-    const cleanId = encodeURIComponent(orderId.replace(/^#/, ""));
-    const res = await fetch(`${BASE_URL}/orders/${cleanId}/status`, {
+    const rawId = String(orderId || "").trim();
+    if (!rawId) return { success: false, error: "ID não informado" };
+    const cleanId = rawId.replace(/^#/, "");
+    const timestamp = Date.now();
+    const res = await fetch(`${BASE_URL}/orders/${encodeURIComponent(cleanId)}/status?_t=${timestamp}`, {
+      method: "GET",
+      cache: "no-store",
       headers: {
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
         Pragma: "no-cache",
+        Expires: "0",
       },
     });
     return await res.json();

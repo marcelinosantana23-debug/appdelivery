@@ -78,22 +78,23 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       playOrderStatusUpdateChime(newStatus);
     }
 
-    if (newStatus !== prevStatus) {
-      prevStatusRef.current = newStatus;
-      statusRef.current = newStatus;
-      updateActiveOrderStatus(newStatus);
-    }
+    prevStatusRef.current = newStatus;
+    statusRef.current = newStatus;
+    updateActiveOrderStatus(newStatus);
   }, []);
 
-  // Busca manual sob demanda no banco D1 ao clicar no botão "Atualizar Status"
+  // Busca manual sob demanda no banco ao clicar no botão "Atualizar Status"
   const handleRefreshStatus = useCallback(async () => {
     if (isRefreshing) return;
     // Garante que o áudio esteja ativo após a interação do toque
     unlockAudioContext().catch(() => {});
 
+    const targetId = order?.id || initialOrder?.id || "";
+    const cleanId = String(targetId).trim().replace(/^#/, "");
+    if (!cleanId) return;
+
     setIsRefreshing(true);
     setRefreshSuccess(false);
-    const cleanId = (initialOrder?.id || order?.id || "").replace(/^#/, "");
 
     try {
       const res = await fetchOrderDetailsApi(cleanId, config.slug);
@@ -106,7 +107,7 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       setRefreshSuccess(true);
       setTimeout(() => setRefreshSuccess(false), 3000);
     } catch (err) {
-      console.warn("Erro ao buscar status mais recente no D1:", err);
+      console.warn("Erro ao buscar status mais recente no banco:", err);
     } finally {
       setIsRefreshing(false);
     }

@@ -28,7 +28,6 @@ import {
   saveCachedCategories,
   haveTenantsChanged,
   haveStoresRankedChanged,
-  haveProductsChanged,
   preloadStoreImages,
   removeCachedTenant,
 } from "@/utils/storeCache";
