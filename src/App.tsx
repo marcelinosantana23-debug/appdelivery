@@ -516,6 +516,16 @@ function AppContent() {
     // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+      // 4. REDIRECIONAMENTO INTELIGENTE (Deep Linking):
+      // Verifica se existe loja salva no localStorage ao abrir o aplicativo na raiz
+      try {
+        const savedStore = localStorage.getItem("topfood_default_store");
+        if (savedStore && savedStore !== "/" && savedStore !== "/portal" && savedStore !== "/topfood") {
+          return "menu";
+        }
+      } catch {
+        // ignore
+      }
       return "portal";
     }
 
@@ -524,6 +534,49 @@ function AppContent() {
   };
 
   const [view, setView] = useState<View>(getInitialView);
+
+  // 4. REDIRECIONAMENTO INTELIGENTE (Deep Linking):
+  // Redireciona o usuário diretamente para a loja salva no localStorage ao abrir o aplicativo
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const path = window.location.pathname.toLowerCase().replace(/\/+$/, "");
+    if (path === "" || path === "/" || path === "/topfood" || path === "/portal") {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get("loja") && !params.get("store") && !params.get("tenant")) {
+        try {
+          const savedStore = localStorage.getItem("topfood_default_store");
+          if (
+            savedStore &&
+            savedStore !== "/" &&
+            savedStore !== "/portal" &&
+            savedStore !== "/topfood"
+          ) {
+            let targetSlug = "";
+            const match = savedStore.match(/^\/loja\/([^/?#]+)/i);
+            if (match && match[1]) {
+              targetSlug = decodeURIComponent(match[1]).toLowerCase();
+            } else {
+              const seg = savedStore.replace(/^\/+|\/+$/g, "").split("/")[0];
+              if (
+                seg &&
+                !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(seg)
+              ) {
+                targetSlug = seg;
+              }
+            }
+
+            if (targetSlug) {
+              window.history.replaceState({ view: "menu", slug: targetSlug }, "", savedStore);
+              selectTenant(targetSlug);
+              setView("menu");
+            }
+          }
+        } catch (e) {
+          console.warn("Erro ao carregar deep linking da loja padrão:", e);
+        }
+      }
+    }
+  }, [selectTenant]);
 
   // Sync with browser URL history using standard HTML5 History API
   const navigateTo = useCallback(
