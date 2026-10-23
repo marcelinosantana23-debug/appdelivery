@@ -515,31 +515,35 @@ function AppContent() {
 
     // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
     const clean = path.replace(/\/+$/, "");
-    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal" || clean === "/index.html") {
       try {
         const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
         if (!isExplicitPortal) {
-          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
-          if (
-            savedStoreRoute &&
-            savedStoreRoute.startsWith("/") &&
-            savedStoreRoute !== "/" &&
-            savedStoreRoute !== "/portal" &&
-            savedStoreRoute !== "/topfood"
-          ) {
-            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
-            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
-            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
-              try {
-                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
-              } catch (_err) {
-                // ignore history state error
-              }
-              return "menu";
+          // 2. Ao abrir o app instalado, redireciona automaticamente para '/loja/' + lojaAtualId
+          const savedLoja = localStorage.getItem("loja_salva");
+          const savedRoute = localStorage.getItem("topfood_saved_store_route");
+          let targetSlug = "";
+
+          if (savedLoja && !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "index.html"].includes(savedLoja.toLowerCase())) {
+            targetSlug = savedLoja;
+          } else if (savedRoute && savedRoute.startsWith("/") && savedRoute !== "/" && savedRoute !== "/portal" && savedRoute !== "/topfood") {
+            const match = savedRoute.match(/^\/loja\/([^/?#]+)/i);
+            const raw = match ? match[1] : savedRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+            if (raw && !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "index.html"].includes(raw.toLowerCase())) {
+              targetSlug = raw;
             }
           }
+
+          if (targetSlug) {
+            try {
+              window.history.replaceState({ view: "menu", slug: targetSlug }, "", `/loja/${targetSlug}`);
+            } catch {
+              // ignore history state error
+            }
+            return "menu";
+          }
         }
-      } catch (_err) {
+      } catch {
         // ignore
       }
       return "portal";
@@ -551,33 +555,36 @@ function AppContent() {
 
   const [view, setView] = useState<View>(getInitialView);
 
-  // Redirecionamento automático ao reabrir o app na raiz caso o usuário tenha baixado o app na vitrine de uma loja
+  // Redirecionamento automático ao abrir o app instalado caso o usuário tenha instalado dentro de uma loja
   useEffect(() => {
     if (typeof window === "undefined") return;
     const path = window.location.pathname.toLowerCase();
     const clean = path.replace(/\/+$/, "");
-    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
+    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal" || clean === "/index.html") {
       try {
         const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
         if (!isExplicitPortal) {
-          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
-          if (
-            savedStoreRoute &&
-            savedStoreRoute.startsWith("/") &&
-            savedStoreRoute !== "/" &&
-            savedStoreRoute !== "/portal" &&
-            savedStoreRoute !== "/topfood"
-          ) {
-            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
-            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
-            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
-              selectTenant(savedSlug);
-              setView("menu");
-              try {
-                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
-              } catch (_err) {
-                // ignore history state error
-              }
+          const savedLoja = localStorage.getItem("loja_salva");
+          const savedRoute = localStorage.getItem("topfood_saved_store_route");
+          let targetSlug = "";
+
+          if (savedLoja && !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "index.html"].includes(savedLoja.toLowerCase())) {
+            targetSlug = savedLoja;
+          } else if (savedRoute && savedRoute.startsWith("/") && savedRoute !== "/" && savedRoute !== "/portal" && savedRoute !== "/topfood") {
+            const match = savedRoute.match(/^\/loja\/([^/?#]+)/i);
+            const raw = match ? match[1] : savedRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+            if (raw && !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "index.html"].includes(raw.toLowerCase())) {
+              targetSlug = raw;
+            }
+          }
+
+          if (targetSlug) {
+            selectTenant(targetSlug);
+            setView("menu");
+            try {
+              window.history.replaceState({ view: "menu", slug: targetSlug }, "", `/loja/${targetSlug}`);
+            } catch {
+              // ignore history state error
             }
           }
         }

@@ -75,12 +75,17 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     const lowerPath = path.toLowerCase();
     const cleanPath = lowerPath.replace(/\/+$/, "");
 
-    // Rotas gerais que NÃO pertencem a uma loja específica (Portal e Painéis Administrativos)
+    // 1. QUANDO O USUÁRIO ESTIVER NA TELA INICIAL (TOP FOOD):
+    // Rotas gerais da Home/Portal ou painéis administrativos NUNCA devem carregar ID de loja
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryStore = searchParams.get("loja") || searchParams.get("store") || searchParams.get("tenant");
+
     const isPortalRoute =
       cleanPath === "" ||
       cleanPath === "/" ||
       cleanPath === "/portal" ||
-      cleanPath === "/topfood";
+      cleanPath === "/topfood" ||
+      cleanPath === "/index.html";
 
     const isAdminRoute =
       lowerPath.startsWith("/admin") ||
@@ -90,46 +95,52 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       lowerPath.startsWith("/api") ||
       lowerPath.startsWith("/health");
 
-    if (isPortalRoute || isAdminRoute) {
+    if ((isPortalRoute && !queryStore) || isAdminRoute) {
       return { isStore: false, storeName: "", storeId: "" };
     }
 
-    // Extrai o slug/ID da loja a partir do caminho /loja/:slug ou /:slug
+    // 2. Extrai o slug/ID da loja a partir do caminho /loja/:slug ou parâmetro
     let extractedSlug = "";
     const match = path.match(/^\/loja\/([^/?#]+)/i);
     if (match && match[1]) {
       extractedSlug = decodeURIComponent(match[1]).toLowerCase().trim();
+    } else if (queryStore) {
+      extractedSlug = decodeURIComponent(String(queryStore)).toLowerCase().trim();
     } else {
       const firstSegment = path.replace(/^\/+|\/+$/g, "").split("/")[0];
       if (
         firstSegment &&
-        !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "carrinho", "checkout", "rastreio"].includes(firstSegment.toLowerCase())
+        !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "carrinho", "checkout", "rastreio", "index.html"].includes(firstSegment.toLowerCase())
       ) {
         extractedSlug = decodeURIComponent(firstSegment).toLowerCase().trim();
       }
     }
 
+    // Se estiver em rota da Home sem slug de loja explícito, garante que é Home
+    if (!extractedSlug && !propStoreName) {
+      return { isStore: false, storeName: "", storeId: "" };
+    }
+
     const finalId =
       extractedSlug ||
       (currentTenant?.slug && currentTenant.slug.trim()) ||
-      (config?.slug && config.slug.trim() !== "topfood" && config.slug.trim()) ||
       "";
+
+    if (!finalId || ["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(finalId.toLowerCase())) {
+      return { isStore: false, storeName: "", storeId: "" };
+    }
 
     const detectedName =
       (propStoreName && propStoreName.trim()) ||
       (currentTenant?.name && currentTenant.name.trim()) ||
       (config?.name && config.name.trim() !== "Top Food" && config.name.trim()) ||
-      "";
+      finalId;
 
-    if (finalId || detectedName) {
-      return {
-        isStore: true,
-        storeName: detectedName || finalId,
-        storeId: finalId,
-      };
-    }
-
-    return { isStore: false, storeName: "", storeId: "" };
+    return {
+      isStore: true,
+      storeName: detectedName,
+      storeId: finalId,
+    };
   };
 
   const { isStore, storeName, storeId: idDaLoja } = getStoreInfo();
@@ -152,7 +163,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         if (link.parentNode) {
           link.parentNode.removeChild(link);
         }
-      } catch (_err) {
+      } catch {
         // ignore
       }
       setIsPrompting(false);
@@ -161,17 +172,55 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
   // Manipulador de clique com Regra de Segurança (Fallback para erro 404)
   const handleInstallClick = async (e?: React.MouseEvent) => {
-    // Salva a rota atual no localStorage para redirecionar ao reabrir o app
-    if (isStore && typeof window !== "undefined") {
-      try {
-        const currentRoute = window.location.pathname + window.location.search;
-        localStorage.setItem("topfood_saved_store_route", currentRoute);
-        if (idDaLoja) {
-          localStorage.setItem("topfood_last_store_slug", idDaLoja);
+    // 1. QUANDO O USUÁRIO ESTIVER NA TELA INICIAL (TOP FOOD):
+    // Se o usuário clicar em "Instalar" estando na Home/Tela Inicial (sem nenhuma loja selecionada),
+    // LIMPE qualquer identificador de loja salvo anteriormente no localStorage (ex: localStorage.removeItem('loja_salva')).
+    // Configure para que a rota padrão ao abrir o app instalado seja estritamente a página inicial ('/').
+    if (!isStore || !idDaLoja) {
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("loja_salva");
+          localStorage.removeItem("topfood_saved_store_route");
+          localStorage.removeItem("topfood_last_store_slug");
+          localStorage.removeItem("topfood_default_store");
+          localStorage.setItem("topfood_default_route", "/");
+          sessionStorage.setItem("topfood_explicit_portal_nav", "true");
+        } catch (err) {
+          console.warn("Erro ao limpar loja do localStorage na tela inicial:", err);
         }
+      }
+
+      // No iPhone/iOS, previne o download do APK e abre o modal explicativo do Safari
+      if (isIOS) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        setActiveTab("ios");
+        setShowModal(true);
+        return;
+      }
+
+      // No Android/Desktop, baixa o APK padrão oficial /top-food.apk
+      if (e) {
+        e.preventDefault();
+      }
+      triggerApkDownload("/top-food.apk", "top-food.apk");
+      return;
+    }
+
+    // 2. QUANDO O USUÁRIO ESTIVER DENTRO DE UMA LOJA ESPECÍFICA:
+    // Salve o ID/slug da loja atual no localStorage (ex: localStorage.setItem('loja_salva', lojaAtualId)).
+    // Ao abrir o app instalado, redirecione automaticamente para a página daquela loja específica ('/loja/' + lojaAtualId).
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("loja_salva", idDaLoja);
+        localStorage.setItem("topfood_saved_store_route", `/loja/${idDaLoja}`);
+        localStorage.setItem("topfood_last_store_slug", idDaLoja);
+        localStorage.setItem("topfood_default_store", `/loja/${idDaLoja}`);
         sessionStorage.removeItem("topfood_explicit_portal_nav");
       } catch (err) {
-        console.warn("Erro ao salvar rota no localStorage:", err);
+        console.warn("Erro ao salvar loja_salva no localStorage:", err);
       }
     }
 
@@ -186,38 +235,29 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       return;
     }
 
-    // 4. ATRIBUTO DE DOWNLOAD
+    // 4. ATRIBUTO DE DOWNLOAD DINÂMICO
     const downloadFileName = nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk";
 
     // 2 & 3. Se estiver em uma loja específica, checa se o APK existe; se der 404, faz fallback para /top-food.apk
-    if (isStore && idDaLoja) {
-      if (e) {
-        e.preventDefault();
-      }
-      setIsPrompting(true);
-      const storeApkUrl = `/${idDaLoja}.apk`;
-
-      try {
-        const checkRes = await fetch(storeApkUrl, { method: "HEAD", cache: "no-store" });
-        // Se retornar 404 ou erro, faz fallback automático para o APK padrão
-        if (checkRes.status === 404 || !checkRes.ok) {
-          console.warn(`APK da loja '${storeApkUrl}' não encontrado (404). Baixando APK padrão /top-food.apk.`);
-          triggerApkDownload("/top-food.apk", downloadFileName);
-        } else {
-          triggerApkDownload(storeApkUrl, downloadFileName);
-        }
-      } catch {
-        // Fallback em caso de falha de conexão
-        triggerApkDownload("/top-food.apk", downloadFileName);
-      }
-      return;
-    }
-
-    // 1. CLIENTE NA TELA INICIAL (TOP FOOD)
     if (e) {
       e.preventDefault();
     }
-    triggerApkDownload("/top-food.apk", "top-food.apk");
+    setIsPrompting(true);
+    const storeApkUrl = `/${idDaLoja}.apk`;
+
+    try {
+      const checkRes = await fetch(storeApkUrl, { method: "HEAD", cache: "no-store" });
+      // Se retornar 404 ou erro, faz fallback automático para o APK padrão
+      if (checkRes.status === 404 || !checkRes.ok) {
+        console.warn(`APK da loja '${storeApkUrl}' não encontrado (404). Baixando APK padrão /top-food.apk.`);
+        triggerApkDownload("/top-food.apk", downloadFileName);
+      } else {
+        triggerApkDownload(storeApkUrl, downloadFileName);
+      }
+    } catch {
+      // Fallback em caso de falha de conexão
+      triggerApkDownload("/top-food.apk", downloadFileName);
+    }
   };
 
   return (
