@@ -96,7 +96,7 @@ export function Header(props: HeaderProps = {}) {
               />
             </div>
 
-            {/* LADO DIREITO: Botão "Instalar" + Atualizar (🔄 circular) + Status da Loja */}
+            {/* LADO DIREITO: Botão "Instalar" (Download /top-food.apk) + Atualizar + Status da Loja */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
               <PWAInstallButton
                 variant="header"

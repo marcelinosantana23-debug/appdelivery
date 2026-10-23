@@ -1,3 +1,8 @@
+/**
+ * Top Food Delivery - Componente Oficial do Botão de Instalação PWA / APK
+ * Atualizado para download direto: /top-food.apk com nome dinâmico da loja
+ */
+
 import React, { useState, useEffect } from "react";
 import {
   Download,
@@ -33,7 +38,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     isDesktop,
   } = usePWAInstall();
 
-  // Acessa o contexto da loja para obter nome e slug caso esteja em uma vitrine
+  // Contexto da loja para obter os dados do estabelecimento atual
   const storeContext = useStore();
   const config = storeContext?.config;
   const currentTenant = storeContext?.currentTenant;
@@ -44,7 +49,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   );
   const [isPrompting, setIsPrompting] = useState(false);
 
-  // Inicializa a aba conforme o dispositivo detectado
+  // Sincroniza a aba ativa com o sistema operacional detectado
   useEffect(() => {
     if (isIOS) {
       setActiveTab("ios");
@@ -55,12 +60,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     }
   }, [isIOS, isAndroid, isXiaomi, isDesktop]);
 
-  // Se já estiver rodando em modo standalone (app instalado), não renderiza
+  // Se já estiver rodando em modo standalone (aplicativo instalado), oculta o botão
   if (isInstalled) {
     return null;
   }
 
-  // Detecta se o usuário está na página de uma loja/estabelecimento e obtém seu nome
+  // Identifica se está navegando na vitrine de um lojista e extrai o nome
   const getStoreInfo = (): { isStore: boolean; storeName: string } => {
     if (typeof window === "undefined") {
       return { isStore: false, storeName: "" };
@@ -73,7 +78,6 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     const path = window.location.pathname.toLowerCase();
     const cleanPath = path.replace(/\/+$/, "");
 
-    // Não é vitrine se for rota do Portal Geral ou rotas administrativas
     const isPortalRoute =
       cleanPath === "" ||
       cleanPath === "/" ||
@@ -91,7 +95,6 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       return { isStore: false, storeName: "" };
     }
 
-    // Se estiver em rota de vitrine (/loja/:slug ou /:slug)
     const detectedName =
       (currentTenant?.name && currentTenant.name.trim()) ||
       (config?.name && config.name.trim() !== "Top Food" && config.name.trim()) ||
@@ -107,8 +110,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const { isStore, storeName: currentStoreName } = getStoreInfo();
   const nomeDaLoja = isStore ? currentStoreName : "";
 
+  // Manipulador de clique: salva rota no localStorage e trata iOS
   const handleInstallClick = async (e?: React.MouseEvent) => {
-    // 4. Salva a rota atual no localStorage ao clicar em baixar na loja para redirecionar o usuário diretamente para ela ao reabrir o app
+    // Salva a rota atual no localStorage para redirecionar ao reabrir o app
     if (isStore && typeof window !== "undefined") {
       try {
         const currentRoute = window.location.pathname + window.location.search;
@@ -119,11 +123,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         }
         sessionStorage.removeItem("topfood_explicit_portal_nav");
       } catch (err) {
-        console.warn("Erro ao salvar rota da loja no localStorage:", err);
+        console.warn("Erro ao salvar rota no localStorage:", err);
       }
     }
 
-    // 1. Se o usuário estiver no iPhone/iOS: ao clicar em instalar, abre o modal instrutivo explicando como adicionar à Tela de Início pelo Safari
+    // No iPhone/iOS, previne o download do APK e abre o modal explicativo do Safari
     if (isIOS) {
       if (e) {
         e.preventDefault();
@@ -134,15 +138,16 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       return;
     }
 
-    // No Android ou Desktop, aciona animação de feedback enquanto o download nativo ocorre pelo link
+    // Feedback visual breve durante o download nativo do arquivo
     setIsPrompting(true);
     setTimeout(() => {
       setIsPrompting(false);
-    }, 1200);
+    }, 1500);
   };
 
   return (
     <>
+      {/* 1. Botão de Cabeçalho / Navbar */}
       {variant === "header" && (
         <a
           id="btn-pwa-install-header"
@@ -168,6 +173,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         </a>
       )}
 
+      {/* 2. Banner de Instalação na Página */}
       {variant === "banner" && (
         <div
           className={`rounded-2xl border border-amber-200/80 dark:border-amber-900/40 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-slate-900 dark:to-slate-800 p-3.5 sm:p-4 shadow-sm ${className}`}
@@ -202,7 +208,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         </div>
       )}
 
-      {/* Modal Instrutivo (com foco especial em iPhone / Safari) */}
+      {/* 3. Modal Informativo para Safari no iOS */}
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in"
@@ -246,7 +252,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </p>
             </div>
 
-            {/* Seletor de Plataforma (Android/Xiaomi, iOS, PC) */}
+            {/* Abas de Navegação de Plataforma */}
             <div className="flex rounded-xl bg-gray-100 dark:bg-slate-800 p-1 mb-4 text-xs font-semibold">
               <button
                 type="button"
@@ -361,7 +367,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
             )}
 
-            {/* Conteúdo: Computador / PC (Chrome, Edge, etc.) */}
+            {/* Conteúdo: Computador / PC */}
             {activeTab === "desktop" && (
               <div className="space-y-3 bg-gray-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-xs text-gray-700 dark:text-gray-300">
                 <div className="flex items-start gap-3">
