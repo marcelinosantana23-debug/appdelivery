@@ -515,36 +515,31 @@ function AppContent() {
 
     // Se a rota for raiz ou /topfood ou /portal -> Home do Portal Top Food
     const clean = path.replace(/\/+$/, "");
-    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal" || clean === "/index.html") {
+    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       try {
         const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
-        if (isExplicitPortal) {
-          return "portal";
+        if (!isExplicitPortal) {
+          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
+          if (
+            savedStoreRoute &&
+            savedStoreRoute.startsWith("/") &&
+            savedStoreRoute !== "/" &&
+            savedStoreRoute !== "/portal" &&
+            savedStoreRoute !== "/topfood"
+          ) {
+            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
+            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
+              try {
+                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
+              } catch (_err) {
+                // ignore history state error
+              }
+              return "menu";
+            }
+          }
         }
-
-        // 2. VERIFICAÇÃO NO INÍCIO DO APP (Deep Link / Redirect):
-        const lojaSalva = localStorage.getItem("loja_salva");
-        const rotaInicial = localStorage.getItem("rota_inicial");
-
-        // SE 'lojaSalva' estiver vazia ou for null (ou 'rota_inicial' for '/'), NÃO redirecione para nenhuma loja. Abra estritamente a vitrine principal do Top Food.
-        if (
-          !lojaSalva ||
-          lojaSalva.trim() === "" ||
-          rotaInicial === "/" ||
-          ["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "index.html"].includes(lojaSalva.toLowerCase().trim())
-        ) {
-          return "portal";
-        }
-
-        // APENAS redirecione para uma loja se 'lojaSalva' contiver um ID válido de uma loja específica.
-        const targetSlug = decodeURIComponent(lojaSalva).toLowerCase().trim();
-        try {
-          window.history.replaceState({ view: "menu", slug: targetSlug }, "", `/loja/${targetSlug}`);
-        } catch {
-          // ignore
-        }
-        return "menu";
-      } catch {
+      } catch (_err) {
         // ignore
       }
       return "portal";
@@ -556,42 +551,38 @@ function AppContent() {
 
   const [view, setView] = useState<View>(getInitialView);
 
-  // 2. VERIFICAÇÃO NO INÍCIO DO APP (Deep Link / Redirect):
+  // Redirecionamento automático ao reabrir o app na raiz caso o usuário tenha baixado o app na vitrine de uma loja
   useEffect(() => {
     if (typeof window === "undefined") return;
     const path = window.location.pathname.toLowerCase();
     const clean = path.replace(/\/+$/, "");
-    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal" || clean === "/index.html") {
+    if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       try {
         const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
-        if (isExplicitPortal) {
-          return;
-        }
-
-        const lojaSalva = localStorage.getItem("loja_salva");
-        const rotaInicial = localStorage.getItem("rota_inicial");
-
-        // SE 'lojaSalva' estiver vazia ou for null (ou 'rota_inicial' for '/'), NÃO redirecione para nenhuma loja. Abra estritamente a vitrine principal do Top Food.
-        if (
-          !lojaSalva ||
-          lojaSalva.trim() === "" ||
-          rotaInicial === "/" ||
-          ["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "index.html"].includes(lojaSalva.toLowerCase().trim())
-        ) {
-          return;
-        }
-
-        // APENAS redirecione para uma loja se 'lojaSalva' contiver um ID válido de uma loja específica.
-        const targetSlug = decodeURIComponent(lojaSalva).toLowerCase().trim();
-        selectTenant(targetSlug);
-        setView("menu");
-        try {
-          window.history.replaceState({ view: "menu", slug: targetSlug }, "", `/loja/${targetSlug}`);
-        } catch {
-          // ignore
+        if (!isExplicitPortal) {
+          const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
+          if (
+            savedStoreRoute &&
+            savedStoreRoute.startsWith("/") &&
+            savedStoreRoute !== "/" &&
+            savedStoreRoute !== "/portal" &&
+            savedStoreRoute !== "/topfood"
+          ) {
+            const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
+            const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+            if (savedSlug && !["admin", "painel", "superadmin", "super-admin", "api", "health"].includes(savedSlug)) {
+              selectTenant(savedSlug);
+              setView("menu");
+              try {
+                window.history.replaceState({ view: "menu", slug: savedSlug }, "", savedStoreRoute);
+              } catch (_err) {
+                // ignore history state error
+              }
+            }
+          }
         }
       } catch (err) {
-        console.warn("Erro no redirect inicial:", err);
+        console.warn("Erro ao redirecionar para loja salva:", err);
       }
     }
   }, [selectTenant]);

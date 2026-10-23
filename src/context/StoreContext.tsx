@@ -458,25 +458,24 @@ function getInitialUrlSlug(): string {
 
   // 5. Rota principal do Portal Top Food (/ ou /topfood ou /portal)
   const clean = path.replace(/\/+$/, "").toLowerCase();
-  if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal" || clean === "/index.html") {
+  if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
     try {
       const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
       if (!isExplicitPortal) {
-        const lojaSalva = localStorage.getItem("loja_salva");
-        const rotaInicial = localStorage.getItem("rota_inicial");
-
-        // SE 'lojaSalva' estiver vazia ou for null (ou 'rota_inicial' for '/'), NÃO redirecione para nenhuma loja. Abra estritamente a vitrine principal do Top Food.
+        const savedStoreRoute = localStorage.getItem("topfood_saved_store_route");
         if (
-          !lojaSalva ||
-          lojaSalva.trim() === "" ||
-          rotaInicial === "/" ||
-          RESERVED_SLUGS.has(lojaSalva.toLowerCase().trim())
+          savedStoreRoute &&
+          savedStoreRoute.startsWith("/") &&
+          savedStoreRoute !== "/" &&
+          savedStoreRoute !== "/portal" &&
+          savedStoreRoute !== "/topfood"
         ) {
-          return "";
+          const match = savedStoreRoute.match(/^\/loja\/([^/?#]+)/i);
+          const savedSlug = match ? match[1] : savedStoreRoute.replace(/^\/+|\/+$/g, "").split("/")[0];
+          if (savedSlug && !RESERVED_SLUGS.has(savedSlug.toLowerCase())) {
+            return decodeURIComponent(savedSlug).toLowerCase();
+          }
         }
-
-        // APENAS redirecione para uma loja se 'lojaSalva' contiver um ID válido de uma loja específica.
-        return decodeURIComponent(lojaSalva).toLowerCase().trim();
       }
     } catch {
       // ignore
@@ -1413,17 +1412,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applyPortalDefaultTheme(portalPrimary);
     setCurrentSlug("");
     setCurrentTenant(null);
-    setConfig({
-      ...defaultStoreConfig,
-      name: "Top Food",
-      slug: "topfood",
-      primaryColor: portalPrimary,
-      primaryDark: PORTAL_DEFAULT_THEME.primaryDark,
-      primaryLight: PORTAL_DEFAULT_THEME.primaryLight,
-      accentColor: PORTAL_DEFAULT_THEME.accentColor,
-      secondaryColor: PORTAL_DEFAULT_THEME.secondaryColor,
-      themeMode: "light",
-    });
+    setConfig((prev) =>
+      prev.primaryColor === portalPrimary && prev.themeMode === "light"
+        ? prev
+        : {
+            ...defaultStoreConfig,
+            primaryColor: portalPrimary,
+            primaryDark: PORTAL_DEFAULT_THEME.primaryDark,
+            primaryLight: PORTAL_DEFAULT_THEME.primaryLight,
+            accentColor: PORTAL_DEFAULT_THEME.accentColor,
+            secondaryColor: PORTAL_DEFAULT_THEME.secondaryColor,
+            themeMode: "light",
+          }
+    );
   }, [platformSettings?.primaryColor]);
 
   // Handle browser back/forward navigation

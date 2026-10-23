@@ -228,12 +228,12 @@ async function startServer() {
     res.redirect(`/api/manifest/${req.params.slug}`);
   });
 
-  // Dedicated Android APK download route: /tap-tap.apk with fallback and support for store-specific APKs
-  app.get(["/tap-tap.apk", "/top-food.apk", "/:storeSlug.apk"], (req, res, next) => {
-    const rawSlug = req.params.storeSlug || "tap-tap";
+  // Dedicated Android APK download route: specific store APK (/:storeSlug.apk) with automatic fallback to /top-food.apk
+  app.get(["/top-food.apk", "/:storeSlug.apk"], (req, res, next) => {
+    const rawSlug = req.params.storeSlug || "top-food";
 
     // 1. Procura o arquivo específico da loja (ex: /pizzaria-vip.apk)
-    if (rawSlug !== "tap-tap" && rawSlug !== "top-food") {
+    if (rawSlug !== "top-food") {
       const storeCandidates = [
         path.join(process.cwd(), "public", `${rawSlug}.apk`),
         path.join(process.cwd(), "dist", `${rawSlug}.apk`),
@@ -241,23 +241,19 @@ async function startServer() {
       for (const file of storeCandidates) {
         if (fs.existsSync(file)) {
           res.setHeader("Content-Type", "application/vnd.android.package-archive");
-          res.setHeader("Content-Disposition", `attachment; filename="${rawSlug}.apk"`);
           return res.sendFile(file);
         }
       }
     }
 
-    // 2. REGRA DE SEGURANÇA (FALLBACK): Entrega /tap-tap.apk (ou top-food.apk como fallback)
+    // 2. REGRA DE SEGURANÇA (FALLBACK): Se o APK da loja não existir ou for a rota oficial, entrega /top-food.apk
     const defaultCandidates = [
-      path.join(process.cwd(), "public", "tap-tap.apk"),
-      path.join(process.cwd(), "dist", "tap-tap.apk"),
       path.join(process.cwd(), "public", "top-food.apk"),
       path.join(process.cwd(), "dist", "top-food.apk"),
     ];
     for (const file of defaultCandidates) {
       if (fs.existsSync(file)) {
         res.setHeader("Content-Type", "application/vnd.android.package-archive");
-        res.setHeader("Content-Disposition", 'attachment; filename="tap-tap.apk"');
         return res.sendFile(file);
       }
     }

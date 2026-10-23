@@ -75,17 +75,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     const lowerPath = path.toLowerCase();
     const cleanPath = lowerPath.replace(/\/+$/, "");
 
-    // 1. QUANDO O USUÁRIO ESTIVER NA TELA INICIAL (TOP FOOD):
-    // Rotas gerais da Home/Portal ou painéis administrativos NUNCA devem carregar ID de loja
-    const searchParams = new URLSearchParams(window.location.search);
-    const queryStore = searchParams.get("loja") || searchParams.get("store") || searchParams.get("tenant");
-
+    // Rotas gerais que NÃO pertencem a uma loja específica (Portal e Painéis Administrativos)
     const isPortalRoute =
       cleanPath === "" ||
       cleanPath === "/" ||
       cleanPath === "/portal" ||
-      cleanPath === "/topfood" ||
-      cleanPath === "/index.html";
+      cleanPath === "/topfood";
 
     const isAdminRoute =
       lowerPath.startsWith("/admin") ||
@@ -95,65 +90,56 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       lowerPath.startsWith("/api") ||
       lowerPath.startsWith("/health");
 
-    if ((isPortalRoute && !queryStore) || isAdminRoute) {
+    if (isPortalRoute || isAdminRoute) {
       return { isStore: false, storeName: "", storeId: "" };
     }
 
-    // 2. Extrai o slug/ID da loja a partir do caminho /loja/:slug ou parâmetro
+    // Extrai o slug/ID da loja a partir do caminho /loja/:slug ou /:slug
     let extractedSlug = "";
     const match = path.match(/^\/loja\/([^/?#]+)/i);
     if (match && match[1]) {
       extractedSlug = decodeURIComponent(match[1]).toLowerCase().trim();
-    } else if (queryStore) {
-      extractedSlug = decodeURIComponent(String(queryStore)).toLowerCase().trim();
     } else {
       const firstSegment = path.replace(/^\/+|\/+$/g, "").split("/")[0];
       if (
         firstSegment &&
-        !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "carrinho", "checkout", "rastreio", "index.html"].includes(firstSegment.toLowerCase())
+        !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood", "carrinho", "checkout", "rastreio"].includes(firstSegment.toLowerCase())
       ) {
         extractedSlug = decodeURIComponent(firstSegment).toLowerCase().trim();
       }
     }
 
-    // Se estiver em rota da Home sem slug de loja explícito, garante que é Home
-    if (!extractedSlug && !propStoreName) {
-      return { isStore: false, storeName: "", storeId: "" };
-    }
-
     const finalId =
       extractedSlug ||
       (currentTenant?.slug && currentTenant.slug.trim()) ||
+      (config?.slug && config.slug.trim() !== "topfood" && config.slug.trim()) ||
       "";
-
-    if (!finalId || ["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(finalId.toLowerCase())) {
-      return { isStore: false, storeName: "", storeId: "" };
-    }
 
     const detectedName =
       (propStoreName && propStoreName.trim()) ||
       (currentTenant?.name && currentTenant.name.trim()) ||
       (config?.name && config.name.trim() !== "Top Food" && config.name.trim()) ||
-      finalId;
+      "";
 
-    return {
-      isStore: true,
-      storeName: detectedName,
-      storeId: finalId,
-    };
+    if (finalId || detectedName) {
+      return {
+        isStore: true,
+        storeName: detectedName || finalId,
+        storeId: finalId,
+      };
+    }
+
+    return { isStore: false, storeName: "", storeId: "" };
   };
 
   const { isStore, storeName, storeId: idDaLoja } = getStoreInfo();
   const nomeDaLoja = isStore ? storeName : "";
 
-  // 1. ARQUIVO DE DOWNLOAD FIXO NA RAIZ:
-  // - O link do botão de instalação deve sempre apontar para a raiz do site: href="/tap-tap.apk" (com a barra '/' no início para não quebrar quando o usuário estiver em sub-rotas como /loja/nome-da-loja).
-  // - O atributo download deve ser: download="tap-tap.apk".
-  const targetHref = "/tap-tap.apk";
-  const downloadFileName = "tap-tap.apk";
+  // 1 & 2. Define o link dinâmico: se em loja específica aponta para /${idDaLoja}.apk; na inicial para /top-food.apk
+  const targetHref = isStore && idDaLoja ? `/${idDaLoja}.apk` : "/top-food.apk";
 
   // Função auxiliar para disparar o download nativo via elemento <a> invisível
-  const triggerApkDownload = (apkUrl: string = "/tap-tap.apk", fileName: string = "tap-tap.apk") => {
+  const triggerApkDownload = (apkUrl: string, fileName: string) => {
     setIsPrompting(true);
     const link = document.createElement("a");
     link.href = apkUrl;
@@ -166,62 +152,26 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         if (link.parentNode) {
           link.parentNode.removeChild(link);
         }
-      } catch {
+      } catch (_err) {
         // ignore
       }
       setIsPrompting(false);
     }, 1500);
   };
 
-  // Manipulador de clique com Regra de Persistência e Download Fixo na Raiz
+  // Manipulador de clique com Regra de Segurança (Fallback para erro 404)
   const handleInstallClick = async (e?: React.MouseEvent) => {
-    // 1. QUANDO O USUÁRIO ESTIVER NA TELA INICIAL (Home/TapTap):
-    // Se o usuário clicar em "Instalar" na TELA INICIAL (Home/TapTap), limpe o localStorage (localStorage.setItem('loja_salva', '')).
-    if (!isStore || !idDaLoja) {
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("loja_salva", ""); // Limpa o ID da loja
-          localStorage.setItem("rota_inicial", "/"); // Define a rota estritamente como a Home do Top Food / TapTap
-          localStorage.removeItem("topfood_saved_store_route");
-          localStorage.removeItem("topfood_last_store_slug");
-          localStorage.removeItem("topfood_default_store");
-          sessionStorage.setItem("topfood_explicit_portal_nav", "true");
-        } catch (err) {
-          console.warn("Erro ao limpar loja do localStorage na tela inicial:", err);
-        }
-      }
-
-      // No iPhone/iOS, previne o download do APK e abre o modal explicativo do Safari
-      if (isIOS) {
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        setActiveTab("ios");
-        setShowModal(true);
-        return;
-      }
-
-      // No Android/Desktop, baixa o APK fixo da raiz /tap-tap.apk
-      if (e) {
-        e.preventDefault();
-      }
-      triggerApkDownload(targetHref, downloadFileName);
-      return;
-    }
-
-    // 2. QUANDO O USUÁRIO ESTIVER DENTRO DE UMA LOJA ESPECÍFICA:
-    // Se o usuário clicar em "Instalar" estando DENTRO de uma loja específica, salve o slug/ID dessa loja no localStorage (ex: localStorage.setItem('loja_salva', lojaAtualId)).
-    if (typeof window !== "undefined") {
+    // Salva a rota atual no localStorage para redirecionar ao reabrir o app
+    if (isStore && typeof window !== "undefined") {
       try {
-        localStorage.setItem("loja_salva", idDaLoja);
-        localStorage.setItem("rota_inicial", `/loja/${idDaLoja}`);
-        localStorage.setItem("topfood_saved_store_route", `/loja/${idDaLoja}`);
-        localStorage.setItem("topfood_last_store_slug", idDaLoja);
-        localStorage.setItem("topfood_default_store", `/loja/${idDaLoja}`);
+        const currentRoute = window.location.pathname + window.location.search;
+        localStorage.setItem("topfood_saved_store_route", currentRoute);
+        if (idDaLoja) {
+          localStorage.setItem("topfood_last_store_slug", idDaLoja);
+        }
         sessionStorage.removeItem("topfood_explicit_portal_nav");
       } catch (err) {
-        console.warn("Erro ao salvar loja_salva no localStorage:", err);
+        console.warn("Erro ao salvar rota no localStorage:", err);
       }
     }
 
@@ -236,11 +186,38 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       return;
     }
 
-    // No Android/Desktop: download sempre apontando para a raiz /tap-tap.apk
+    // 4. ATRIBUTO DE DOWNLOAD
+    const downloadFileName = nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk";
+
+    // 2 & 3. Se estiver em uma loja específica, checa se o APK existe; se der 404, faz fallback para /top-food.apk
+    if (isStore && idDaLoja) {
+      if (e) {
+        e.preventDefault();
+      }
+      setIsPrompting(true);
+      const storeApkUrl = `/${idDaLoja}.apk`;
+
+      try {
+        const checkRes = await fetch(storeApkUrl, { method: "HEAD", cache: "no-store" });
+        // Se retornar 404 ou erro, faz fallback automático para o APK padrão
+        if (checkRes.status === 404 || !checkRes.ok) {
+          console.warn(`APK da loja '${storeApkUrl}' não encontrado (404). Baixando APK padrão /top-food.apk.`);
+          triggerApkDownload("/top-food.apk", downloadFileName);
+        } else {
+          triggerApkDownload(storeApkUrl, downloadFileName);
+        }
+      } catch {
+        // Fallback em caso de falha de conexão
+        triggerApkDownload("/top-food.apk", downloadFileName);
+      }
+      return;
+    }
+
+    // 1. CLIENTE NA TELA INICIAL (TOP FOOD)
     if (e) {
       e.preventDefault();
     }
-    triggerApkDownload(targetHref, downloadFileName);
+    triggerApkDownload("/top-food.apk", "top-food.apk");
   };
 
   return (
@@ -250,10 +227,10 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         <a
           id="btn-pwa-install-header"
           href={targetHref}
-          download={downloadFileName}
+          download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
           onClick={handleInstallClick}
           className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition shadow-xs border border-white/25 active:scale-95 cursor-pointer whitespace-nowrap h-7 sm:h-7.5 ${className}`}
-          title="Instalar App no seu dispositivo"
+          title="Instalar Top Food no seu dispositivo"
         >
           <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 shrink-0" />
           {label ? (
@@ -295,7 +272,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             <a
               id="btn-pwa-install-banner"
               href={targetHref}
-              download={downloadFileName}
+              download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
               onClick={handleInstallClick}
               className="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
             >
@@ -437,7 +414,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 </p>
                 <a
                   href={targetHref}
-                  download={downloadFileName}
+                  download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
                   onClick={handleInstallClick}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-4 shadow-sm transition active:scale-95 cursor-pointer"
                 >
@@ -445,7 +422,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   <span>
                     {isPrompting
                       ? "Baixando..."
-                      : "Baixar tap-tap.apk"}
+                      : nomeDaLoja
+                      ? `Baixar APK (${nomeDaLoja})`
+                      : "Baixar top-food.apk"}
                   </span>
                 </a>
                 <div className="pt-1 text-[11px] text-gray-500 dark:text-gray-400">
@@ -478,11 +457,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     <div className="mt-2">
                       <a
                         href={targetHref}
-                        download={downloadFileName}
+                        download={nomeDaLoja ? `${nomeDaLoja} - Top Food.apk` : "top-food.apk"}
                         onClick={handleInstallClick}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-gray-800 dark:text-white transition cursor-pointer"
                       >
-                        <Download className="h-3.5 w-3.5" /> Baixar tap-tap.apk
+                        <Download className="h-3.5 w-3.5" /> Baixar APK
                       </a>
                     </div>
                   </div>
