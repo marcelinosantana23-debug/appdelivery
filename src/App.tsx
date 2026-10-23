@@ -21,6 +21,7 @@ import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import type { Product, Order } from "@/types";
 import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
 import { getActiveOrderData } from "@/utils/orderStorage";
+import { isAppStandalone } from "@/hooks/usePWAInstall";
 
 type View = "portal" | "menu" | "checkout" | "tracking" | "admin" | "superadmin";
 
@@ -522,24 +523,31 @@ function AppContent() {
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       try {
-        // 2. NA INICIALIZAÇÃO DO APP:
-        // Se 'loja_salva' tiver um valor válido no localStorage, faz o redirecionamento imediato
-        const lojaSalva = (
-          localStorage.getItem("loja_salva") ||
-          ""
-        ).trim();
+        const isStandalone = isAppStandalone();
+        if (isStandalone) {
+          // 3. REDIRECIONAMENTO APENAS NO APP INSTALADO:
+          const lojaSalva = (
+            localStorage.getItem("loja_salva") ||
+            ""
+          ).trim();
 
-        if (
-          lojaSalva &&
-          !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
-        ) {
-          const targetRoute = `/loja/${lojaSalva}`;
-          try {
-            window.history.replaceState({ view: "menu", slug: lojaSalva }, "", targetRoute);
-          } catch (_err) {
-            // ignore history state error
+          if (
+            lojaSalva &&
+            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
+          ) {
+            const targetRoute = `/loja/${lojaSalva}`;
+            try {
+              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", targetRoute);
+            } catch (_err) {
+              // ignore history state error
+            }
+            return "menu";
           }
-          return "menu";
+        } else {
+          // 1 & 2. ACESSO À HOME NA WEB (/): NUNCA redireciona e limpa loja_salva
+          localStorage.removeItem("loja_salva");
+          localStorage.removeItem("topfood_saved_store_route");
+          localStorage.removeItem("topfood_last_store_slug");
         }
       } catch (_err) {
         // ignore
@@ -553,33 +561,41 @@ function AppContent() {
 
   const [view, setView] = useState<View>(getInitialView);
 
-  // 2. NA INICIALIZAÇÃO DO APP:
-  // Redirecionamento imediato caso 'loja_salva' exista no localStorage
+  // 1, 2 & 3. Gerenciamento de inicialização e redirecionamento na Home
   useEffect(() => {
     if (typeof window === "undefined") return;
     const path = window.location.pathname.toLowerCase();
     const clean = path.replace(/\/+$/, "");
     if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
       try {
-        const lojaSalva = (
-          localStorage.getItem("loja_salva") ||
-          ""
-        ).trim();
+        const isStandalone = isAppStandalone();
+        if (isStandalone) {
+          // 3. REDIRECIONAMENTO APENAS NO APP INSTALADO:
+          const lojaSalva = (
+            localStorage.getItem("loja_salva") ||
+            ""
+          ).trim();
 
-        if (
-          lojaSalva &&
-          !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
-        ) {
-          selectTenant(lojaSalva);
-          setView("menu");
-          try {
-            window.history.replaceState({ view: "menu", slug: lojaSalva }, "", `/loja/${lojaSalva}`);
-          } catch (_err) {
-            // ignore history state error
+          if (
+            lojaSalva &&
+            !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(lojaSalva.toLowerCase())
+          ) {
+            selectTenant(lojaSalva);
+            setView("menu");
+            try {
+              window.history.replaceState({ view: "menu", slug: lojaSalva }, "", `/loja/${lojaSalva}`);
+            } catch (_err) {
+              // ignore history state error
+            }
           }
+        } else {
+          // 1 & 2. ACESSO À HOME NA WEB (/): NUNCA redireciona e limpa o localStorage
+          localStorage.removeItem("loja_salva");
+          localStorage.removeItem("topfood_saved_store_route");
+          localStorage.removeItem("topfood_last_store_slug");
         }
       } catch (err) {
-        console.warn("Erro ao redirecionar para loja salva:", err);
+        console.warn("Erro ao processar inicialização da home:", err);
       }
     }
   }, [selectTenant]);

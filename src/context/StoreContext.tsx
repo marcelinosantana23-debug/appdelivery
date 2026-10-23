@@ -460,9 +460,16 @@ function getInitialUrlSlug(): string {
   const clean = path.replace(/\/+$/, "").toLowerCase();
   if (clean === "" || clean === "/" || clean === "/topfood" || clean === "/portal") {
     try {
-      const isExplicitPortal = sessionStorage.getItem("topfood_explicit_portal_nav") === "true";
-      if (!isExplicitPortal) {
-        // Redirecionamento unificado: verifica loja_salva no localStorage
+      const isStandalone =
+        typeof window !== "undefined" &&
+        Boolean(
+          (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+          (window.navigator as unknown as { standalone?: boolean })?.standalone === true ||
+          document.referrer.includes("android-app://")
+        );
+
+      if (isStandalone) {
+        // 3. REDIRECIONAMENTO APENAS NO APP INSTALADO:
         const lojaSalva = (
           localStorage.getItem("loja_salva") ||
           ""
@@ -470,6 +477,11 @@ function getInitialUrlSlug(): string {
         if (lojaSalva && !RESERVED_SLUGS.has(lojaSalva.toLowerCase())) {
           return decodeURIComponent(lojaSalva).toLowerCase();
         }
+      } else {
+        // 1 & 2. ACESSO À HOME NA WEB (/): NUNCA redireciona e limpa loja_salva
+        localStorage.removeItem("loja_salva");
+        localStorage.removeItem("topfood_saved_store_route");
+        localStorage.removeItem("topfood_last_store_slug");
       }
     } catch {
       // ignore

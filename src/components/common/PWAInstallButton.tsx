@@ -22,8 +22,6 @@ interface PWAInstallButtonProps {
   variant?: "header" | "floating" | "banner";
   label?: string;
   storeName?: string;
-  storeId?: string;
-  storeSlug?: string;
 }
 
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
@@ -31,8 +29,6 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   variant = "header",
   label,
   storeName: propStoreName,
-  storeId: propStoreId,
-  storeSlug: propStoreSlug,
 }) => {
   const {
     isInstalled,
@@ -94,6 +90,10 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       lowerPath.startsWith("/api") ||
       lowerPath.startsWith("/health");
 
+    if (isPortalRoute || isAdminRoute) {
+      return { isStore: false, storeName: "", storeId: "" };
+    }
+
     // Extrai o slug/ID da loja a partir do caminho /loja/:slug ou /:slug
     let extractedSlug = "";
     const match = path.match(/^\/loja\/([^/?#]+)/i);
@@ -109,24 +109,23 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       }
     }
 
-    const lojaAtual = currentTenant || config;
-    const resolvedId =
-      propStoreSlug ||
-      propStoreId ||
+    const finalId =
       extractedSlug ||
-      (lojaAtual?.slug && lojaAtual.slug !== "topfood" ? lojaAtual.slug.trim() : "") ||
-      (lojaAtual?.id && lojaAtual.id !== "topfood" ? lojaAtual.id.trim() : "");
+      (currentTenant?.slug && currentTenant.slug.trim()) ||
+      (config?.slug && config.slug.trim() !== "topfood" && config.slug.trim()) ||
+      "";
 
     const detectedName =
       (propStoreName && propStoreName.trim()) ||
-      (lojaAtual?.name && lojaAtual.name !== "Top Food" ? lojaAtual.name.trim() : "") ||
+      (currentTenant?.name && currentTenant.name.trim()) ||
+      (config?.name && config.name.trim() !== "Top Food" && config.name.trim()) ||
       "";
 
-    if (!isPortalRoute && !isAdminRoute && (resolvedId || detectedName)) {
+    if (finalId || detectedName) {
       return {
         isStore: true,
-        storeName: detectedName || resolvedId,
-        storeId: resolvedId,
+        storeName: detectedName || finalId,
+        storeId: finalId,
       };
     }
 
@@ -166,48 +165,21 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const handleInstallClick = (e?: React.MouseEvent) => {
     if (typeof window !== "undefined") {
       try {
-        const path = window.location.pathname;
-        const cleanPath = path.toLowerCase().replace(/\/+$/, "");
-        const isPortalHome =
-          cleanPath === "" ||
-          cleanPath === "/" ||
-          cleanPath === "/portal" ||
-          cleanPath === "/topfood";
-
-        const match = path.match(/^\/loja\/([^/?#]+)/i);
-        const params = { id: match ? decodeURIComponent(match[1]).trim() : undefined };
-        const lojaAtual = currentTenant || config;
-
-        // Regra solicitada:
-        // const idDaLoja = lojaAtual?.slug || lojaAtual?.id || params?.id;
-        const targetId =
-          propStoreSlug ||
-          propStoreId ||
-          idDaLoja ||
-          lojaAtual?.slug ||
-          lojaAtual?.id ||
-          params?.id;
-
-        if (
-          !isPortalHome &&
-          targetId &&
-          targetId !== "undefined" &&
-          targetId !== "null" &&
-          targetId !== "topfood" &&
-          !["admin", "painel", "superadmin", "super-admin", "api", "health", "portal", "topfood"].includes(targetId.toLowerCase())
-        ) {
-          // Se o usuário clicar em "Instalar" DENTRO de uma loja específica:
-          // salva o ID/slug dessa loja no localStorage
-          console.log("[Top Food] Salvando loja_salva no localStorage:", targetId);
-          localStorage.setItem("loja_salva", targetId);
-          localStorage.setItem("topfood_last_store_slug", targetId);
-          localStorage.setItem("topfood_saved_store_route", `/loja/${targetId}`);
+        if (isStore && idDaLoja) {
+          // Ao clicar no botão de instalar dentro de uma loja:
+          // Salva o ID e o link dessa loja no localStorage para que, quando o app for instalado e aberto,
+          // ele redirecione e abra direto nessa mesma loja.
+          localStorage.setItem("loja_salva", idDaLoja);
+          localStorage.setItem("loja_salva_link", `/loja/${idDaLoja}`);
+          localStorage.setItem("topfood_last_store_slug", idDaLoja);
+          localStorage.setItem("topfood_saved_store_route", `/loja/${idDaLoja}`);
           sessionStorage.removeItem("topfood_explicit_portal_nav");
-        } else if (isPortalHome) {
-          // Se o usuário clicar em "Instalar" na TELA INICIAL (Home do Top Food):
-          // limpe qualquer loja salva
-          console.log("[Top Food] Limpando loja_salva no localStorage (tela inicial)");
+        } else {
+          // Ao clicar na Home, limpa o localStorage para abrir na vitrine principal do Top Food
           localStorage.setItem("loja_salva", "");
+          localStorage.removeItem("loja_salva");
+          localStorage.setItem("loja_salva_link", "");
+          localStorage.removeItem("loja_salva_link");
           localStorage.removeItem("topfood_saved_store_route");
           localStorage.removeItem("topfood_last_store_slug");
         }

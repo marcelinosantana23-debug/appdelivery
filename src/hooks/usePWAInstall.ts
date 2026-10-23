@@ -11,6 +11,19 @@ declare global {
   }
 }
 
+export function isAppStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+      document.referrer.includes("android-app://")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function getDeviceState() {
   if (typeof window === "undefined") {
     return {
@@ -30,10 +43,7 @@ function getDeviceState() {
   const isAndroidDevice = /android/.test(userAgent);
   const isXiaomiDevice = /miuibrowser|xiaomi|redmi|poco/i.test(userAgent);
   const isDesktopDevice = !isIOSDevice && !isAndroidDevice;
-  const isStandalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-    document.referrer.includes("android-app://");
+  const isStandalone = isAppStandalone();
 
   return {
     isIOS: isIOSDevice,

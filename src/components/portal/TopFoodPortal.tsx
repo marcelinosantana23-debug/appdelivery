@@ -68,12 +68,28 @@ export function TopFoodPortal({
     ]);
   };
 
-  // 1. RESET DE TEMA NO PORTAL PRINCIPAL (HOME):
+  // 1. RESET DE TEMA E LIMPEZA NA HOME WEB:
   // Ao montar a página do Portal TopFood, restaura obrigatoriamente as cores primárias padrão do aplicativo (vermelho/tema original do TopFood)
+  // e limpa qualquer identificador antigo no localStorage ao acessar a Home na Web
   useEffect(() => {
     resetToPortalTheme();
     if (typeof document !== "undefined") {
       document.title = platformSettings?.heroTitle || "Top Food - O Portal do Delivery";
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const isStandalone =
+          (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+          (window.navigator as unknown as { standalone?: boolean })?.standalone === true ||
+          document.referrer.includes("android-app://");
+        if (!isStandalone) {
+          localStorage.removeItem("loja_salva");
+          localStorage.removeItem("topfood_saved_store_route");
+          localStorage.removeItem("topfood_last_store_slug");
+        }
+      } catch (_err) {
+        // ignore storage error
+      }
     }
   }, [resetToPortalTheme, platformSettings?.heroTitle]);
 

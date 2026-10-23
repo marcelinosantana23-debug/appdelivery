@@ -67,22 +67,42 @@
     <meta name="twitter:description" content="O seu portal de delivery para as melhores lanchonetes, pizzarias, açaíterias e restaurantes." />
     <meta name="twitter:image" content="https://top-food-delivery.marcelinosantana23.workers.dev/icon-512.png" />
 
-    <!-- Redirecionamento Imediato ao Iniciar o App caso exista loja_salva -->
+    <!-- Verificação de Modo Standalone (PWA / APK Instalado) para loja_salva -->
     <script>
       (function() {
         try {
           var p = window.location.pathname.toLowerCase().replace(/\/+$/, '');
-          if (p === '' || p === '/' || p === '/topfood' || p === '/portal') {
-            var lojaSalva = (localStorage.getItem('loja_salva') || '').trim();
-            var reserved = ['admin', 'painel', 'superadmin', 'super-admin', 'api', 'health', 'portal', 'topfood'];
-            if (lojaSalva && reserved.indexOf(lojaSalva.toLowerCase()) === -1) {
-              var target = '/loja/' + encodeURIComponent(lojaSalva);
-              if (window.location.pathname !== target) {
-                window.history.replaceState({ view: 'menu', slug: lojaSalva }, '', target);
+          var isHomeRoute = p === '' || p === '/' || p === '/topfood' || p === '/portal';
+
+          if (isHomeRoute) {
+            var isStandalone = false;
+            try {
+              isStandalone =
+                (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+                (window.navigator && window.navigator.standalone === true) ||
+                (document.referrer && document.referrer.indexOf('android-app://') !== -1);
+            } catch (_e) {}
+
+            if (isStandalone) {
+              // 3. REDIRECIONAMENTO APENAS NO APP INSTALADO:
+              var lojaSalva = (localStorage.getItem('loja_salva') || '').trim();
+              var reserved = ['admin', 'painel', 'superadmin', 'super-admin', 'api', 'health', 'portal', 'topfood'];
+              if (lojaSalva && reserved.indexOf(lojaSalva.toLowerCase()) === -1) {
+                var target = '/loja/' + encodeURIComponent(lojaSalva);
+                if (window.location.pathname !== target) {
+                  window.history.replaceState({ view: 'menu', slug: lojaSalva }, '', target);
+                }
               }
+            } else {
+              // 1 & 2. ACESSO À HOME NA WEB (/): NUNCA redireciona e limpa o localStorage
+              try {
+                localStorage.removeItem('loja_salva');
+                localStorage.removeItem('topfood_saved_store_route');
+                localStorage.removeItem('topfood_last_store_slug');
+              } catch (_e) {}
             }
           }
-        } catch (_e) {}
+        } catch (_err) {}
       })();
     </script>
 
