@@ -3132,6 +3132,25 @@ api.get("/orders/stream", async (c) => {
     targetTenant = await db.getTenantByIdOrSlug(tenantParam);
   }
 
+  // Identificação e validação de permissão de super_admin
+  let isSuperAdmin = false;
+  const authHeader = c.req.header("Authorization") || c.req.query("token") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (token) {
+    try {
+      const user = await db.getUserByToken(token);
+      if (user && ["super_admin", "superadmin", "SUPER_ADMIN"].includes(user.role)) {
+        isSuperAdmin = true;
+      } else if (user && user.tenantId && !targetTenant) {
+        targetTenant = await db.getTenantByIdOrSlug(user.tenantId);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const effectiveTenantId = targetTenant?.id || (tenantParam ? tenantParam.trim() : null);
+
   return streamSSE(c, async (stream) => {
     await stream.writeSSE({
       event: "connected",
@@ -3139,9 +3158,16 @@ api.get("/orders/stream", async (c) => {
     });
 
     try {
-      const initialOrders = targetTenant
-        ? await db.getOrdersByTenant(targetTenant.id)
-        : await db.getAllOrders();
+      let initialOrders: any[] = [];
+      if (effectiveTenantId) {
+        initialOrders = await db.getOrdersByTenant(effectiveTenantId);
+      } else if (isSuperAdmin) {
+        initialOrders = await db.getAllOrders();
+      } else {
+        // Blindagem total: sem tenant e sem super admin, lista vazia sem vazamento
+        initialOrders = [];
+      }
+
       await stream.writeSSE({
         event: "orders",
         data: JSON.stringify({ orders: initialOrders, timestamp: Date.now() }),
@@ -3151,11 +3177,19 @@ api.get("/orders/stream", async (c) => {
     }
 
     const unsubscribe = orderEvents.subscribe(async (payload) => {
+      // Sem tenant e sem super admin, nunca propaga eventos
+      if (!effectiveTenantId && !isSuperAdmin) {
+        return;
+      }
+
       const match =
-        !targetTenant ||
-        payload.order?.tenantId === targetTenant.id ||
-        payload.order?.tenantId === targetTenant.slug ||
-        payload.tenantId === targetTenant.id;
+        isSuperAdmin ||
+        (effectiveTenantId && (
+          payload.order?.tenantId === effectiveTenantId ||
+          payload.order?.tenantId === targetTenant?.slug ||
+          payload.tenantId === effectiveTenantId ||
+          payload.tenantId === targetTenant?.slug
+        ));
 
       if (match) {
         try {
@@ -3176,7 +3210,7 @@ api.get("/orders/stream", async (c) => {
             }),
           });
         } catch (err) {
-          console.warn("SSE global push error:", err);
+          console.warn("SSE push order error:", err);
         }
       }
     });
@@ -3331,25 +3365,45 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
   }
 });
 
-// Endpoint de listagem e polling contínuo a cada 3 segundos: GET /api/orders?tenantId=...
+// Endpoint de listagem de pedidos: GET /api/orders?tenantId=...
 api.get("/orders", async (c) => {
   try {
     const db = getDb(c);
     const tenantParam = c.req.query("tenantId") || c.req.query("loja") || c.req.query("slug");
 
-    if (tenantParam) {
-      const tenant = await db.getTenantByIdOrSlug(tenantParam);
+    if (tenantParam && tenantParam.trim()) {
+      const cleanParam = tenantParam.trim();
+      const tenant = await db.getTenantByIdOrSlug(cleanParam);
       if (tenant) {
         const orders = await db.getOrdersByTenant(tenant.id);
         return c.json({ success: true, orders }, 200);
       }
-      const orders = await db.getOrdersByTenant(tenantParam);
+      const orders = await db.getOrdersByTenant(cleanParam);
       return c.json({ success: true, orders }, 200);
     }
 
-    // Se nenhum tenant informado, listar todos os pedidos
-    const orders = await db.getAllOrders();
-    return c.json({ success: true, orders }, 200);
+    // Se nenhum tenant informado, verificar autenticação. Apenas super_admin pode consultar pedidos globais.
+    // Lojista ou requisição pública sem tenant_id jamais recebe pedidos de outras lojas.
+    const authHeader = c.req.header("Authorization") || "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (token) {
+      try {
+        const user = await db.getUserByToken(token);
+        if (user && ["super_admin", "superadmin", "SUPER_ADMIN"].includes(user.role)) {
+          const orders = await db.getAllOrders();
+          return c.json({ success: true, orders }, 200);
+        }
+        if (user && user.tenantId) {
+          const orders = await db.getOrdersByTenant(user.tenantId);
+          return c.json({ success: true, orders }, 200);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Blindagem total: sem tenant_id e sem super_admin, retorna lista vazia segura
+    return c.json({ success: true, orders: [] }, 200);
   } catch (e: any) {
     return c.json({ success: false, orders: [], error: e.message || "Erro ao buscar pedidos" }, 500);
   }

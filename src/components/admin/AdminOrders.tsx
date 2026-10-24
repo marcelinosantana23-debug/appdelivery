@@ -124,15 +124,14 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
         }
       }
       const res = await refreshOrders();
-      if (res) {
+      if (res !== null) {
         setRefreshError(null);
         showToast("Lista de pedidos atualizada com sucesso!", "success");
       } else {
-        setRefreshError("Não foi possível carregar os pedidos no momento. Verifique sua conexão e tente novamente.");
+        showToast("Conexão instável. Mantendo pedidos salvos na tela.", "warning");
       }
-    } catch (err: any) {
-      setRefreshError(err?.message || "Erro de rede ao sincronizar pedidos com o servidor.");
-      showToast("Erro ao sincronizar pedidos", "error");
+    } catch {
+      showToast("Conexão instável. Mantendo pedidos salvos na tela.", "warning");
     } finally {
       setIsRefreshing(false);
     }

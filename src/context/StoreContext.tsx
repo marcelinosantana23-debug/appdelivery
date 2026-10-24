@@ -1315,11 +1315,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setProducts([]);
           }
 
-          if (oRes.success && oRes.orders) {
-            setOrders(oRes.orders);
-          } else {
-            setOrders([]);
+          if (oRes.success && oRes.orders && Array.isArray(oRes.orders)) {
+            const tenantOrders = oRes.orders
+              .filter((o: Order) => o && (o.tenantId === t.id || o.tenantId === t.slug))
+              .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+            setOrders(tenantOrders);
           }
+          // Preserva o estado de pedidos se houver oscilação de rede (nunca zera com setOrders([]))
 
           // 3. REGRA DE VALIDAÇÃO DE CACHE VAZIO:
           // NUNCA salva no LocalStorage se a resposta da API de produtos retornar uma array vazia ou se houver erro de requisição.
@@ -2312,6 +2314,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const handleIncomingNewOrder = (incomingOrder: Order) => {
       if (!incomingOrder || !incomingOrder.id || !isMounted) return;
 
+      // FILTRO RIGOROSO POR ID DA LOJA (store_id)
+      const currentTenantId = currentTenant?.id;
+      const currentTenantSlug = currentTenant?.slug || currentSlug;
+      const belongsToThisStore = (
+        (currentTenantId && incomingOrder.tenantId === currentTenantId) ||
+        (currentTenantSlug && incomingOrder.tenantId === currentTenantSlug) ||
+        (currentTenantId && incomingOrder.tenantId?.toLowerCase() === currentTenantId.toLowerCase()) ||
+        (currentTenantSlug && incomingOrder.tenantId?.toLowerCase() === currentTenantSlug.toLowerCase())
+      );
+      if (!belongsToThisStore) {
+        return; // NUNCA insere pedidos de outras lojas
+      }
+
       const orderCleanId = incomingOrder.id.replace(/^#/, "");
       const isAlreadyKnown =
         knownOrderIdsRef.current.has(incomingOrder.id) ||
@@ -2322,19 +2337,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       knownOrderIdsRef.current.add(incomingOrder.id);
       knownOrderIdsRef.current.add(orderCleanId);
 
-      // 1. Insere o pedido na tela imediatamente
+      // 1. Insere o pedido na tela imediatamente, mantendo ordenação decrescente por data
       setOrders((prev) => {
         const index = prev.findIndex(
           (o) =>
             o.id === incomingOrder.id ||
             o.id.replace(/^#/, "") === orderCleanId
         );
+        let updated: Order[];
         if (index >= 0) {
-          const updated = [...prev];
+          updated = [...prev];
           updated[index] = { ...updated[index], ...incomingOrder };
-          return updated;
+        } else {
+          updated = [incomingOrder, ...prev];
         }
-        return [incomingOrder, ...prev];
+        return updated.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
       });
 
       // Se é um pedido novo, registra badge visual e notifica via CustomEvent
@@ -2355,6 +2372,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // Função de atualização em tempo real de status do pedido
     const handleIncomingOrderUpdate = (updatedOrder: Order) => {
       if (!updatedOrder || !updatedOrder.id || !isMounted) return;
+
+      // FILTRO RIGOROSO POR ID DA LOJA (store_id)
+      const currentTenantId = currentTenant?.id;
+      const currentTenantSlug = currentTenant?.slug || currentSlug;
+      const belongsToThisStore = (
+        (currentTenantId && updatedOrder.tenantId === currentTenantId) ||
+        (currentTenantSlug && updatedOrder.tenantId === currentTenantSlug) ||
+        (currentTenantId && updatedOrder.tenantId?.toLowerCase() === currentTenantId.toLowerCase()) ||
+        (currentTenantSlug && updatedOrder.tenantId?.toLowerCase() === currentTenantSlug.toLowerCase())
+      );
+      if (!belongsToThisStore) {
+        return; // NUNCA atualiza pedidos de outras lojas
+      }
+
       const cleanId = updatedOrder.id.replace(/^#/, "");
 
       setOrders((prev) =>
@@ -2385,14 +2416,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // 1. Carga inicial de pedidos uma única vez ao montar (sem qualquer repetição periódica/polling)
+    // 1. Carga inicial de pedidos uma única vez ao montar
     const loadInitialOrders = async () => {
       try {
         const res = await fetchOrdersApi(tenantParam);
         if (!isMounted) return;
 
-        if (res.success && res.orders) {
-          const incoming: Order[] = res.orders;
+        if (res.success && Array.isArray(res.orders)) {
+          const currentTenantId = currentTenant?.id;
+          const currentTenantSlug = currentTenant?.slug || currentSlug;
+          const incoming: Order[] = res.orders
+            .filter((o: Order) => {
+              if (!o) return false;
+              if (currentTenantId && o.tenantId === currentTenantId) return true;
+              if (currentTenantSlug && o.tenantId === currentTenantSlug) return true;
+              return false;
+            })
+            .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+
           setOrders(incoming);
           knownOrderIdsRef.current = new Set([
             ...incoming.map((o) => o.id),
@@ -2409,16 +2450,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // 2. Escutador de Evento em Tempo Real via BroadcastChannel (comunicação instantânea cliente -> lojista)
     const unsubscribeBroadcast = subscribeOrderBroadcast((message) => {
       if (!isMounted) return;
-      const targetTenantId = currentTenant?.id || currentTenant?.slug || currentSlug;
+      const targetTenantId = currentTenant?.id;
+      const targetTenantSlug = currentTenant?.slug || currentSlug;
       const msgTenant = message.tenantId || message.order?.tenantId;
 
-      // Se a mensagem pertence a esta loja (ou se ambos identificadores forem vazios/compatíveis)
+      // FILTRO RIGOROSO POR ID DA LOJA
       const isForThisTenant =
-        !targetTenantId ||
-        !msgTenant ||
-        msgTenant === targetTenantId ||
-        msgTenant === currentTenant?.id ||
-        msgTenant === currentTenant?.slug;
+        Boolean(msgTenant) &&
+        Boolean(targetTenantId || targetTenantSlug) &&
+        (msgTenant === targetTenantId ||
+          msgTenant === targetTenantSlug ||
+          (targetTenantId && msgTenant?.toLowerCase() === targetTenantId.toLowerCase()) ||
+          (targetTenantSlug && msgTenant?.toLowerCase() === targetTenantSlug.toLowerCase()));
 
       if (isForThisTenant && message.order) {
         if (message.type === "NEW_ORDER") {
@@ -2475,7 +2518,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           try {
             const data = JSON.parse(e.data);
             if (data?.orders && Array.isArray(data.orders)) {
-              const incoming: Order[] = data.orders;
+              const currentTenantId = currentTenant?.id;
+              const currentTenantSlug = currentTenant?.slug || currentSlug;
+              const incoming: Order[] = data.orders
+                .filter((o: Order) => {
+                  if (!o) return false;
+                  if (currentTenantId && o.tenantId === currentTenantId) return true;
+                  if (currentTenantSlug && o.tenantId === currentTenantSlug) return true;
+                  return false;
+                })
+                .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+
               const prevIds = knownOrderIdsRef.current;
 
               if (prevIds.size > 0) {
@@ -2512,9 +2565,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const syncOrdersWithCloud = async () => {
       try {
         const res = await fetchOrdersApi(tenantParam);
-        if (!isMounted || !res.success || !res.orders) return;
+        if (!isMounted || !res.success || !Array.isArray(res.orders)) return;
 
-        const incoming: Order[] = res.orders;
+        const currentTenantId = currentTenant?.id;
+        const currentTenantSlug = currentTenant?.slug || currentSlug;
+        const incoming: Order[] = res.orders
+          .filter((o: Order) => {
+            if (!o) return false;
+            if (currentTenantId && o.tenantId === currentTenantId) return true;
+            if (currentTenantSlug && o.tenantId === currentTenantSlug) return true;
+            return false;
+          })
+          .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+
         const prevIds = knownOrderIdsRef.current;
 
         if (prevIds.size > 0) {
@@ -2545,10 +2608,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
             return curr;
           });
-          return hasDiff ? merged : prev;
+          return hasDiff
+            ? merged.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
+            : prev;
         });
       } catch {
-        // ignora erros de rede móvel temporários
+        // ignora erros de rede móvel temporários e PRESERVA a lista de pedidos existente na sessão
       }
     };
 
@@ -2584,18 +2649,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refreshOrders = useCallback(async () => {
     try {
       const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug || undefined;
+      if (!tenantParam) return null;
+
       const res = await fetchOrdersApi(tenantParam);
-      if (res.success && res.orders) {
-        setOrders(res.orders);
-        res.orders.forEach((o) => {
+      if (res.success && Array.isArray(res.orders)) {
+        const currentTenantId = currentTenant?.id;
+        const currentTenantSlug = currentTenant?.slug || currentSlug;
+        const filtered = res.orders
+          .filter((o: Order) => {
+            if (!o) return false;
+            if (currentTenantId && o.tenantId === currentTenantId) return true;
+            if (currentTenantSlug && o.tenantId === currentTenantSlug) return true;
+            return false;
+          })
+          .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+
+        setOrders(filtered);
+        filtered.forEach((o) => {
           knownOrderIdsRef.current.add(o.id);
           knownOrderIdsRef.current.add(o.id.replace(/^#/, ""));
         });
-        return res.orders;
+        return filtered;
       }
     } catch (err) {
       console.warn("Erro ao atualizar pedidos:", err);
     }
+    // Preserva estado anterior e retorna null se falhar na rede
     return null;
   }, [currentTenant?.id, currentTenant?.slug, currentSlug]);
 

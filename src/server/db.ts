@@ -1268,476 +1268,7 @@ const initialProducts: Product[] = [
   ordem: p.position ?? p.ordem ?? idx,
 }));
 
-const initialOrders: Order[] = [
-  {
-    id: "#4821",
-    tenantId: "tenant-burger-town",
-    customerName: "Mariana Silva",
-    customerPhone: "(11) 98765-4321",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    address: {
-      street: "Rua Augusta",
-      number: "1200",
-      district: "Consolação",
-      complement: "Apto 42",
-      reference: "Próximo ao metrô",
-    },
-    subtotal: 54.0,
-    deliveryFee: 6.0,
-    total: 60.0,
-    status: "received",
-    items: [
-      {
-        id: "item-1",
-        product: {
-          id: "bt-smash-bacon",
-          name: "Smash Monster Duplo Bacon",
-          price: 29.9,
-          image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
-        },
-        quantity: 2,
-        selectedOptions: [{ id: "extra-bacon", name: "Bacon extra", price: 4.0 }],
-        notes: "Sem picles por favor",
-      },
-      {
-        id: "item-2",
-        product: {
-          id: "bt-xtudo-artesanal",
-          name: "X-Tudo Artesanal Burger Town",
-          price: 36.9,
-          image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
-        },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "",
-      },
-    ],
-    statusHistory: [{ status: "received", timestamp: Date.now() - 15 * 60000 }],
-    createdAt: Date.now() - 15 * 60000,
-  },
-  {
-    id: "#4820",
-    tenantId: "tenant-burger-town",
-    customerName: "Rodrigo Costa",
-    customerPhone: "(11) 97123-8899",
-    orderType: "pickup",
-    paymentMethod: "card",
-    subtotal: 32.0,
-    deliveryFee: 0,
-    total: 32.0,
-    status: "preparing",
-    items: [
-      {
-        id: "item-3",
-        product: {
-          id: "p2",
-          name: "Double Cheese Bacon",
-          price: 32.0,
-        },
-        quantity: 1,
-        selectedOptions: [],
-        notes: "Bem passado",
-      },
-    ],
-    statusHistory: [
-      { status: "received", timestamp: Date.now() - 40 * 60000 },
-      { status: "preparing", timestamp: Date.now() - 25 * 60000 },
-    ],
-    createdAt: Date.now() - 40 * 60000,
-  },
-  {
-    id: "#8910",
-    tenantId: "tenant-pizza-bella",
-    customerName: "Fernanda Lima",
-    customerPhone: "(11) 99112-2334",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    address: {
-      street: "Alameda Santos",
-      number: "850",
-      district: "Cerqueira César",
-      complement: "Bloco B - 110",
-      reference: "Portaria 24h",
-    },
-    subtotal: 54.0,
-    deliveryFee: 7.5,
-    total: 61.5,
-    status: "received",
-    items: [
-      {
-        id: "item-4",
-        product: {
-          id: "pizza-3",
-          name: "Pizza Quatro Queijos Nobres",
-          price: 54.0,
-        },
-        quantity: 1,
-        selectedOptions: [{ id: "borda-catupiry", name: "Borda recheada com Catupiry", price: 8.0 }],
-        notes: "Massa bem assada",
-      },
-    ],
-    statusHistory: [{ status: "received", timestamp: Date.now() - 8 * 60000 }],
-    createdAt: Date.now() - 8 * 60000,
-  },
-  // Pedidos Concluídos de Exemplo (MS Preparações & Burger Town) para Faturamento
-  {
-    id: "#4815",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Lucas Mendes",
-    customerPhone: "(11) 98112-9900",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    address: {
-      street: "Av. Paulista",
-      number: "1578",
-      district: "Bela Vista",
-      complement: "Apto 84",
-      reference: "Em frente ao MASP",
-    },
-    subtotal: 68.0,
-    deliveryFee: 5.0,
-    total: 73.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p1",
-        product: { id: "msp-1", name: "X-Salada Especial MS", price: 26.9, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "Maionese à parte",
-      },
-    ],
-    statusHistory: [
-      { status: "received", timestamp: Date.now() - 3 * 3600000 },
-      { status: "preparing", timestamp: Date.now() - 2.5 * 3600000 },
-      { status: "delivering", timestamp: Date.now() - 2.2 * 3600000 },
-      { status: "done", timestamp: Date.now() - 2 * 3600000 },
-    ],
-    createdAt: Date.now() - 3 * 3600000,
-  },
-  {
-    id: "#4816",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Camila Rocha",
-    customerPhone: "(11) 97334-1122",
-    orderType: "pickup",
-    paymentMethod: "card",
-    subtotal: 52.0,
-    deliveryFee: 0,
-    total: 52.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p2",
-        product: { id: "msp-2", name: "Smash Burger Duplo Bacon", price: 31.9, image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "Sem cebola",
-      },
-    ],
-    statusHistory: [
-      { status: "received", timestamp: Date.now() - 5 * 3600000 },
-      { status: "preparing", timestamp: Date.now() - 4.5 * 3600000 },
-      { status: "done", timestamp: Date.now() - 4 * 3600000 },
-    ],
-    createdAt: Date.now() - 5 * 3600000,
-  },
-  {
-    id: "#4810",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Thiago Santos",
-    customerPhone: "(11) 96554-3322",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    address: {
-      street: "Rua Bela Cintra",
-      number: "450",
-      district: "Consolação",
-      complement: "Casa 2",
-      reference: "Portão cinza",
-    },
-    subtotal: 86.0,
-    deliveryFee: 5.0,
-    total: 91.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p3",
-        product: { id: "msp-3", name: "X-Tudo Campeão MS", price: 34.9, image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "",
-      },
-    ],
-    statusHistory: [
-      { status: "received", timestamp: Date.now() - 26 * 3600000 },
-      { status: "done", timestamp: Date.now() - 25 * 3600000 },
-    ],
-    createdAt: Date.now() - 26 * 3600000,
-  },
-  {
-    id: "#4805",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Juliana Alves",
-    customerPhone: "(11) 99871-2244",
-    orderType: "delivery",
-    paymentMethod: "card",
-    address: {
-      street: "Rua Haddock Lobo",
-      number: "700",
-      district: "Cerqueira César",
-      complement: "Conjunto 12",
-      reference: "",
-    },
-    subtotal: 62.0,
-    deliveryFee: 5.0,
-    total: 67.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p4",
-        product: { id: "msp-2", name: "Smash Burger Duplo Bacon", price: 31.9, image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "Cheddar bem cremoso",
-      },
-    ],
-    statusHistory: [{ status: "done", timestamp: Date.now() - 2 * 86400000 }],
-    createdAt: Date.now() - 2 * 86400000,
-  },
-  {
-    id: "#4799",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Beatriz Lima",
-    customerPhone: "(11) 97722-6611",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    subtotal: 95.0,
-    deliveryFee: 5.0,
-    total: 100.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p5",
-        product: { id: "msp-3", name: "X-Tudo Campeão MS", price: 34.9, image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "",
-      },
-    ],
-    statusHistory: [{ status: "done", timestamp: Date.now() - 3 * 86400000 }],
-    createdAt: Date.now() - 3 * 86400000,
-  },
-  {
-    id: "#4790",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Rafael Nogueira",
-    customerPhone: "(11) 98443-1234",
-    orderType: "pickup",
-    paymentMethod: "cash",
-    changeFor: "50",
-    subtotal: 44.0,
-    deliveryFee: 0,
-    total: 44.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p6",
-        product: { id: "msp-4", name: "Batata Frita Crocante Rústica", price: 18.0, image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "",
-      },
-    ],
-    statusHistory: [{ status: "done", timestamp: Date.now() - 5 * 86400000 }],
-    createdAt: Date.now() - 5 * 86400000,
-  },
-  {
-    id: "#4782",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Patricia Gomes",
-    customerPhone: "(11) 95532-9090",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    subtotal: 78.0,
-    deliveryFee: 5.0,
-    total: 83.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p7",
-        product: { id: "msp-1", name: "X-Salada Especial MS", price: 26.9, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "",
-      },
-    ],
-    statusHistory: [{ status: "done", timestamp: Date.now() - 7 * 86400000 }],
-    createdAt: Date.now() - 7 * 86400000,
-  },
-  {
-    id: "#4770",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Marcelo Vieira",
-    customerPhone: "(11) 94411-8833",
-    orderType: "delivery",
-    paymentMethod: "card",
-    subtotal: 110.0,
-    deliveryFee: 5.0,
-    total: 115.0,
-    status: "done",
-    items: [
-      {
-        id: "item-p8",
-        product: { id: "msp-3", name: "X-Tudo Campeão MS", price: 34.9, image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80" },
-        quantity: 3,
-        selectedOptions: [],
-        notes: "",
-      },
-    ],
-    statusHistory: [{ status: "done", timestamp: Date.now() - 10 * 86400000 }],
-    createdAt: Date.now() - 10 * 86400000,
-  },
-  {
-    id: "#4761",
-    tenantId: "tenant-ms-preparacoes",
-    customerName: "Marcos Paulo",
-    customerPhone: "(11) 91122-3344",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    subtotal: 58.0,
-    deliveryFee: 5.0,
-    total: 63.0,
-    status: "cancelled", // Este pedido cancelado NÃO deve entrar no faturamento
-    items: [
-      {
-        id: "item-p9",
-        product: { id: "msp-1", name: "X-Salada Especial MS", price: 26.9, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80" },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "Cancelado pelo cliente",
-      },
-    ],
-    statusHistory: [{ status: "cancelled", timestamp: Date.now() - 4 * 86400000 }],
-    createdAt: Date.now() - 4 * 86400000,
-  },
-  // Pedidos da Loja de Demonstração Definitiva (Central dos Lanches & Pizzaria)
-  {
-    id: "#5012",
-    tenantId: "tenant-central-dos-lanches",
-    customerName: "Lucas Ferreira",
-    customerPhone: "(11) 99812-3456",
-    orderType: "delivery",
-    paymentMethod: "pix",
-    address: {
-      street: "Av. Central",
-      number: "420",
-      district: "Centro",
-      complement: "Apto 12",
-      reference: "Perto da praça",
-    },
-    subtotal: 96.7,
-    deliveryFee: 5.0,
-    total: 101.7,
-    status: "done",
-    items: [
-      {
-        id: "item-cl-1",
-        product: {
-          id: "central-lanche-xtudo",
-          name: "X-Tudo",
-          price: 28.9,
-          image: "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80",
-        },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "Capricha na batata palha",
-      },
-      {
-        id: "item-cl-2",
-        product: {
-          id: "central-hotdog-monstro",
-          name: "Hot Dog Prensado Monstro",
-          price: 26.9,
-          image: "https://images.unsplash.com/photo-1619740455993-9e612b1af08a?auto=format&fit=crop&w=600&q=80",
-        },
-        quantity: 1,
-        selectedOptions: [],
-        notes: "",
-      },
-      {
-        id: "item-cl-3",
-        product: {
-          id: "central-bebida-refri-2l",
-          name: "Refrigerante Garrafa 2 Litros",
-          price: 14.0,
-          image: "https://images.unsplash.com/photo-1554866585-cd94860890b7?auto=format&fit=crop&w=600&q=80",
-        },
-        quantity: 1,
-        selectedOptions: [{ id: "opt-cl-2l-coca", name: "Coca-Cola 2L", price: 0 }],
-        notes: "",
-      },
-    ],
-    statusHistory: [
-      { status: "received", timestamp: Date.now() - 45 * 60000 },
-      { status: "preparing", timestamp: Date.now() - 35 * 60000 },
-      { status: "delivering", timestamp: Date.now() - 20 * 60000 },
-      { status: "done", timestamp: Date.now() - 10 * 60000 },
-    ],
-    createdAt: Date.now() - 45 * 60000,
-  },
-  {
-    id: "#5011",
-    tenantId: "tenant-central-dos-lanches",
-    customerName: "Amanda Ribeiro",
-    customerPhone: "(11) 98744-1199",
-    orderType: "delivery",
-    paymentMethod: "card",
-    address: {
-      street: "Rua das Palmeiras",
-      number: "180",
-      district: "Centro",
-      complement: "Casa",
-      reference: "",
-    },
-    subtotal: 91.8,
-    deliveryFee: 5.0,
-    total: 96.8,
-    status: "done",
-    items: [
-      {
-        id: "item-cl-4",
-        product: {
-          id: "central-pizza-frango-catupiry",
-          name: "Pizza Frango com Catupiry",
-          price: 49.9,
-          image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=600&q=80",
-        },
-        quantity: 1,
-        selectedOptions: [],
-        notes: "",
-      },
-      {
-        id: "item-cl-5",
-        product: {
-          id: "central-acai-500",
-          name: "Açaí na Tigela ou Copo 500ml",
-          price: 21.0,
-          image: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80",
-        },
-        quantity: 2,
-        selectedOptions: [],
-        notes: "Com leite em pó, morango e leite condensado",
-      },
-    ],
-    statusHistory: [
-      { status: "received", timestamp: Date.now() - 3 * 3600000 },
-      { status: "done", timestamp: Date.now() - 2 * 3600000 },
-    ],
-    createdAt: Date.now() - 3 * 3600000,
-  },
-];
+const initialOrders: Order[] = [];
 
 const initialCustomers: Customer[] = [
   {
@@ -5530,15 +5061,20 @@ export class Database {
   // ===================== ORDERS =====================
 
   async getOrdersByTenant(tenantId: string): Promise<Order[]> {
+    if (!tenantId || !tenantId.trim()) {
+      return [];
+    }
+    const cleanTenantId = tenantId.trim();
+
     if (this.env?.DB) {
       try {
         await this.ensureTables();
         const res = await this.env.DB.prepare(
           "SELECT * FROM orders WHERE tenant_id = ? ORDER BY created_at DESC"
         )
-          .bind(tenantId)
+          .bind(cleanTenantId)
           .all<any>();
-        if (res.results && res.results.length > 0) {
+        if (res.results) {
           return res.results.map((r: any) => this.mapOrderRow(r));
         }
       } catch (e) {
@@ -5546,7 +5082,9 @@ export class Database {
       }
     }
 
-    return globalStore.orders.filter((o) => o.tenantId === tenantId);
+    return globalStore.orders
+      .filter((o) => o && (o.tenantId === cleanTenantId || o.tenantId === tenantId))
+      .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   }
 
   async getAllOrders(): Promise<Order[]> {
@@ -5556,7 +5094,7 @@ export class Database {
         const res = await this.env.DB.prepare(
           "SELECT * FROM orders ORDER BY created_at DESC"
         ).all<any>();
-        if (res.results && res.results.length > 0) {
+        if (res.results) {
           return res.results.map((r: any) => this.mapOrderRow(r));
         }
       } catch (e) {
@@ -5564,7 +5102,9 @@ export class Database {
       }
     }
 
-    return [...globalStore.orders];
+    return [...globalStore.orders].sort(
+      (a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
+    );
   }
 
   async getOrderById(orderId: string): Promise<Order | null> {
