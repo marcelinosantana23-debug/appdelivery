@@ -1660,7 +1660,7 @@ const handlePedidosLoja = async (c: any) => {
 
     // Se nenhum tenant/loja informado via query/header, verificar autenticação (token do lojista)
     if (!targetTenantId) {
-      const authHeader = c.req.header("Authorization") || "";
+      const authHeader = c.req.header("Authorization") || c.req.header("authorization") || "";
       const token = authHeader.replace(/^Bearer\s+/i, "").trim();
       if (token) {
         try {
@@ -1676,6 +1676,7 @@ const handlePedidosLoja = async (c: any) => {
 
     if (!targetTenantId) {
       // Retorna array JSON válido com status 200 (nunca status 500 ou null que quebre a tela)
+      c.header("Cache-Control", "no-cache, no-store, must-revalidate");
       return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
     }
 
@@ -1688,16 +1689,15 @@ const handlePedidosLoja = async (c: any) => {
         tenantIdToSearch = tenant.id;
         tenantSlugToSearch = tenant.slug || targetTenantId;
       }
-    } catch (e) {
-      console.warn("[/pedidos/loja] Erro ao resolver tenant:", e);
+    } catch {
+      // fallback com targetTenantId direto
     }
 
     let orders: Order[] = [];
 
-    // 1. Tentar consulta SQL direta no Cloudflare D1 se configurado
+    // 1. Consulta SQL direta e veloz no Cloudflare D1 (sem re-executar ensureTables)
     if (c.env?.DB) {
       try {
-        await db.ensureTables();
         const d1Res = await c.env.DB.prepare(
           "SELECT * FROM orders WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC, id DESC"
         )
@@ -1708,11 +1708,11 @@ const handlePedidosLoja = async (c: any) => {
           orders = d1Res.results.map((r: any) => (db as any).mapOrderRow(r));
         }
       } catch (sqlErr) {
-        console.warn("[/pedidos/loja] Erro na consulta SQL D1:", sqlErr);
+        console.warn("[/pedidos/loja] D1 query aviso:", sqlErr);
       }
     }
 
-    // 2. Fallback seguro para getOrdersByTenant
+    // 2. Fallback direto para db.getOrdersByTenant
     if (!orders || orders.length === 0) {
       try {
         const fetched = await db.getOrdersByTenant(tenantIdToSearch);
@@ -1720,7 +1720,7 @@ const handlePedidosLoja = async (c: any) => {
           orders = fetched;
         }
       } catch (dbErr) {
-        console.warn("[/pedidos/loja] Erro em db.getOrdersByTenant:", dbErr);
+        console.warn("[/pedidos/loja] getOrdersByTenant fallback aviso:", dbErr);
       }
     }
 
@@ -1734,6 +1734,8 @@ const handlePedidosLoja = async (c: any) => {
       return timeB - timeA;
     });
 
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    c.header("Pragma", "no-cache");
     return c.json(
       {
         success: true,
@@ -1744,8 +1746,9 @@ const handlePedidosLoja = async (c: any) => {
       200
     );
   } catch (err: any) {
-    console.error("[/pedidos/loja] Exceção capturada, retornando array vazio seguro:", err);
+    console.warn("[/pedidos/loja] Retornando array vazio seguro:", err);
     // REGRA DE OURO: Se houver qualquer erro de banco ou requisição, retorne obrigatoriamente um array JSON válido `[]` (nunca null, undefined ou 500)
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
     return c.json(
       {
         success: true,
@@ -3493,124 +3496,8 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
   }
 });
 
-// ===================== ROTA DEDICADA DE LISTAGEM DE PEDIDOS DO LOJISTA: GET /api/pedidos/loja =====================
-api.get("/pedidos/loja", async (c) => {
-  try {
-    const db = getDb(c);
-    const storeParam =
-      c.req.query("store_id") ||
-      c.req.query("loja_id") ||
-      c.req.query("lojaId") ||
-      c.req.query("storeId") ||
-      c.req.query("tenantId") ||
-      c.req.query("tenant_id") ||
-      c.req.query("loja") ||
-      c.req.query("slug") ||
-      c.req.header("X-Tenant-Id") ||
-      c.req.header("X-Store-Id") ||
-      "";
-
-    let targetTenantId = storeParam.trim();
-
-    // Se nenhum tenant/loja informado via query/header, verificar autenticação (token do lojista)
-    if (!targetTenantId) {
-      const authHeader = c.req.header("Authorization") || "";
-      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-      if (token) {
-        try {
-          const user = await db.getUserByToken(token);
-          if (user?.tenantId) {
-            targetTenantId = user.tenantId;
-          }
-        } catch {
-          // ignore auth decode error
-        }
-      }
-    }
-
-    if (!targetTenantId) {
-      // Retorna array JSON válido com status 200 (nunca status 500 ou null que quebre a tela)
-      return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
-    }
-
-    // Resolve tenant para garantir ID e Slug corretos
-    let tenantIdToSearch = targetTenantId;
-    let tenantSlugToSearch = targetTenantId;
-    try {
-      const tenant = await db.getTenantByIdOrSlug(targetTenantId);
-      if (tenant) {
-        tenantIdToSearch = tenant.id;
-        tenantSlugToSearch = tenant.slug || targetTenantId;
-      }
-    } catch (e) {
-      console.warn("[/pedidos/loja] Erro ao resolver tenant:", e);
-    }
-
-    let orders: Order[] = [];
-
-    // 1. Tentar consulta SQL direta no Cloudflare D1 se configurado
-    if (c.env?.DB) {
-      try {
-        await db.ensureTables();
-        const d1Res = await c.env.DB.prepare(
-          "SELECT * FROM orders WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC, id DESC"
-        )
-          .bind(tenantIdToSearch, tenantSlugToSearch)
-          .all<any>();
-
-        if (d1Res?.results && Array.isArray(d1Res.results)) {
-          orders = d1Res.results.map((r: any) => (db as any).mapOrderRow(r));
-        }
-      } catch (sqlErr) {
-        console.warn("[/pedidos/loja] Erro na consulta SQL D1:", sqlErr);
-      }
-    }
-
-    // 2. Fallback seguro para getOrdersByTenant
-    if (!orders || orders.length === 0) {
-      try {
-        const fetched = await db.getOrdersByTenant(tenantIdToSearch);
-        if (Array.isArray(fetched)) {
-          orders = fetched;
-        }
-      } catch (dbErr) {
-        console.warn("[/pedidos/loja] Erro em db.getOrdersByTenant:", dbErr);
-      }
-    }
-
-    // Garante que é estritamente um array válido
-    const safeOrders = Array.isArray(orders) ? orders : [];
-
-    // Ordenação garantida do mais recente para o mais antigo (ORDER BY created_at DESC, id DESC)
-    safeOrders.sort((a, b) => {
-      const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt).getTime() || 0;
-      const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt).getTime() || 0;
-      return timeB - timeA;
-    });
-
-    return c.json(
-      {
-        success: true,
-        orders: safeOrders,
-        pedidos: safeOrders,
-        total: safeOrders.length,
-      },
-      200
-    );
-  } catch (err: any) {
-    console.error("[/pedidos/loja] Exceção capturada, retornando array vazio seguro:", err);
-    // REGRA DE OURO: Se houver qualquer erro de banco ou requisição, retorne obrigatoriamente um array JSON válido `[]` (nunca null, undefined ou 500)
-    return c.json(
-      {
-        success: true,
-        orders: [],
-        pedidos: [],
-        total: 0,
-      },
-      200
-    );
-  }
-});
+// Alias adicional de compatibilidade para listagem de pedidos da loja
+api.get("/pedidos-loja", handlePedidosLoja);
 
 // Endpoint de listagem de pedidos: GET /api/orders?tenantId=...
 api.get("/orders", async (c) => {

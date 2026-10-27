@@ -2659,18 +2659,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Recarga manual sob demanda de pedidos via API (usada pelos botões "Atualizar" no painel do lojista)
   const refreshOrders = useCallback(async () => {
     try {
+      const storedSlug = typeof window !== "undefined"
+        ? (localStorage.getItem("active_store_slug") || localStorage.getItem("topfood_admin_tenant") || "")
+        : "";
       const tenantParam =
         currentTenant?.id ||
         currentTenant?.slug ||
         currentSlug ||
         currentUser?.tenantId ||
+        storedSlug ||
         undefined;
-      if (!tenantParam) return null;
 
       const res = await fetchOrdersApi(tenantParam);
       if (res.success && Array.isArray(res.orders)) {
         const currentTenantId = currentTenant?.id || currentUser?.tenantId;
-        const currentTenantSlug = currentTenant?.slug || currentSlug;
+        const currentTenantSlug = currentTenant?.slug || currentSlug || storedSlug;
         const getTime = (v: any) => (typeof v === "number" ? v : new Date(v).getTime() || 0);
         const filtered = res.orders
           .filter((o: Order) => {
@@ -2692,7 +2695,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn("Erro ao atualizar pedidos:", err);
     }
-    // Preserva estado anterior e retorna null se falhar na rede
+    // Preserva estado anterior se falhar na rede
     return null;
   }, [currentTenant?.id, currentTenant?.slug, currentSlug, currentUser?.tenantId]);
 
