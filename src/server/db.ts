@@ -5442,38 +5442,43 @@ export class Database {
     return newOrder;
   }
 
-  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order | null> {
+  async updateOrderStatus(orderId: string, status: OrderStatus | string): Promise<Order | null> {
     if (!orderId) return null;
-    const cleanId = orderId.startsWith("#") ? orderId : `#${orderId}`;
-    const rawId = orderId.replace(/^#/, "");
+    let decoded = String(orderId).trim();
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch {
+      // ignore
+    }
+    const cleanId = decoded.startsWith("#") ? decoded : `#${decoded}`;
+    const rawId = decoded.replace(/^#/, "");
 
     // 1. Obtém o pedido atual do D1, KV ou memória
     const order = await this.getOrderById(orderId);
     if (!order) return null;
 
-    order.status = status;
+    order.status = status as OrderStatus;
     if (!order.statusHistory) {
       order.statusHistory = [];
     }
-    order.statusHistory.push({ status, timestamp: Date.now() });
+    order.statusHistory.push({ status: status as OrderStatus, timestamp: Date.now() });
 
-    // 2. Persiste imediatamente no Cloudflare D1
+    // 2. Persiste imediatamente de forma síncrona no Cloudflare D1
     if (this.env?.DB) {
       try {
-        await this.ensureTables();
         await this.env.DB.prepare(
-          "UPDATE orders SET status = ?, status_history_json = ? WHERE id = ? OR id = ? OR id = ?"
+          "UPDATE orders SET status = ?, status_history_json = ? WHERE id = ? OR id = ? OR id = ? OR id = ?"
         )
-          .bind(status, JSON.stringify(order.statusHistory), order.id, cleanId, rawId)
+          .bind(status, JSON.stringify(order.statusHistory), order.id, decoded, cleanId, rawId)
           .run();
       } catch (e) {
         console.warn("D1 updateOrderStatus error:", e);
       }
     }
 
-    // 3. Atualiza memória global
+    // 3. Atualiza memória global de forma imediata
     const memIndex = globalStore.orders.findIndex(
-      (o) => o.id === order.id || o.id === cleanId || o.id === rawId
+      (o) => o.id === order.id || o.id === decoded || o.id === cleanId || o.id === rawId || (o.id && o.id.replace(/^#/, "") === rawId)
     );
     if (memIndex >= 0) {
       globalStore.orders[memIndex] = order;
@@ -5487,6 +5492,15 @@ export class Database {
       try {
         await kv.put(`order:${order.id}`, JSON.stringify(order));
         await kv.put(`order:${cleanId}`, JSON.stringify(order));
+        await kv.put(`order:${rawId}`, JSON.stringify(order));
+        await kv.put(`order_status:${rawId}`, JSON.stringify({
+          orderId: order.id,
+          status: order.status,
+          updatedAt: Date.now(),
+        }));
+        if (order.tenantId) {
+          await kv.put(`tenant_orders_version:${order.tenantId}`, Date.now().toString());
+        }
       } catch (e) {
         console.warn("KV update order error:", e);
       }

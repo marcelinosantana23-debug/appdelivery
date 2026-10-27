@@ -186,7 +186,23 @@ export type OrderItem = CartItem;
 export type OrderType = "delivery" | "pickup" | "dine_in";
 export type PaymentMethod = "pix" | "card" | "cash";
 export type CardType = "credit" | "debit";
-export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "cancelled";
+export type StandardOrderStatus =
+  | "PENDENTE"
+  | "EM_PREPARO"
+  | "PRONTO"
+  | "SAIU_PARA_ENTREGA"
+  | "ENTREGUE"
+  | "CANCELADO";
+
+export type OrderStatus =
+  | "received"
+  | "preparing"
+  | "delivering"
+  | "done"
+  | "cancelled"
+  | "ready"
+  | StandardOrderStatus
+  | (string & {});
 
 export interface Order {
   id: string;

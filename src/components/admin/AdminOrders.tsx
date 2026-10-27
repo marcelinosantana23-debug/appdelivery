@@ -42,20 +42,16 @@ import {
   formatTableDisplay,
   formatTableNumberOnly,
 } from "@/utils/order";
+import { toStandardStatus, getStatusRank, getNextOrderStatus } from "@/utils/orderStorage";
 import type { Order, OrderStatus } from "@/types";
 
-const statusFlow: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }>; color: string }[] = [
-  { status: "received", label: "Recebido", icon: Package, color: "bg-blue-500" },
-  { status: "preparing", label: "Em produção", icon: ChefHat, color: "bg-orange-500" },
-  { status: "delivering", label: "Saiu p/ entrega", icon: Bike, color: "bg-purple-500" },
-  { status: "done", label: "Finalizado", icon: CheckCircle2, color: "bg-green-500" },
+const statusFlow: { status: string; label: string; icon: React.ComponentType<{ className?: string }>; color: string }[] = [
+  { status: "PENDENTE", label: "Recebido", icon: Package, color: "bg-blue-500" },
+  { status: "EM_PREPARO", label: "Em produção", icon: ChefHat, color: "bg-amber-500" },
+  { status: "PRONTO", label: "Pronto", icon: CheckCircle2, color: "bg-emerald-500" },
+  { status: "SAIU_PARA_ENTREGA", label: "Saiu p/ entrega", icon: Bike, color: "bg-purple-500" },
+  { status: "ENTREGUE", label: "Finalizado", icon: CheckCircle2, color: "bg-green-600" },
 ];
-
-const nextStatusMap: Record<string, OrderStatus> = {
-  received: "preparing",
-  preparing: "delivering",
-  delivering: "done",
-};
 
 export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const { orders, updateOrderStatus, clearNewOrderFlag, refreshOrders, showToast } = useStore();
@@ -103,15 +99,21 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
     toggle: toggleWakeLock,
   } = useScreenWakeLock(true);
 
-  const activeOrdersCount = orders.filter((o) => o.status !== "done" && o.status !== "cancelled").length;
-  const pendingOrdersCount = orders.filter((o) => o.status === "received").length;
+  const activeOrdersCount = orders.filter((o) => {
+    const rank = getStatusRank(o.status);
+    return rank < 4 && rank !== 99;
+  }).length;
+  const pendingOrdersCount = orders.filter((o) => getStatusRank(o.status) === 0).length;
   const allOrdersCount = orders.length;
 
   // Ordenação determinística do pedido mais recente para o mais antigo
   const filtered = useMemo(() => {
     const base =
       filter === "active"
-        ? orders.filter((o) => o.status !== "done" && o.status !== "cancelled")
+        ? orders.filter((o) => {
+            const rank = getStatusRank(o.status);
+            return rank < 4 && rank !== 99;
+          })
         : orders;
 
     return [...base].sort((a, b) => {
@@ -366,8 +368,16 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
                       nowMs={nowMs}
                       isNew={newOrderIds.includes(order.id)}
                       onView={() => clearNewOrderFlag(order.id)}
-                      onAdvance={(id) => updateOrderStatus(id, nextStatusMap[order.status])}
-                      onCancel={(id) => updateOrderStatus(id, "cancelled")}
+                      onAdvance={(id) => {
+                        const isPickupOrDineIn = order.orderType === "pickup" || order.orderType === "dine_in" || (order as any).delivery_type === "pickup" || (order as any).delivery_type === "dine_in";
+                        const next = getNextOrderStatus(order.status, isPickupOrDineIn);
+                        updateOrderStatus(id, next as OrderStatus);
+                        clearNewOrderFlag(id);
+                      }}
+                      onCancel={(id) => {
+                        updateOrderStatus(id, "CANCELADO" as OrderStatus);
+                        clearNewOrderFlag(id);
+                      }}
                       onViewReceipt={(order) => setViewingReceiptOrder(order)}
                       onOpenMotoboy={(order) => setMotoboyModalOrder(order)}
                       onPrintThermalReceipt={(order) => setThermalReceiptOrder(order)}
@@ -385,8 +395,16 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
               nowMs={nowMs}
               isNew={newOrderIds.includes(order.id)}
               onView={() => clearNewOrderFlag(order.id)}
-              onAdvance={(id) => updateOrderStatus(id, nextStatusMap[order.status])}
-              onCancel={(id) => updateOrderStatus(id, "cancelled")}
+              onAdvance={(id) => {
+                const isPickupOrDineIn = order.orderType === "pickup" || order.orderType === "dine_in" || (order as any).delivery_type === "pickup" || (order as any).delivery_type === "dine_in";
+                const next = getNextOrderStatus(order.status, isPickupOrDineIn);
+                updateOrderStatus(id, next as OrderStatus);
+                clearNewOrderFlag(id);
+              }}
+              onCancel={(id) => {
+                updateOrderStatus(id, "CANCELADO" as OrderStatus);
+                clearNewOrderFlag(id);
+              }}
               onViewReceipt={(order) => setViewingReceiptOrder(order)}
               onOpenMotoboy={(order) => setMotoboyModalOrder(order)}
               onPrintThermalReceipt={(order) => setThermalReceiptOrder(order)}
@@ -445,29 +463,42 @@ function OrderCard({
 }) {
   const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
   const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
-  const defaultStatusInfo = statusFlow.find((s) => s.status === order.status);
   
+  const stdStatus = toStandardStatus(order.status);
+  const isCancelled = stdStatus === "CANCELADO";
+  const isDone = stdStatus === "ENTREGUE";
+  const isPending = stdStatus === "PENDENTE";
+  const isPreparing = stdStatus === "EM_PREPARO";
+  const isReady = stdStatus === "PRONTO";
+  const isDelivering = stdStatus === "SAIU_PARA_ENTREGA";
+
+  const defaultStatusInfo =
+    statusFlow.find((s) => s.status === stdStatus) || {
+      status: stdStatus,
+      label: isPending ? "Recebido" : isPreparing ? "Em produção" : isReady ? "Pronto" : isDelivering ? "Saiu p/ entrega" : isDone ? "Finalizado" : "Pendente",
+      icon: isPending ? Package : isPreparing ? ChefHat : isReady ? CheckCircle2 : isDelivering ? Bike : CheckCircle2,
+      color: isPending ? "bg-blue-500" : isPreparing ? "bg-amber-500" : isReady ? "bg-emerald-500" : isDelivering ? "bg-purple-500" : "bg-green-600",
+    };
+
   // Ajuste dinâmico de badge para retirada no balcão e consumo no local
   const statusInfo =
-    order.status === "delivering" && isPickup
+    (isDelivering || isReady) && isPickup
       ? {
-          status: "delivering" as OrderStatus,
+          status: "SAIU_PARA_ENTREGA",
           label: "Pronto no Balcão",
           icon: ShoppingBag,
           color: "bg-emerald-600",
         }
-      : order.status === "delivering" && isDineIn
+      : (isDelivering || isReady) && isDineIn
       ? {
-          status: "delivering" as OrderStatus,
+          status: "SAIU_PARA_ENTREGA",
           label: "Servir na Mesa",
           icon: UtensilsCrossed,
           color: "bg-purple-600",
         }
       : defaultStatusInfo;
 
-  const isCancelled = order.status === "cancelled";
-  const isDone = order.status === "done";
-  const canAdvance = nextStatusMap[order.status] !== undefined;
+  const canAdvance = !isCancelled && !isDone;
   const { config, showToast } = useStore();
 
   const hasFixedMotoboy = Boolean(config.motoboyPhone && config.motoboyPhone.trim());
@@ -494,17 +525,24 @@ function OrderCard({
   const exactDateTimeLabel = formatOrderExactDateTime(order.createdAt, order as any);
 
   const getAdvanceButtonLabel = () => {
-    if (order.status === "received") {
+    if (isPending) {
       return "Aceitar Pedido / Iniciar Preparo";
     }
-    if (order.status === "preparing") {
+    if (isPreparing) {
       return isDineIn
-        ? "Marcar como 'Pronto / Servir na Mesa'"
+        ? "Marcar como 'Pronto para Servir'"
         : isPickup
         ? "Marcar como 'Pronto no Balcão'"
-        : "Enviar para Entrega";
+        : "Marcar como 'Pronto na Cozinha'";
     }
-    if (order.status === "delivering") {
+    if (isReady) {
+      return isDineIn
+        ? "Marcar como 'Servido na Mesa'"
+        : isPickup
+        ? "Marcar como 'Retirado'"
+        : "Enviar para Entrega (Saiu p/ Entrega)";
+    }
+    if (isDelivering) {
       return isDineIn
         ? "Marcar como 'Servido na Mesa'"
         : isPickup
@@ -1003,7 +1041,7 @@ function OrderCard({
                   onAdvance(order.id);
                 }}
                 className={`w-full flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm sm:text-base font-black text-white shadow-md transition-all active:scale-[0.99] cursor-pointer ${
-                  order.status === "received"
+                  isPending
                     ? "bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400 shadow-emerald-200 animate-pulse"
                     : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100"
                 }`}

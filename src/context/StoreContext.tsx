@@ -82,7 +82,7 @@ import {
   broadcastOrderUpdate,
   subscribeOrderBroadcast,
 } from "@/utils/ordersChannel";
-import { updateActiveOrderStatus } from "@/utils/orderStorage";
+import { updateActiveOrderStatus, toStandardStatus, getStatusRank } from "@/utils/orderStorage";
 import type { ToastMessage } from "@/components/common/Toast";
 
 interface StoreContextValue {
@@ -623,6 +623,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Inicializa o carrinho com os itens salvos para esta loja/sessão
   const [cart, setCart] = useState<CartItem[]>(() => loadSavedCart(initialSlug));
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
+  // Mapa de fixação definitiva de status no painel do lojista (blinda contra reversão para pendente por SSE antigo ou polling)
+  const pinnedStatusMapRef = useRef<Map<string, { status: string; timestamp: number; rank: number }>>(new Map());
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem("delivery_sound_enabled");
@@ -2203,8 +2205,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const updateOrderStatus = useCallback(
-    async (orderId: string, status: OrderStatus) => {
+    async (orderId: string, status: OrderStatus | string) => {
       const tenantId = currentTenant?.id || currentTenant?.slug || currentSlug || "marcelino";
+      const cleanId = orderId.replace(/^#/, "");
+      const stdStatus = toStandardStatus(status);
+      const rank = getStatusRank(stdStatus);
+
+      // Fixa o status do pedido na sessão do lojista (blinda contra reversão por eventos concorrentes)
+      pinnedStatusMapRef.current.set(orderId, { status: stdStatus, timestamp: Date.now(), rank });
+      pinnedStatusMapRef.current.set(cleanId, { status: stdStatus, timestamp: Date.now(), rank });
+      pinnedStatusMapRef.current.set(`#${cleanId}`, { status: stdStatus, timestamp: Date.now(), rank });
+
+      // Remove imediatamente das notificações de novos pedidos (cessa piscar e alarme imediatamente)
+      setNewOrderIds((prev) => prev.filter((id) => id !== orderId && id !== cleanId && id !== `#${cleanId}`));
 
       // 1. Atualização otimista imediata na interface React (sem travamento)
       let targetOrder: Order | null = null;
@@ -2212,13 +2225,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         prev.map((o) => {
           if (
             o.id === orderId ||
-            o.id === `#${orderId}` ||
-            o.id.replace(/^#/, "") === orderId.replace(/^#/, "")
+            o.id === `#${cleanId}` ||
+            o.id.replace(/^#/, "") === cleanId
           ) {
             const updated: Order = {
               ...o,
-              status,
-              statusHistory: [...(o.statusHistory || []), { status, timestamp: Date.now() }],
+              status: stdStatus as OrderStatus,
+              statusHistory: [...(o.statusHistory || []), { status: stdStatus as OrderStatus, timestamp: Date.now() }],
             };
             targetOrder = updated;
             return updated;
@@ -2235,7 +2248,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("topfood-active-order-updated", {
-              detail: { orderId, status },
+              detail: { orderId, status: stdStatus, order: targetOrder },
             })
           );
           if ("BroadcastChannel" in window) {
@@ -2243,7 +2256,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             bc.postMessage({
               type: "ORDER_STATUS_CHANGED",
               orderId,
-              status,
+              status: stdStatus,
+              order: targetOrder,
               timestamp: Date.now(),
             });
             setTimeout(() => {
@@ -2260,33 +2274,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (
           !activeId ||
           activeId === orderId ||
-          activeId.replace(/^#/, "") === orderId.replace(/^#/, "")
+          activeId.replace(/^#/, "") === cleanId
         ) {
-          updateActiveOrderStatus(status);
+          updateActiveOrderStatus(stdStatus as OrderStatus);
         }
       } catch {
         // ignore
       }
 
       // 3. Feedback visual imediato via Toast
-      const statusLabels: Record<OrderStatus, string> = {
-        received: "Recebido",
-        preparing: "Em Preparo",
-        delivering: "Saiu para Entrega",
-        done: "Finalizado",
-        cancelled: "Cancelado",
+      const statusLabels: Record<string, string> = {
+        PENDENTE: "Pendente",
+        EM_PREPARO: "Em Preparo",
+        PRONTO: "Pronto",
+        SAIU_PARA_ENTREGA: "Saiu para Entrega",
+        ENTREGUE: "Entregue",
+        CANCELADO: "Cancelado",
       };
-      showToast(`Pedido ${orderId} atualizado para: ${statusLabels[status] || status}`, "success");
+      showToast(`Pedido ${orderId} atualizado para: ${statusLabels[stdStatus] || stdStatus}`, "success");
 
-      // 4. Persiste no Cloudflare D1 e KV via API
+      // 4. Persiste no Cloudflare D1 e KV via API de forma síncrona
       try {
-        const res = await updateOrderStatusApi(orderId, status, tenantId);
+        const res = await updateOrderStatusApi(orderId, stdStatus, tenantId);
         if (!res.success) {
           console.warn("Aviso ao persistir status:", res.error);
+        } else if (res.order) {
+          pinnedStatusMapRef.current.set(cleanId, { status: stdStatus, timestamp: Date.now(), rank });
         }
       } catch (err) {
-        console.warn("Erro de rede ao atualizar status do pedido:", err);
-        showToast("Aviso: Falha temporária de rede ao sincronizar status.", "warning");
+        console.warn("Erro de rede ao sincronizar status do pedido:", err);
       }
     },
     [currentTenant, currentSlug, showToast]
@@ -2394,10 +2410,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       const cleanId = updatedOrder.id.replace(/^#/, "");
+      const pinned = pinnedStatusMapRef.current.get(cleanId) || pinnedStatusMapRef.current.get(updatedOrder.id);
+      const incomingRank = getStatusRank(updatedOrder.status);
+
+      // Se o pedido já possui um status fixado na sessão pelo lojista com rank maior, ignora evento desatualizado
+      if (pinned && pinned.rank > incomingRank) {
+        return;
+      }
+
+      const effectiveStatus = (pinned && pinned.rank >= incomingRank) ? pinned.status : updatedOrder.status;
+      const finalOrder: Order = {
+        ...updatedOrder,
+        status: effectiveStatus as OrderStatus,
+      };
 
       setOrders((prev) =>
         prev.map((o) =>
-          o.id === updatedOrder.id || o.id.replace(/^#/, "") === cleanId ? { ...o, ...updatedOrder } : o
+          o.id === updatedOrder.id || o.id.replace(/^#/, "") === cleanId ? { ...o, ...finalOrder } : o
         )
       );
 
@@ -2408,12 +2437,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           activeId &&
           (activeId === updatedOrder.id || activeId.replace(/^#/, "") === cleanId)
         ) {
-          localStorage.setItem("topfood_active_order_status", updatedOrder.status);
-          localStorage.setItem("topfood_active_order_data", JSON.stringify(updatedOrder));
+          localStorage.setItem("topfood_active_order_status", finalOrder.status);
+          localStorage.setItem("topfood_active_order_data", JSON.stringify(finalOrder));
           if (typeof window !== "undefined") {
             window.dispatchEvent(
               new CustomEvent("topfood-active-order-updated", {
-                detail: { orderId: updatedOrder.id, status: updatedOrder.status, order: updatedOrder },
+                detail: { orderId: updatedOrder.id, status: finalOrder.status, order: finalOrder },
               })
             );
           }
@@ -2440,6 +2469,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               if (currentTenantSlug && (o.tenantId === currentTenantSlug || (o as any).loja_id === currentTenantSlug || (o as any).store_id === currentTenantSlug)) return true;
               if (tenantParam && (o.tenantId === tenantParam || (o as any).loja_id === tenantParam)) return true;
               return false;
+            })
+            .map((o: Order) => {
+              const cleanId = o.id.replace(/^#/, "");
+              const pinned = pinnedStatusMapRef.current.get(cleanId) || pinnedStatusMapRef.current.get(o.id);
+              const oRank = getStatusRank(o.status);
+              if (pinned && pinned.rank > oRank) {
+                return { ...o, status: pinned.status as OrderStatus };
+              }
+              return o;
             })
             .sort((a: Order, b: Order) => getTime(b.createdAt) - getTime(a.createdAt));
 
@@ -2682,6 +2720,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (currentTenantSlug && (o.tenantId === currentTenantSlug || (o as any).loja_id === currentTenantSlug || (o as any).store_id === currentTenantSlug)) return true;
             if (tenantParam && (o.tenantId === tenantParam || (o as any).loja_id === tenantParam)) return true;
             return false;
+          })
+          .map((o: Order) => {
+            const cleanId = o.id.replace(/^#/, "");
+            const pinned = pinnedStatusMapRef.current.get(cleanId) || pinnedStatusMapRef.current.get(o.id);
+            const oRank = getStatusRank(o.status);
+            if (pinned && pinned.rank > oRank) {
+              return { ...o, status: pinned.status as OrderStatus };
+            }
+            return o;
           })
           .sort((a: Order, b: Order) => getTime(b.createdAt) - getTime(a.createdAt));
 

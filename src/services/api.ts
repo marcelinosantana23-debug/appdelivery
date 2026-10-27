@@ -796,21 +796,36 @@ export async function createTenantOrderApi(
 
 export async function updateOrderStatusApi(
   orderId: string,
-  status: OrderStatus,
+  status: OrderStatus | string,
   slugOrId?: string
-): Promise<{ success: boolean; order?: Order; error?: string }> {
+): Promise<{ success: boolean; status?: string; order?: Order; error?: string }> {
   try {
+    const cleanId = String(orderId).trim().replace(/^#/, "");
     const url = slugOrId
-      ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${encodeURIComponent(orderId)}/status`
-      : `${BASE_URL}/orders/${encodeURIComponent(orderId)}/status`;
+      ? `${BASE_URL}/tenants/${encodeURIComponent(slugOrId)}/orders/${encodeURIComponent(cleanId)}/status`
+      : `${BASE_URL}/orders/${encodeURIComponent(cleanId)}/status`;
     const res = await fetch(url, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, novoStatus: status }),
     });
+
+    if (!res.ok) {
+      // Fallback para rota direta /pedidos/:id/status
+      const fallbackRes = await fetch(`${BASE_URL}/pedidos/${encodeURIComponent(cleanId)}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ status, novoStatus: status }),
+      });
+      return await fallbackRes.json();
+    }
+
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };

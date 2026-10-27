@@ -16,6 +16,144 @@ const ALT_STORAGE_KEY = "active_order_id";
 const DATA_STORAGE_KEY = "topfood_active_order_data";
 const STATUS_STORAGE_KEY = "topfood_active_order_status";
 
+export function toStandardStatus(raw: string | undefined | null): string {
+  if (!raw) return "PENDENTE";
+  const s = String(raw).toUpperCase().trim().replace(/[\s-]+/g, "_");
+  if (
+    s === "PENDENTE" ||
+    s === "RECEIVED" ||
+    s === "PENDING" ||
+    s === "RECEBIDO" ||
+    s === "NOVO"
+  ) {
+    return "PENDENTE";
+  }
+  if (
+    s === "EM_PREPARO" ||
+    s === "PREPARING" ||
+    s === "EM_PRODUCAO" ||
+    s === "PRODUCAO" ||
+    s === "PREPARANDO" ||
+    s === "CONFIRMED" ||
+    s === "ACEITO"
+  ) {
+    return "EM_PREPARO";
+  }
+  if (
+    s === "PRONTO" ||
+    s === "READY" ||
+    s === "PRONTO_BALCAO" ||
+    s === "PRONTO_NO_BALCAO" ||
+    s === "PRONTO_COZINHA"
+  ) {
+    return "PRONTO";
+  }
+  if (
+    s === "SAIU_PARA_ENTREGA" ||
+    s === "DELIVERING" ||
+    s === "A_CAMINHO" ||
+    s === "DISPATCHED" ||
+    s === "OUT_FOR_DELIVERY" ||
+    s === "EM_ENTREGA"
+  ) {
+    return "SAIU_PARA_ENTREGA";
+  }
+  if (
+    s === "ENTREGUE" ||
+    s === "DONE" ||
+    s === "COMPLETED" ||
+    s === "DELIVERED" ||
+    s === "CONCLUIDO" ||
+    s === "CONCLUÍDO" ||
+    s === "FINALIZADO" ||
+    s === "SERVIDO"
+  ) {
+    return "ENTREGUE";
+  }
+  if (s === "CANCELADO" || s === "CANCELLED" || s === "CANCELED") {
+    return "CANCELADO";
+  }
+  return s;
+}
+
+export function toLegacyStatus(raw: string | undefined | null): OrderStatus {
+  const std = toStandardStatus(raw);
+  switch (std) {
+    case "PENDENTE":
+      return "received";
+    case "EM_PREPARO":
+      return "preparing";
+    case "PRONTO":
+      return "preparing";
+    case "SAIU_PARA_ENTREGA":
+      return "delivering";
+    case "ENTREGUE":
+      return "done";
+    case "CANCELADO":
+      return "cancelled";
+    default:
+      return "received";
+  }
+}
+
+export function getStatusRank(raw: string | undefined | null): number {
+  const std = toStandardStatus(raw);
+  switch (std) {
+    case "PENDENTE":
+      return 0;
+    case "EM_PREPARO":
+      return 1;
+    case "PRONTO":
+      return 2;
+    case "SAIU_PARA_ENTREGA":
+      return 3;
+    case "ENTREGUE":
+      return 4;
+    case "CANCELADO":
+      return 99;
+    default:
+      return 0;
+  }
+}
+
+export function getNextOrderStatus(
+  currentStatus: string | undefined | null,
+  isPickupOrDineIn: boolean = false
+): string {
+  const std = toStandardStatus(currentStatus);
+  switch (std) {
+    case "PENDENTE":
+      return "EM_PREPARO";
+    case "EM_PREPARO":
+      return "PRONTO";
+    case "PRONTO":
+      return isPickupOrDineIn ? "ENTREGUE" : "SAIU_PARA_ENTREGA";
+    case "SAIU_PARA_ENTREGA":
+      return "ENTREGUE";
+    default:
+      return "ENTREGUE";
+  }
+}
+
+export function getStatusStepIndex(status: string | undefined | null): number {
+  if (!status) return 0;
+  const s = toStandardStatus(status);
+  switch (s) {
+    case "PENDENTE":
+      return 0;
+    case "EM_PREPARO":
+      return 1;
+    case "PRONTO":
+      return 2;
+    case "SAIU_PARA_ENTREGA":
+      return 3;
+    case "ENTREGUE":
+      return 4;
+    default:
+      return 0;
+  }
+}
+
 /**
  * Normaliza qualquer variante de status de pedido (ex: português, inglês, banco D1)
  * para o enum estrito OrderStatus ("received" | "preparing" | "delivering" | "done" | "cancelled")

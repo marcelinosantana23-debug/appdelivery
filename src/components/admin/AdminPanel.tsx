@@ -252,8 +252,8 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
     }
   }, [isAdminAuthed, config?.slug, currentUser?.id]);
 
-  // Identifica pedidos pendentes aguardando aceite do lojista (status 'received')
-  const pendingOrders = orders.filter((o) => o.status === "received");
+  // Identifica pedidos pendentes aguardando aceite do lojista (status 'received' ou 'PENDENTE')
+  const pendingOrders = orders.filter((o) => o.status === "received" || o.status === "PENDENTE" || (o as any).status === "pending");
   const hasPendingOrders = pendingOrders.length > 0;
 
   // =========================================================================

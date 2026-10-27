@@ -189,35 +189,100 @@ export const STATUS_MAP_PT_TO_EN: Record<string, OrderStatus> = {
   "pendente": "received",
   "recebido": "received",
   "Recebido": "received",
+  "PENDENTE": "received",
   "Em Preparo": "preparing",
   "em preparo": "preparing",
   "preparando": "preparing",
+  "EM_PREPARO": "preparing",
+  "Pronto": "ready",
+  "pronto": "ready",
+  "PRONTO": "ready",
   "Saiu para Entrega": "delivering",
   "saiu para entrega": "delivering",
   "em entrega": "delivering",
+  "SAIU_PARA_ENTREGA": "delivering",
   "Concluído": "done",
   "concluido": "done",
   "finalizado": "done",
+  "ENTREGUE": "done",
+  "entregue": "done",
   "Cancelado": "cancelled",
   "cancelado": "cancelled",
+  "CANCELADO": "cancelled",
 };
 
-export const STATUS_MAP_EN_TO_PT: Record<OrderStatus, string> = {
+export const STATUS_MAP_EN_TO_PT: Record<string, string> = {
   received: "Pendente",
   preparing: "Em Preparo",
+  ready: "Pronto",
   delivering: "Saiu para Entrega",
   done: "Concluído",
   cancelled: "Cancelado",
+  PENDENTE: "Pendente",
+  EM_PREPARO: "Em Preparo",
+  PRONTO: "Pronto",
+  SAIU_PARA_ENTREGA: "Saiu para Entrega",
+  ENTREGUE: "Entregue",
+  CANCELADO: "Cancelado",
 };
 
-export function normalizeOrderStatus(statusInput: string): OrderStatus {
-  if (!statusInput) return "received";
-  const mapped = STATUS_MAP_PT_TO_EN[statusInput.trim()];
-  if (mapped) return mapped;
-  if (["received", "preparing", "delivering", "done", "cancelled"].includes(statusInput.toLowerCase())) {
-    return statusInput.toLowerCase() as OrderStatus;
+export function toStandardStatus(statusInput: string | undefined | null): string {
+  if (!statusInput) return "PENDENTE";
+  const s = String(statusInput).toUpperCase().trim().replace(/[\s-]+/g, "_");
+  if (s === "PENDENTE" || s === "RECEIVED" || s === "PENDING" || s === "RECEBIDO" || s === "NOVO") return "PENDENTE";
+  if (
+    s === "EM_PREPARO" ||
+    s === "PREPARING" ||
+    s === "EM_PRODUCAO" ||
+    s === "PRODUCAO" ||
+    s === "PREPARANDO" ||
+    s === "CONFIRMED" ||
+    s === "ACEITO"
+  ) {
+    return "EM_PREPARO";
   }
-  return "received";
+  if (s === "PRONTO" || s === "READY" || s === "PRONTO_BALCAO" || s === "PRONTO_NO_BALCAO" || s === "PRONTO_COZINHA") return "PRONTO";
+  if (
+    s === "SAIU_PARA_ENTREGA" ||
+    s === "DELIVERING" ||
+    s === "A_CAMINHO" ||
+    s === "DISPATCHED" ||
+    s === "OUT_FOR_DELIVERY" ||
+    s === "EM_ENTREGA"
+  ) {
+    return "SAIU_PARA_ENTREGA";
+  }
+  if (
+    s === "ENTREGUE" ||
+    s === "DONE" ||
+    s === "COMPLETED" ||
+    s === "DELIVERED" ||
+    s === "CONCLUIDO" ||
+    s === "CONCLUÍDO" ||
+    s === "FINALIZADO" ||
+    s === "SERVIDO"
+  ) {
+    return "ENTREGUE";
+  }
+  if (s === "CANCELADO" || s === "CANCELLED" || s === "CANCELED") return "CANCELADO";
+  return s;
+}
+
+export function toLegacyStatus(statusInput: string | undefined | null): OrderStatus {
+  const std = toStandardStatus(statusInput);
+  switch (std) {
+    case "PENDENTE": return "received";
+    case "EM_PREPARO": return "preparing";
+    case "PRONTO": return "preparing";
+    case "SAIU_PARA_ENTREGA": return "delivering";
+    case "ENTREGUE": return "done";
+    case "CANCELADO": return "cancelled";
+    default: return "received";
+  }
+}
+
+export function normalizeOrderStatus(statusInput: string): OrderStatus {
+  return toLegacyStatus(statusInput);
 }
 
 // -----------------------------------------------------------------------------
@@ -1798,18 +1863,23 @@ api.get("/pedidos/:id", async (c) => {
   }
 });
 
-// PATCH & PUT /api/pedidos/:id/status - Atualizar status do pedido no D1 / KV
+// PATCH, PUT & POST /api/pedidos/:id/status - Atualizar status do pedido de forma síncrona no D1
 const handleStatusUpdate = async (c: any) => {
   try {
     const db = getDb(c);
     const pedidoId = c.req.param("id") || c.req.param("orderId");
-    const body = await c.req.json();
-    const statusInput = body.status || body.novoStatus;
+    let body: any = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+    const statusInput = body.status || body.novoStatus || body.novo_status;
 
     if (!statusInput) {
       return c.json({
         success: false,
-        error: "O campo 'status' é obrigatório (ex: 'Pendente', 'Em Preparo', 'Saiu para Entrega', 'Concluído', 'Cancelado').",
+        error: "O campo 'status' é obrigatório (ex: 'PENDENTE', 'EM_PREPARO', 'PRONTO', 'SAIU_PARA_ENTREGA', 'ENTREGUE', 'CANCELADO').",
       }, 400);
     }
 
@@ -1821,8 +1891,8 @@ const handleStatusUpdate = async (c: any) => {
       await verifyTokenSafely(rawToken, jwtSecret);
     }
 
-    const statusNormalizado = normalizeOrderStatus(statusInput);
-    const atualizado = await db.updateOrderStatus(pedidoId, statusNormalizado);
+    const standardStatus = toStandardStatus(statusInput);
+    const atualizado = await db.updateOrderStatus(pedidoId, standardStatus);
 
     if (!atualizado) {
       return c.json({ success: false, error: "Pedido não encontrado para atualização." }, 404);
@@ -1837,7 +1907,7 @@ const handleStatusUpdate = async (c: any) => {
         await kv.put(`order:${cleanId}`, JSON.stringify(atualizado));
         await kv.put(`order_status:${cleanId}`, JSON.stringify({
           orderId: atualizado.id,
-          status: atualizado.status,
+          status: standardStatus,
           updatedAt: Date.now(),
         }));
         if (atualizado.tenantId) {
@@ -1850,12 +1920,17 @@ const handleStatusUpdate = async (c: any) => {
 
     return c.json({
       success: true,
-      message: `Status do pedido atualizado para '${STATUS_MAP_EN_TO_PT[statusNormalizado]}' no Cloudflare D1/KV!`,
+      status: standardStatus,
+      message: `Status do pedido atualizado para '${standardStatus}' com sucesso no Cloudflare D1!`,
       pedido: {
         ...atualizado,
-        statusPt: STATUS_MAP_EN_TO_PT[atualizado.status] || atualizado.status,
+        status: standardStatus,
+        statusPt: STATUS_MAP_EN_TO_PT[toLegacyStatus(standardStatus)] || standardStatus,
       },
-      order: atualizado,
+      order: {
+        ...atualizado,
+        status: standardStatus,
+      },
     }, 200);
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Erro ao atualizar status do pedido." }, 500);
@@ -1864,11 +1939,15 @@ const handleStatusUpdate = async (c: any) => {
 
 api.patch("/pedidos/:id/status", handleStatusUpdate);
 api.put("/pedidos/:id/status", handleStatusUpdate);
+api.post("/pedidos/:id/status", handleStatusUpdate);
 api.patch("/pedidos/:id", handleStatusUpdate);
+api.put("/pedidos/:id", handleStatusUpdate);
 api.patch("/orders/:orderId/status", handleStatusUpdate);
 api.put("/orders/:orderId/status", handleStatusUpdate);
+api.post("/orders/:orderId/status", handleStatusUpdate);
 api.patch("/tenants/:slugOrId/orders/:orderId/status", handleStatusUpdate);
 api.put("/tenants/:slugOrId/orders/:orderId/status", handleStatusUpdate);
+api.post("/tenants/:slugOrId/orders/:orderId/status", handleStatusUpdate);
 
 // Consulta rápida de status do pedido para sincronização de clientes em 4G/5G
 api.get("/orders/:orderId/status", async (c) => {

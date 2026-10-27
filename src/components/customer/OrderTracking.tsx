@@ -4,7 +4,7 @@ import type { Order, OrderStatus } from "@/types";
 import { formatPrice, formatTableDisplay, formatTableNumberOnly } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
 import { fetchOrderDetailsApi } from "@/services/api";
-import { updateActiveOrderStatus } from "@/utils/orderStorage";
+import { updateActiveOrderStatus, toStandardStatus, toLegacyStatus, getStatusStepIndex } from "@/utils/orderStorage";
 import { GlobalReloadButton } from "@/components/common/GlobalReloadButton";
 import { playOrderStatusUpdateChime, unlockAudioContext } from "@/utils/audio";
 
@@ -24,23 +24,74 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
   const [refreshSuccess, setRefreshSuccess] = useState(false);
 
   // Referência para o status atual e rastreio de transição para disparo sonoro
-  const prevStatusRef = useRef<OrderStatus>(initialOrder?.status || "received");
+  const prevStatusRef = useRef<string>(toStandardStatus(initialOrder?.status));
   const isInitialLoadRef = useRef<boolean>(true);
-  const statusRef = useRef<OrderStatus>(initialOrder?.status || "received");
-  statusRef.current = order?.status || "received";
+  const statusRef = useRef<string>(toStandardStatus(initialOrder?.status));
+  statusRef.current = toStandardStatus(order?.status);
 
   const isPickup = order?.orderType === "pickup" || (order as any)?.delivery_type === "pickup";
   const isDineIn = order?.orderType === "dine_in" || (order as any)?.delivery_type === "dine_in";
 
-  const statusSteps: { status: OrderStatus; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { status: "received", label: "Recebido", icon: Package },
-    { status: "preparing", label: "Em produção", icon: ChefHat },
+  // 5 Etapas padronizadas exigidas pela barra visual do cliente:
+  // [ PENDENTE ] ➔ [ EM_PREPARO ] ➔ [ PRONTO ] ➔ [ SAIU_PARA_ENTREGA ] ➔ [ ENTREGUE ]
+  const statusSteps: {
+    statusKey: string;
+    label: string;
+    description: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }[] = [
     {
-      status: "delivering",
-      label: isDineIn ? "Servir na mesa" : isPickup ? "Pronto p/ retirada" : "Saiu para entrega",
+      statusKey: "PENDENTE",
+      label: "Pedido Recebido",
+      description: "Aguardando confirmação da loja",
+      icon: Package,
+    },
+    {
+      statusKey: "EM_PREPARO",
+      label: "Em Preparo",
+      description: isDineIn
+        ? "Seu prato está sendo preparado pelo chef"
+        : "Seu pedido está sendo preparado na cozinha",
+      icon: ChefHat,
+    },
+    {
+      statusKey: "PRONTO",
+      label: isDineIn
+        ? "Pronto para Servir"
+        : isPickup
+        ? "Pronto para Retirada"
+        : "Pronto na Cozinha",
+      description: isDineIn
+        ? "Pratos prontos na cozinha para servir"
+        : isPickup
+        ? "Pedido pronto para você retirar no balcão"
+        : "Pedido pronto, embalado e aguardando saída",
+      icon: isDineIn ? UtensilsCrossed : isPickup ? ShoppingBag : CheckCircle2,
+    },
+    {
+      statusKey: "SAIU_PARA_ENTREGA",
+      label: isDineIn
+        ? "Servindo na Mesa"
+        : isPickup
+        ? "Aguardando no Balcão"
+        : "Saiu para Entrega",
+      description: isDineIn
+        ? "O garçom está levando seu pedido até sua mesa"
+        : isPickup
+        ? "Disponível no balcão para retirada imediata"
+        : "O motoboy está a caminho do seu endereço",
       icon: isDineIn ? UtensilsCrossed : isPickup ? ShoppingBag : Bike,
     },
-    { status: "done", label: isDineIn ? "Servido" : isPickup ? "Retirado" : "Finalizado", icon: CheckCircle2 },
+    {
+      statusKey: "ENTREGUE",
+      label: isDineIn ? "Servido na Mesa" : isPickup ? "Pedido Retirado" : "Pedido Entregue",
+      description: isDineIn
+        ? "Bom apetite! Aproveite sua refeição"
+        : isPickup
+        ? "Pedido entregue no balcão! Obrigado pela preferência"
+        : "Bom apetite! Pedido finalizado com sucesso",
+      icon: CheckCircle2,
+    },
   ];
 
   // Desbloqueia automaticamente o áudio na primeira interação do cliente na tela de rastreio
@@ -61,22 +112,26 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
   }, []);
 
   // Aplica atualização de status em tempo real por eventos (sem loops de polling)
-  const applyStatus = useCallback((newStatus: OrderStatus, updatedOrder?: Order | null) => {
+  const applyStatus = useCallback((newStatus: OrderStatus | string, updatedOrder?: Order | null) => {
+    const stdNew = toStandardStatus(newStatus);
     const prevStatus = prevStatusRef.current;
     if (updatedOrder) {
-      setOrder(updatedOrder);
+      setOrder({
+        ...updatedOrder,
+        status: stdNew as OrderStatus,
+      });
     } else {
-      setOrder((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      setOrder((prev) => (prev ? { ...prev, status: stdNew as OrderStatus } : prev));
     }
 
     // Dispara efeito sonoro suave ("tricks") quando o status do pedido é atualizado e NÃO é o carregamento inicial
-    if (newStatus !== prevStatus && !isInitialLoadRef.current) {
-      playOrderStatusUpdateChime(newStatus);
+    if (stdNew !== prevStatus && !isInitialLoadRef.current) {
+      playOrderStatusUpdateChime(toLegacyStatus(stdNew));
     }
 
-    prevStatusRef.current = newStatus;
-    statusRef.current = newStatus;
-    updateActiveOrderStatus(newStatus);
+    prevStatusRef.current = stdNew;
+    statusRef.current = stdNew;
+    updateActiveOrderStatus(stdNew as OrderStatus);
   }, []);
 
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -232,8 +287,8 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     };
   }, [initialOrder?.id, config.slug, applyStatus]);
 
-  const currentIndex = statusSteps.findIndex((s) => s.status === order?.status);
-  const isCancelled = order?.status === "cancelled";
+  const currentIndex = getStatusStepIndex(order?.status);
+  const isCancelled = toStandardStatus(order?.status) === "CANCELADO";
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50">
@@ -318,36 +373,41 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
                   const isCurrent = i === currentIndex;
                   const Icon = step.icon;
                   return (
-                    <div key={step.status} className="flex gap-4 pb-8 last:pb-0 relative">
+                    <div key={step.statusKey} className="flex gap-4 pb-7 last:pb-0 relative">
                       {i < statusSteps.length - 1 && (
                         <div
-                          className={`absolute left-5 top-10 h-full w-0.5 ${
+                          className={`absolute left-5 top-10 h-full w-0.5 transition-colors duration-500 ${
                             i < currentIndex ? "bg-primary" : "bg-gray-200"
                           }`}
                         />
                       )}
                       <div
-                        className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all ${
+                        className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
                           isComplete
-                            ? "bg-primary text-white"
-                            : "bg-gray-100 text-gray-300"
-                        } ${isCurrent ? "ring-4 ring-primary/20" : ""}`}
+                            ? "bg-primary text-white shadow-xs"
+                            : "bg-gray-100 text-gray-400"
+                        } ${isCurrent ? "ring-4 ring-primary/20 scale-105" : ""}`}
                       >
                         <Icon className="h-5 w-5" />
                       </div>
-                      <div className="flex flex-col justify-center">
-                        <span
-                          className={`font-bold ${
-                            isComplete ? "text-gray-800" : "text-gray-400"
-                          }`}
-                        >
-                          {step.label}
-                        </span>
-                        {isCurrent && (
-                          <span className="text-xs text-primary font-medium animate-fade-in">
-                            Status atual
+                      <div className="flex flex-col justify-center min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-bold text-sm ${
+                              isComplete ? "text-gray-800" : "text-gray-400"
+                            }`}
+                          >
+                            {step.label}
                           </span>
-                        )}
+                          {isCurrent && (
+                            <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold animate-pulse">
+                              Status atual
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {step.description}
+                        </p>
                       </div>
                     </div>
                   );
