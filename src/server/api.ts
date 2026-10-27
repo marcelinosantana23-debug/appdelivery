@@ -1638,11 +1638,137 @@ api.get("/lojas/:slug/pedidos", async (c) => {
   }
 });
 
+// ===================== ROTA DEDICADA DE LISTAGEM DE PEDIDOS DO LOJISTA: GET /api/pedidos/loja =====================
+const handlePedidosLoja = async (c: any) => {
+  try {
+    const db = getDb(c);
+    const storeParam =
+      c.req.query("store_id") ||
+      c.req.query("loja_id") ||
+      c.req.query("lojaId") ||
+      c.req.query("storeId") ||
+      c.req.query("tenantId") ||
+      c.req.query("tenant_id") ||
+      c.req.query("loja") ||
+      c.req.query("slug") ||
+      c.req.param("lojaId") ||
+      c.req.header("X-Tenant-Id") ||
+      c.req.header("X-Store-Id") ||
+      "";
+
+    let targetTenantId = storeParam.trim();
+
+    // Se nenhum tenant/loja informado via query/header, verificar autenticação (token do lojista)
+    if (!targetTenantId) {
+      const authHeader = c.req.header("Authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      if (token) {
+        try {
+          const user = await db.getUserByToken(token);
+          if (user?.tenantId) {
+            targetTenantId = user.tenantId;
+          }
+        } catch {
+          // ignore auth decode error
+        }
+      }
+    }
+
+    if (!targetTenantId) {
+      // Retorna array JSON válido com status 200 (nunca status 500 ou null que quebre a tela)
+      return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
+    }
+
+    // Resolve tenant para garantir ID e Slug corretos
+    let tenantIdToSearch = targetTenantId;
+    let tenantSlugToSearch = targetTenantId;
+    try {
+      const tenant = await db.getTenantByIdOrSlug(targetTenantId);
+      if (tenant) {
+        tenantIdToSearch = tenant.id;
+        tenantSlugToSearch = tenant.slug || targetTenantId;
+      }
+    } catch (e) {
+      console.warn("[/pedidos/loja] Erro ao resolver tenant:", e);
+    }
+
+    let orders: Order[] = [];
+
+    // 1. Tentar consulta SQL direta no Cloudflare D1 se configurado
+    if (c.env?.DB) {
+      try {
+        await db.ensureTables();
+        const d1Res = await c.env.DB.prepare(
+          "SELECT * FROM orders WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC, id DESC"
+        )
+          .bind(tenantIdToSearch, tenantSlugToSearch)
+          .all<any>();
+
+        if (d1Res?.results && Array.isArray(d1Res.results)) {
+          orders = d1Res.results.map((r: any) => (db as any).mapOrderRow(r));
+        }
+      } catch (sqlErr) {
+        console.warn("[/pedidos/loja] Erro na consulta SQL D1:", sqlErr);
+      }
+    }
+
+    // 2. Fallback seguro para getOrdersByTenant
+    if (!orders || orders.length === 0) {
+      try {
+        const fetched = await db.getOrdersByTenant(tenantIdToSearch);
+        if (Array.isArray(fetched)) {
+          orders = fetched;
+        }
+      } catch (dbErr) {
+        console.warn("[/pedidos/loja] Erro em db.getOrdersByTenant:", dbErr);
+      }
+    }
+
+    // Garante que é estritamente um array válido
+    const safeOrders = Array.isArray(orders) ? orders : [];
+
+    // Ordenação garantida do mais recente para o mais antigo (ORDER BY created_at DESC, id DESC)
+    safeOrders.sort((a, b) => {
+      const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt).getTime() || 0;
+      const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt).getTime() || 0;
+      return timeB - timeA;
+    });
+
+    return c.json(
+      {
+        success: true,
+        orders: safeOrders,
+        pedidos: safeOrders,
+        total: safeOrders.length,
+      },
+      200
+    );
+  } catch (err: any) {
+    console.error("[/pedidos/loja] Exceção capturada, retornando array vazio seguro:", err);
+    // REGRA DE OURO: Se houver qualquer erro de banco ou requisição, retorne obrigatoriamente um array JSON válido `[]` (nunca null, undefined ou 500)
+    return c.json(
+      {
+        success: true,
+        orders: [],
+        pedidos: [],
+        total: 0,
+      },
+      200
+    );
+  }
+};
+
+api.get("/pedidos/loja", handlePedidosLoja);
+api.get("/pedidos/loja/:lojaId", handlePedidosLoja);
+
 // GET /api/pedidos/:id - Detalhes de um pedido específico
 api.get("/pedidos/:id", async (c) => {
   try {
-    const db = getDb(c);
     const pedidoId = c.req.param("id");
+    if (pedidoId === "loja") {
+      return handlePedidosLoja(c);
+    }
+    const db = getDb(c);
     const pedido = await db.getOrderById(pedidoId);
 
     if (!pedido) {
@@ -2985,13 +3111,15 @@ api.get("/tenants/:slugOrId/orders", async (c) => {
     const tenant = await db.getTenantByIdOrSlug(slugOrId);
 
     if (!tenant) {
-      return c.json({ success: false, orders: [], error: "Lanchonete não encontrada" }, 404);
+      return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
     }
 
     const orders = await db.getOrdersByTenant(tenant.id);
-    return c.json({ success: true, orders }, 200);
+    const safeOrders = Array.isArray(orders) ? orders : [];
+    return c.json({ success: true, orders: safeOrders, pedidos: safeOrders, total: safeOrders.length }, 200);
   } catch (err: any) {
-    return c.json({ success: false, orders: [], error: err?.message || "Erro ao buscar pedidos da lanchonete" }, 500);
+    console.warn("[tenants/orders] Erro ao buscar pedidos, retornando array seguro:", err);
+    return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
   }
 });
 
@@ -3365,21 +3493,143 @@ api.post("/tenants/:slugOrId/orders", async (c) => {
   }
 });
 
+// ===================== ROTA DEDICADA DE LISTAGEM DE PEDIDOS DO LOJISTA: GET /api/pedidos/loja =====================
+api.get("/pedidos/loja", async (c) => {
+  try {
+    const db = getDb(c);
+    const storeParam =
+      c.req.query("store_id") ||
+      c.req.query("loja_id") ||
+      c.req.query("lojaId") ||
+      c.req.query("storeId") ||
+      c.req.query("tenantId") ||
+      c.req.query("tenant_id") ||
+      c.req.query("loja") ||
+      c.req.query("slug") ||
+      c.req.header("X-Tenant-Id") ||
+      c.req.header("X-Store-Id") ||
+      "";
+
+    let targetTenantId = storeParam.trim();
+
+    // Se nenhum tenant/loja informado via query/header, verificar autenticação (token do lojista)
+    if (!targetTenantId) {
+      const authHeader = c.req.header("Authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      if (token) {
+        try {
+          const user = await db.getUserByToken(token);
+          if (user?.tenantId) {
+            targetTenantId = user.tenantId;
+          }
+        } catch {
+          // ignore auth decode error
+        }
+      }
+    }
+
+    if (!targetTenantId) {
+      // Retorna array JSON válido com status 200 (nunca status 500 ou null que quebre a tela)
+      return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
+    }
+
+    // Resolve tenant para garantir ID e Slug corretos
+    let tenantIdToSearch = targetTenantId;
+    let tenantSlugToSearch = targetTenantId;
+    try {
+      const tenant = await db.getTenantByIdOrSlug(targetTenantId);
+      if (tenant) {
+        tenantIdToSearch = tenant.id;
+        tenantSlugToSearch = tenant.slug || targetTenantId;
+      }
+    } catch (e) {
+      console.warn("[/pedidos/loja] Erro ao resolver tenant:", e);
+    }
+
+    let orders: Order[] = [];
+
+    // 1. Tentar consulta SQL direta no Cloudflare D1 se configurado
+    if (c.env?.DB) {
+      try {
+        await db.ensureTables();
+        const d1Res = await c.env.DB.prepare(
+          "SELECT * FROM orders WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC, id DESC"
+        )
+          .bind(tenantIdToSearch, tenantSlugToSearch)
+          .all<any>();
+
+        if (d1Res?.results && Array.isArray(d1Res.results)) {
+          orders = d1Res.results.map((r: any) => (db as any).mapOrderRow(r));
+        }
+      } catch (sqlErr) {
+        console.warn("[/pedidos/loja] Erro na consulta SQL D1:", sqlErr);
+      }
+    }
+
+    // 2. Fallback seguro para getOrdersByTenant
+    if (!orders || orders.length === 0) {
+      try {
+        const fetched = await db.getOrdersByTenant(tenantIdToSearch);
+        if (Array.isArray(fetched)) {
+          orders = fetched;
+        }
+      } catch (dbErr) {
+        console.warn("[/pedidos/loja] Erro em db.getOrdersByTenant:", dbErr);
+      }
+    }
+
+    // Garante que é estritamente um array válido
+    const safeOrders = Array.isArray(orders) ? orders : [];
+
+    // Ordenação garantida do mais recente para o mais antigo (ORDER BY created_at DESC, id DESC)
+    safeOrders.sort((a, b) => {
+      const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt).getTime() || 0;
+      const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt).getTime() || 0;
+      return timeB - timeA;
+    });
+
+    return c.json(
+      {
+        success: true,
+        orders: safeOrders,
+        pedidos: safeOrders,
+        total: safeOrders.length,
+      },
+      200
+    );
+  } catch (err: any) {
+    console.error("[/pedidos/loja] Exceção capturada, retornando array vazio seguro:", err);
+    // REGRA DE OURO: Se houver qualquer erro de banco ou requisição, retorne obrigatoriamente um array JSON válido `[]` (nunca null, undefined ou 500)
+    return c.json(
+      {
+        success: true,
+        orders: [],
+        pedidos: [],
+        total: 0,
+      },
+      200
+    );
+  }
+});
+
 // Endpoint de listagem de pedidos: GET /api/orders?tenantId=...
 api.get("/orders", async (c) => {
   try {
     const db = getDb(c);
-    const tenantParam = c.req.query("tenantId") || c.req.query("loja") || c.req.query("slug");
+    const tenantParam =
+      c.req.query("tenantId") ||
+      c.req.query("tenant_id") ||
+      c.req.query("store_id") ||
+      c.req.query("loja_id") ||
+      c.req.query("loja") ||
+      c.req.query("slug");
 
     if (tenantParam && tenantParam.trim()) {
       const cleanParam = tenantParam.trim();
       const tenant = await db.getTenantByIdOrSlug(cleanParam);
-      if (tenant) {
-        const orders = await db.getOrdersByTenant(tenant.id);
-        return c.json({ success: true, orders }, 200);
-      }
-      const orders = await db.getOrdersByTenant(cleanParam);
-      return c.json({ success: true, orders }, 200);
+      const orders = await db.getOrdersByTenant(tenant ? tenant.id : cleanParam);
+      const safeOrders = Array.isArray(orders) ? orders : [];
+      return c.json({ success: true, orders: safeOrders, pedidos: safeOrders, total: safeOrders.length }, 200);
     }
 
     // Se nenhum tenant informado, verificar autenticação. Apenas super_admin pode consultar pedidos globais.
@@ -3391,11 +3641,13 @@ api.get("/orders", async (c) => {
         const user = await db.getUserByToken(token);
         if (user && ["super_admin", "superadmin", "SUPER_ADMIN"].includes(user.role)) {
           const orders = await db.getAllOrders();
-          return c.json({ success: true, orders }, 200);
+          const safeOrders = Array.isArray(orders) ? orders : [];
+          return c.json({ success: true, orders: safeOrders, pedidos: safeOrders, total: safeOrders.length }, 200);
         }
         if (user && user.tenantId) {
           const orders = await db.getOrdersByTenant(user.tenantId);
-          return c.json({ success: true, orders }, 200);
+          const safeOrders = Array.isArray(orders) ? orders : [];
+          return c.json({ success: true, orders: safeOrders, pedidos: safeOrders, total: safeOrders.length }, 200);
         }
       } catch {
         // ignore
@@ -3403,9 +3655,10 @@ api.get("/orders", async (c) => {
     }
 
     // Blindagem total: sem tenant_id e sem super_admin, retorna lista vazia segura
-    return c.json({ success: true, orders: [] }, 200);
+    return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
   } catch (e: any) {
-    return c.json({ success: false, orders: [], error: e.message || "Erro ao buscar pedidos" }, 500);
+    console.warn("[/orders] Erro capturado, retornando array seguro:", e);
+    return c.json({ success: true, orders: [], pedidos: [], total: 0 }, 200);
   }
 });
 

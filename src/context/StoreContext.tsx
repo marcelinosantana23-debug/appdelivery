@@ -2306,7 +2306,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [orders]);
 
   useEffect(() => {
-    const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug;
+    const tenantParam =
+      currentTenant?.id ||
+      currentTenant?.slug ||
+      currentSlug ||
+      currentUser?.tenantId ||
+      undefined;
     if (!tenantParam) return;
     let isMounted = true;
 
@@ -2315,13 +2320,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!incomingOrder || !incomingOrder.id || !isMounted) return;
 
       // FILTRO RIGOROSO POR ID DA LOJA (store_id)
-      const currentTenantId = currentTenant?.id;
+      const currentTenantId = currentTenant?.id || currentUser?.tenantId;
       const currentTenantSlug = currentTenant?.slug || currentSlug;
       const belongsToThisStore = (
         (currentTenantId && incomingOrder.tenantId === currentTenantId) ||
         (currentTenantSlug && incomingOrder.tenantId === currentTenantSlug) ||
         (currentTenantId && incomingOrder.tenantId?.toLowerCase() === currentTenantId.toLowerCase()) ||
-        (currentTenantSlug && incomingOrder.tenantId?.toLowerCase() === currentTenantSlug.toLowerCase())
+        (currentTenantSlug && incomingOrder.tenantId?.toLowerCase() === currentTenantSlug.toLowerCase()) ||
+        (currentTenantId && (incomingOrder as any).loja_id === currentTenantId) ||
+        (currentTenantId && (incomingOrder as any).store_id === currentTenantId)
       );
       if (!belongsToThisStore) {
         return; // NUNCA insere pedidos de outras lojas
@@ -2423,16 +2430,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
 
         if (res.success && Array.isArray(res.orders)) {
-          const currentTenantId = currentTenant?.id;
+          const currentTenantId = currentTenant?.id || currentUser?.tenantId;
           const currentTenantSlug = currentTenant?.slug || currentSlug;
+          const getTime = (v: any) => (typeof v === "number" ? v : new Date(v).getTime() || 0);
           const incoming: Order[] = res.orders
             .filter((o: Order) => {
               if (!o) return false;
-              if (currentTenantId && o.tenantId === currentTenantId) return true;
-              if (currentTenantSlug && o.tenantId === currentTenantSlug) return true;
+              if (currentTenantId && (o.tenantId === currentTenantId || (o as any).loja_id === currentTenantId || (o as any).store_id === currentTenantId)) return true;
+              if (currentTenantSlug && (o.tenantId === currentTenantSlug || (o as any).loja_id === currentTenantSlug || (o as any).store_id === currentTenantSlug)) return true;
+              if (tenantParam && (o.tenantId === tenantParam || (o as any).loja_id === tenantParam)) return true;
               return false;
             })
-            .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+            .sort((a: Order, b: Order) => getTime(b.createdAt) - getTime(a.createdAt));
 
           setOrders(incoming);
           knownOrderIdsRef.current = new Set([
@@ -2567,16 +2576,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const res = await fetchOrdersApi(tenantParam);
         if (!isMounted || !res.success || !Array.isArray(res.orders)) return;
 
-        const currentTenantId = currentTenant?.id;
+        const currentTenantId = currentTenant?.id || currentUser?.tenantId;
         const currentTenantSlug = currentTenant?.slug || currentSlug;
+        const getTime = (v: any) => (typeof v === "number" ? v : new Date(v).getTime() || 0);
         const incoming: Order[] = res.orders
           .filter((o: Order) => {
             if (!o) return false;
-            if (currentTenantId && o.tenantId === currentTenantId) return true;
-            if (currentTenantSlug && o.tenantId === currentTenantSlug) return true;
+            if (currentTenantId && (o.tenantId === currentTenantId || (o as any).loja_id === currentTenantId || (o as any).store_id === currentTenantId)) return true;
+            if (currentTenantSlug && (o.tenantId === currentTenantSlug || (o as any).loja_id === currentTenantSlug || (o as any).store_id === currentTenantSlug)) return true;
+            if (tenantParam && (o.tenantId === tenantParam || (o as any).loja_id === tenantParam)) return true;
             return false;
           })
-          .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+          .sort((a: Order, b: Order) => getTime(b.createdAt) - getTime(a.createdAt));
 
         const prevIds = knownOrderIdsRef.current;
 
@@ -2648,21 +2659,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Recarga manual sob demanda de pedidos via API (usada pelos botões "Atualizar" no painel do lojista)
   const refreshOrders = useCallback(async () => {
     try {
-      const tenantParam = currentTenant?.id || currentTenant?.slug || currentSlug || undefined;
+      const tenantParam =
+        currentTenant?.id ||
+        currentTenant?.slug ||
+        currentSlug ||
+        currentUser?.tenantId ||
+        undefined;
       if (!tenantParam) return null;
 
       const res = await fetchOrdersApi(tenantParam);
       if (res.success && Array.isArray(res.orders)) {
-        const currentTenantId = currentTenant?.id;
+        const currentTenantId = currentTenant?.id || currentUser?.tenantId;
         const currentTenantSlug = currentTenant?.slug || currentSlug;
+        const getTime = (v: any) => (typeof v === "number" ? v : new Date(v).getTime() || 0);
         const filtered = res.orders
           .filter((o: Order) => {
             if (!o) return false;
-            if (currentTenantId && o.tenantId === currentTenantId) return true;
-            if (currentTenantSlug && o.tenantId === currentTenantSlug) return true;
+            if (currentTenantId && (o.tenantId === currentTenantId || (o as any).loja_id === currentTenantId || (o as any).store_id === currentTenantId)) return true;
+            if (currentTenantSlug && (o.tenantId === currentTenantSlug || (o as any).loja_id === currentTenantSlug || (o as any).store_id === currentTenantSlug)) return true;
+            if (tenantParam && (o.tenantId === tenantParam || (o as any).loja_id === tenantParam)) return true;
             return false;
           })
-          .sort((a: Order, b: Order) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+          .sort((a: Order, b: Order) => getTime(b.createdAt) - getTime(a.createdAt));
 
         setOrders(filtered);
         filtered.forEach((o) => {
@@ -2676,7 +2694,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     // Preserva estado anterior e retorna null se falhar na rede
     return null;
-  }, [currentTenant?.id, currentTenant?.slug, currentSlug]);
+  }, [currentTenant?.id, currentTenant?.slug, currentSlug, currentUser?.tenantId]);
 
   const refreshStoreAdminData = useCallback(async () => {
     const slug = currentTenant?.slug || currentSlug;

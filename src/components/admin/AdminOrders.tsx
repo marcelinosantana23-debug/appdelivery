@@ -65,9 +65,42 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
   const [motoboyModalOrder, setMotoboyModalOrder] = useState<Order | null>(null);
   const [thermalReceiptOrder, setThermalReceiptOrder] = useState<Order | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(() => orders.length === 0);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const topAnchorRef = useRef<HTMLDivElement>(null);
+
+  // No carregamento inicial da página do lojista, faz o fetch para buscar a lista de pedidos da loja
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchInitial = async () => {
+      setIsInitialLoading(true);
+      setFetchFailed(false);
+      try {
+        const res = await refreshOrders();
+        if (isCancelled) return;
+        if (res === null) {
+          setFetchFailed(true);
+        } else {
+          setFetchFailed(false);
+          setRefreshError(null);
+        }
+      } catch {
+        if (!isCancelled) {
+          setFetchFailed(true);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+    fetchInitial();
+    return () => {
+      isCancelled = true;
+    };
+  }, [refreshOrders]);
 
   // Atualiza o relógio relativo a cada 60s para manter os rótulos ("Há X min", "Há X horas", etc.) sempre sincronizados
   useEffect(() => {
@@ -116,6 +149,7 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
     if (isRefreshing) return;
     setIsRefreshing(true);
     setRefreshError(null);
+    setFetchFailed(false);
     try {
       if (typeof window !== "undefined") {
         const p = window.location.pathname.toLowerCase();
@@ -126,14 +160,26 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
       const res = await refreshOrders();
       if (res !== null) {
         setRefreshError(null);
+        setFetchFailed(false);
         showToast("Lista de pedidos atualizada com sucesso!", "success");
+      } else {
+        if (orders.length === 0) {
+          setFetchFailed(true);
+          setRefreshError("Não foi possível carregar os pedidos no momento. Verifique sua conexão.");
+        } else {
+          showToast("Conexão instável. Mantendo pedidos salvos na tela.", "warning");
+        }
+      }
+    } catch {
+      if (orders.length === 0) {
+        setFetchFailed(true);
+        setRefreshError("Não foi possível carregar os pedidos no momento. Verifique sua conexão.");
       } else {
         showToast("Conexão instável. Mantendo pedidos salvos na tela.", "warning");
       }
-    } catch {
-      showToast("Conexão instável. Mantendo pedidos salvos na tela.", "warning");
     } finally {
       setIsRefreshing(false);
+      setIsInitialLoading(false);
     }
   };
 
@@ -309,17 +355,59 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
           </div>
         )}
 
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-20 text-gray-400">
-            <Package className="h-16 w-16" strokeWidth={1} />
-            <p className="font-medium text-base text-gray-600">
-              Nenhum pedido {filter === "active" ? "ativo" : ""} no momento
-            </p>
-            <p className="text-sm text-gray-400">
-              {filter === "active"
-                ? "Os novos pedidos aparecerão aqui em tempo real"
-                : "O histórico completo de pedidos aparecerá aqui"}
-            </p>
+        {isInitialLoading && orders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-500 text-center">
+            <RefreshCw className="h-10 w-10 text-amber-500 animate-spin" />
+            <p className="font-bold text-base text-slate-800">Carregando pedidos da lanchonete...</p>
+            <p className="text-xs text-slate-400">Consultando pedidos mais recentes...</p>
+          </div>
+        ) : fetchFailed && orders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-14 px-4 text-center rounded-3xl bg-white border-2 border-red-200/80 shadow-sm max-w-md mx-auto my-6 animate-fade-in">
+            <div className="h-14 w-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center border border-red-200">
+              <AlertCircle className="h-7 w-7" />
+            </div>
+            <div>
+              <p className="font-black text-base text-slate-900">Falha ao carregar pedidos</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                Não foi possível conectar ao servidor para carregar a lista de pedidos do estabelecimento.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              disabled={isRefreshing}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-5 py-2.5 text-xs font-black shadow-md shadow-amber-500/20 transition cursor-pointer disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <span>{isRefreshing ? "Recarregando pedidos..." : "Recarregar pedidos"}</span>
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400 text-center">
+            <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
+              <Package className="h-8 w-8" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="font-bold text-base text-slate-700">
+                Nenhum pedido {filter === "active" ? "ativo" : ""} no momento
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {filter === "active"
+                  ? "Os novos pedidos aparecerão aqui em tempo real assim que entrarem."
+                  : "O histórico completo de pedidos aparecerá aqui."}
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleRefreshClick}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 active:scale-95 transition shadow-xs cursor-pointer disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 text-slate-600 ${isRefreshing ? "animate-spin text-amber-500" : ""}`} />
+                <span>{isRefreshing ? "Recarregando..." : "Recarregar pedidos"}</span>
+              </button>
+            </div>
           </div>
         ) : filter === "all" ? (
           <div className="space-y-6">

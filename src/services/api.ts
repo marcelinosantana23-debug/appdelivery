@@ -494,34 +494,114 @@ export async function deleteTenantAddonGroupApi(
   }
 }
 
-export async function fetchOrdersApi(
-  tenantId?: string
-): Promise<{ success: boolean; orders: Order[]; error?: string }> {
+export async function fetchMerchantOrdersApi(
+  storeId?: string
+): Promise<{ success: boolean; orders: Order[]; pedidos?: Order[]; error?: string }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12000);
   try {
-    const url = tenantId ? `${BASE_URL}/orders?tenantId=${encodeURIComponent(tenantId)}` : `${BASE_URL}/orders`;
+    const clean = storeId && typeof storeId === "string" ? encodeURIComponent(storeId.trim()) : "";
+    const query = clean
+      ? `?store_id=${clean}&loja_id=${clean}&tenantId=${clean}&_t=${Date.now()}`
+      : `?_t=${Date.now()}`;
+    const url = `${BASE_URL}/pedidos/loja${query}`;
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
         "Cache-Control": "no-cache, no-store, must-revalidate",
         Pragma: "no-cache",
+        ...getAuthHeaders(),
       },
     });
     clearTimeout(timeoutId);
     if (!res.ok) {
       const errData = await res.json().catch(() => null);
-      return { success: false, orders: [], error: errData?.error || `Erro do servidor (${res.status}) ao buscar pedidos.` };
+      return {
+        success: false,
+        orders: [],
+        pedidos: [],
+        error: errData?.error || `Erro (${res.status}) ao buscar pedidos da loja.`,
+      };
     }
-    const data = await res.json();
-    const list = Array.isArray(data.orders) ? data.orders : (Array.isArray(data.pedidos) ? data.pedidos : []);
-    return { success: true, orders: list };
+    const data = await res.json().catch(() => ({}));
+    const list = Array.isArray(data.orders)
+      ? data.orders
+      : Array.isArray(data.pedidos)
+      ? data.pedidos
+      : Array.isArray(data)
+      ? data
+      : [];
+    return { success: true, orders: list, pedidos: list };
   } catch (err: any) {
     clearTimeout(timeoutId);
     const isTimeout = err?.name === "AbortError";
     return {
       success: false,
       orders: [],
+      pedidos: [],
+      error: isTimeout
+        ? "Tempo limite esgotado ao buscar pedidos da loja. Verifique sua conexão e tente novamente."
+        : err?.message || "Erro de conexão ao buscar pedidos da loja.",
+    };
+  }
+}
+
+export async function fetchOrdersApi(
+  tenantId?: string
+): Promise<{ success: boolean; orders: Order[]; pedidos?: Order[]; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  try {
+    const authHeaders = getAuthHeaders();
+    let url = `${BASE_URL}/orders?_t=${Date.now()}`;
+    if (tenantId && tenantId.trim()) {
+      const clean = encodeURIComponent(tenantId.trim());
+      url = `${BASE_URL}/pedidos/loja?store_id=${clean}&loja_id=${clean}&tenantId=${clean}&_t=${Date.now()}`;
+    }
+
+    let res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        ...authHeaders,
+      },
+    });
+
+    // Fallback de compatibilidade caso a rota /pedidos/loja retorne 404
+    if (!res.ok && res.status === 404 && tenantId && tenantId.trim()) {
+      const fallbackUrl = `${BASE_URL}/orders?tenantId=${encodeURIComponent(tenantId.trim())}&_t=${Date.now()}`;
+      res = await fetch(fallbackUrl, {
+        signal: controller.signal,
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          ...authHeaders,
+        },
+      });
+    }
+
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      return { success: false, orders: [], pedidos: [], error: errData?.error || `Erro do servidor (${res.status}) ao buscar pedidos.` };
+    }
+    const data = await res.json().catch(() => ({}));
+    const list = Array.isArray(data.orders)
+      ? data.orders
+      : Array.isArray(data.pedidos)
+      ? data.pedidos
+      : Array.isArray(data)
+      ? data
+      : [];
+    return { success: true, orders: list, pedidos: list };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    const isTimeout = err?.name === "AbortError";
+    return {
+      success: false,
+      orders: [],
+      pedidos: [],
       error: isTimeout
         ? "Tempo limite esgotado ao buscar pedidos. Verifique sua conexão e tente novamente."
         : (err?.message || "Erro de conexão ao buscar pedidos."),

@@ -5066,13 +5066,25 @@ export class Database {
     }
     const cleanTenantId = tenantId.trim();
 
+    let resolvedTenantId = cleanTenantId;
+    let resolvedTenantSlug = cleanTenantId;
+    try {
+      const tenant = await this.getTenantByIdOrSlug(cleanTenantId);
+      if (tenant) {
+        resolvedTenantId = tenant.id;
+        resolvedTenantSlug = tenant.slug || cleanTenantId;
+      }
+    } catch {
+      // ignore
+    }
+
     if (this.env?.DB) {
       try {
         await this.ensureTables();
         const res = await this.env.DB.prepare(
-          "SELECT * FROM orders WHERE tenant_id = ? ORDER BY created_at DESC"
+          "SELECT * FROM orders WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC, id DESC"
         )
-          .bind(cleanTenantId)
+          .bind(resolvedTenantId, resolvedTenantSlug)
           .all<any>();
         if (res.results) {
           return res.results.map((r: any) => this.mapOrderRow(r));
@@ -5082,9 +5094,19 @@ export class Database {
       }
     }
 
-    return globalStore.orders
-      .filter((o) => o && (o.tenantId === cleanTenantId || o.tenantId === tenantId))
-      .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    return (globalStore.orders || [])
+      .filter(
+        (o) =>
+          o &&
+          (o.tenantId === cleanTenantId ||
+            o.tenantId === resolvedTenantId ||
+            o.tenantId === resolvedTenantSlug)
+      )
+      .sort((a, b) => {
+        const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt).getTime() || 0;
+        const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt).getTime() || 0;
+        return timeB - timeA;
+      });
   }
 
   async getAllOrders(): Promise<Order[]> {
