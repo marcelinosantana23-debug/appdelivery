@@ -47,9 +47,9 @@ import type { Order, OrderStatus } from "@/types";
 
 const statusFlow: { status: string; label: string; icon: React.ComponentType<{ className?: string }>; color: string }[] = [
   { status: "PENDENTE", label: "Recebido", icon: Package, color: "bg-blue-500" },
-  { status: "EM_PREPARO", label: "Em produção", icon: ChefHat, color: "bg-amber-500" },
+  { status: "EM_PREPARO", label: "Pedido Aceito", icon: ChefHat, color: "bg-amber-500" },
   { status: "PRONTO", label: "Pronto", icon: CheckCircle2, color: "bg-emerald-500" },
-  { status: "SAIU_PARA_ENTREGA", label: "Saiu p/ entrega", icon: Bike, color: "bg-purple-500" },
+  { status: "SAIU_PARA_ENTREGA", label: "Saiu para entrega", icon: Bike, color: "bg-purple-500" },
   { status: "ENTREGUE", label: "Finalizado", icon: CheckCircle2, color: "bg-green-600" },
 ];
 
@@ -369,7 +369,15 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
                       isNew={newOrderIds.includes(order.id)}
                       onView={() => clearNewOrderFlag(order.id)}
                       onAdvance={(id) => {
-                        const isPickupOrDineIn = order.orderType === "pickup" || order.orderType === "dine_in" || (order as any).delivery_type === "pickup" || (order as any).delivery_type === "dine_in";
+                        const isPickupOrDineIn =
+                          order.orderType === "pickup" ||
+                          order.orderType === "takeaway" ||
+                          order.orderType === "dine_in" ||
+                          (order as any).delivery_type === "pickup" ||
+                          (order as any).delivery_type === "dine_in" ||
+                          (order as any).tipo_pedido === "retirada" ||
+                          (order as any).tipo_pedido === "mesa" ||
+                          Boolean((order as any).tableNumber || (order as any).table_number || (order as any).mesa);
                         const next = getNextOrderStatus(order.status, isPickupOrDineIn);
                         updateOrderStatus(id, next as OrderStatus);
                         clearNewOrderFlag(id);
@@ -396,7 +404,15 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
               isNew={newOrderIds.includes(order.id)}
               onView={() => clearNewOrderFlag(order.id)}
               onAdvance={(id) => {
-                const isPickupOrDineIn = order.orderType === "pickup" || order.orderType === "dine_in" || (order as any).delivery_type === "pickup" || (order as any).delivery_type === "dine_in";
+                const isPickupOrDineIn =
+                  order.orderType === "pickup" ||
+                  order.orderType === "takeaway" ||
+                  order.orderType === "dine_in" ||
+                  (order as any).delivery_type === "pickup" ||
+                  (order as any).delivery_type === "dine_in" ||
+                  (order as any).tipo_pedido === "retirada" ||
+                  (order as any).tipo_pedido === "mesa" ||
+                  Boolean((order as any).tableNumber || (order as any).table_number || (order as any).mesa);
                 const next = getNextOrderStatus(order.status, isPickupOrDineIn);
                 updateOrderStatus(id, next as OrderStatus);
                 clearNewOrderFlag(id);
@@ -461,8 +477,16 @@ function OrderCard({
   onOpenMotoboy: (order: Order) => void;
   onPrintThermalReceipt: (order: Order) => void;
 }) {
-  const isPickup = order.orderType === "pickup" || (order as any).delivery_type === "pickup";
-  const isDineIn = order.orderType === "dine_in" || (order as any).delivery_type === "dine_in";
+  const isPickup =
+    order.orderType === "pickup" ||
+    order.orderType === "takeaway" ||
+    (order as any).delivery_type === "pickup" ||
+    (order as any).tipo_pedido === "retirada";
+  const isDineIn =
+    order.orderType === "dine_in" ||
+    (order as any).delivery_type === "dine_in" ||
+    (order as any).tipo_pedido === "mesa" ||
+    Boolean((order as any).tableNumber || (order as any).table_number || (order as any).mesa);
   
   const stdStatus = toStandardStatus(order.status);
   const isCancelled = stdStatus === "CANCELADO";
@@ -475,30 +499,50 @@ function OrderCard({
   const defaultStatusInfo =
     statusFlow.find((s) => s.status === stdStatus) || {
       status: stdStatus,
-      label: isPending ? "Recebido" : isPreparing ? "Em produção" : isReady ? "Pronto" : isDelivering ? "Saiu p/ entrega" : isDone ? "Finalizado" : "Pendente",
+      label: isPending ? "Recebido" : isPreparing ? "Pedido Aceito" : isReady ? "Pronto" : isDelivering ? "Saiu para Entrega" : isDone ? "Finalizado" : "Pendente",
       icon: isPending ? Package : isPreparing ? ChefHat : isReady ? CheckCircle2 : isDelivering ? Bike : CheckCircle2,
       color: isPending ? "bg-blue-500" : isPreparing ? "bg-amber-500" : isReady ? "bg-emerald-500" : isDelivering ? "bg-purple-500" : "bg-green-600",
     };
 
   // Ajuste dinâmico de badge para retirada no balcão e consumo no local
   const statusInfo =
-    (isDelivering || isReady) && isPickup
+    isPending
       ? {
-          status: "SAIU_PARA_ENTREGA",
+          status: "PENDENTE",
+          label: "Recebido",
+          icon: Package,
+          color: "bg-blue-500",
+        }
+      : isPreparing
+      ? {
+          status: "EM_PREPARO",
+          label: "Pedido Aceito",
+          icon: ChefHat,
+          color: "bg-amber-500",
+        }
+      : (isDelivering || isReady) && isPickup
+      ? {
+          status: "PRONTO",
           label: "Pronto no Balcão",
           icon: ShoppingBag,
           color: "bg-emerald-600",
         }
       : (isDelivering || isReady) && isDineIn
       ? {
-          status: "SAIU_PARA_ENTREGA",
-          label: "Servir na Mesa",
+          status: "PRONTO",
+          label: "Pronto na Mesa",
           icon: UtensilsCrossed,
+          color: "bg-purple-600",
+        }
+      : (isDelivering || isReady)
+      ? {
+          status: "SAIU_PARA_ENTREGA",
+          label: "Saiu para Entrega",
+          icon: Bike,
           color: "bg-purple-600",
         }
       : defaultStatusInfo;
 
-  const canAdvance = !isCancelled && !isDone;
   const { config, showToast } = useStore();
 
   const hasFixedMotoboy = Boolean(config.motoboyPhone && config.motoboyPhone.trim());
@@ -523,34 +567,6 @@ function OrderCard({
 
   const relativeTimeLabel = formatRelativeOrderTime(order.createdAt, nowMs, order as any);
   const exactDateTimeLabel = formatOrderExactDateTime(order.createdAt, order as any);
-
-  const getAdvanceButtonLabel = () => {
-    if (isPending) {
-      return "Aceitar Pedido / Iniciar Preparo";
-    }
-    if (isPreparing) {
-      return isDineIn
-        ? "Marcar como 'Pronto para Servir'"
-        : isPickup
-        ? "Marcar como 'Pronto no Balcão'"
-        : "Marcar como 'Pronto na Cozinha'";
-    }
-    if (isReady) {
-      return isDineIn
-        ? "Marcar como 'Servido na Mesa'"
-        : isPickup
-        ? "Marcar como 'Retirado'"
-        : "Enviar para Entrega (Saiu p/ Entrega)";
-    }
-    if (isDelivering) {
-      return isDineIn
-        ? "Marcar como 'Servido na Mesa'"
-        : isPickup
-        ? "Marcar como 'Retirado'"
-        : "Marcar como 'Entregue'";
-    }
-    return "Avançar Status";
-  };
 
   const receiptUrl = order.pixReceiptUrl || order.pix_receipt_url;
 
@@ -1030,8 +1046,8 @@ function OrderCard({
             </div>
           )}
 
-          {/* 3. AÇÃO PRINCIPAL DE STATUS (BOTÃO DE DESTAQUE TOTAL) */}
-          {canAdvance && (
+          {/* 3. AÇÃO PRINCIPAL DE STATUS (ESTRITAMENTE 2 ETAPAS SEQUENCIAIS) */}
+          {isPending ? (
             <div className="pt-0.5">
               <button
                 type="button"
@@ -1040,15 +1056,60 @@ function OrderCard({
                   e.stopPropagation();
                   onAdvance(order.id);
                 }}
-                className={`w-full flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm sm:text-base font-black text-white shadow-md transition-all active:scale-[0.99] cursor-pointer ${
-                  isPending
-                    ? "bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400 shadow-emerald-200 animate-pulse"
-                    : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100"
-                }`}
+                className="w-full flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm sm:text-base font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-md ring-2 ring-emerald-400 shadow-emerald-200 animate-pulse transition-all active:scale-[0.99] cursor-pointer"
+                title="Ação 1: Aceitar Pedido (Muda o status para aceito/em preparo)"
               >
                 <Check className="h-5 w-5 stroke-[2.5]" />
-                <span>{getAdvanceButtonLabel()}</span>
+                <span>Aceitar Pedido</span>
               </button>
+            </div>
+          ) : isPreparing ? (
+            <div className="pt-0.5">
+              <button
+                type="button"
+                id={`advance-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdvance(order.id);
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm sm:text-base font-black text-white bg-amber-600 hover:bg-amber-700 shadow-md ring-2 ring-amber-400 shadow-amber-200 transition-all active:scale-[0.99] cursor-pointer"
+                title="Ação 2: Pronto / Concluir (O botão final único que finaliza a etapa ativa)"
+              >
+                <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
+                <span>Pronto / Concluir</span>
+              </button>
+            </div>
+          ) : (
+            <div className="pt-0.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-emerald-950 font-bold text-xs sm:text-sm shadow-2xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
+                <span>
+                  {order.orderType === "delivery"
+                    ? "Saiu para Entrega"
+                    : isDineIn
+                    ? "Pronto para Servir na Mesa"
+                    : "Pronto para Retirada no Balcão"}
+                </span>
+                <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[11px] font-extrabold text-emerald-900 ml-1">
+                  Etapa Ativa Concluída
+                </span>
+              </div>
+
+              {!isDone && (
+                <button
+                  type="button"
+                  id={`finish-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdvance(order.id);
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-600 bg-white hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-bold transition cursor-pointer active:scale-95"
+                  title="Finalizar e arquivar este pedido no histórico"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Marcar como Entregue / Finalizado</span>
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -29,11 +29,38 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
   const statusRef = useRef<string>(toStandardStatus(initialOrder?.status));
   statusRef.current = toStandardStatus(order?.status);
 
-  const isPickup = order?.orderType === "pickup" || (order as any)?.delivery_type === "pickup";
-  const isDineIn = order?.orderType === "dine_in" || (order as any)?.delivery_type === "dine_in";
+  const isDineIn =
+    order?.orderType === "dine_in" ||
+    (order as any)?.delivery_type === "dine_in" ||
+    (order as any)?.orderType === "mesa" ||
+    (order as any)?.tipo_pedido === "mesa" ||
+    Boolean((order as any)?.tableNumber || (order as any)?.table_number || (order as any)?.mesa);
 
-  // 5 Etapas padronizadas exigidas pela barra visual do cliente:
-  // [ PENDENTE ] ➔ [ EM_PREPARO ] ➔ [ PRONTO ] ➔ [ SAIU_PARA_ENTREGA ] ➔ [ ENTREGUE ]
+  const isPickup =
+    order?.orderType === "pickup" ||
+    order?.orderType === "takeaway" ||
+    (order as any)?.delivery_type === "pickup" ||
+    (order as any)?.orderType === "retirada" ||
+    (order as any)?.tipo_pedido === "retirada";
+
+  // Textos dinâmicos rigorosamente exigidos baseados no tipo_pedido:
+  // - Se tipo_pedido for 'delivery' ➔ "Saiu para Entrega"
+  // - Se tipo_pedido for 'retirada' ➔ "Pronto para Retirada no Balcão"
+  // - Se tipo_pedido for 'mesa' ➔ "Pronto para Servir na Mesa"
+  const step3Label = isDineIn
+    ? "Pronto para Servir na Mesa"
+    : isPickup
+    ? "Pronto para Retirada no Balcão"
+    : "Saiu para Entrega";
+
+  const step3Desc = isDineIn
+    ? "Pratos prontos! O garçom está servindo na sua mesa"
+    : isPickup
+    ? "Seu pedido está prontinho e disponível para você retirar no balcão"
+    : "O motoboy retirou seu pedido e está a caminho do seu endereço";
+
+  const step3Icon = isDineIn ? UtensilsCrossed : isPickup ? ShoppingBag : Bike;
+
   const statusSteps: {
     statusKey: string;
     label: string;
@@ -48,39 +75,19 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
     },
     {
       statusKey: "EM_PREPARO",
-      label: "Em Preparo",
+      label: "Pedido Aceito",
       description: isDineIn
-        ? "Seu prato está sendo preparado pelo chef"
-        : "Seu pedido está sendo preparado na cozinha",
+        ? "Seu pedido foi aceito e está sendo preparado pelo chef"
+        : isPickup
+        ? "Seu pedido foi aceito e está em preparo para o balcão"
+        : "Seu pedido foi aceito e está sendo preparado na cozinha",
       icon: ChefHat,
     },
     {
-      statusKey: "PRONTO",
-      label: isDineIn
-        ? "Pronto para Servir"
-        : isPickup
-        ? "Pronto para Retirada"
-        : "Pronto na Cozinha",
-      description: isDineIn
-        ? "Pratos prontos na cozinha para servir"
-        : isPickup
-        ? "Pedido pronto para você retirar no balcão"
-        : "Pedido pronto, embalado e aguardando saída",
-      icon: isDineIn ? UtensilsCrossed : isPickup ? ShoppingBag : CheckCircle2,
-    },
-    {
-      statusKey: "SAIU_PARA_ENTREGA",
-      label: isDineIn
-        ? "Servindo na Mesa"
-        : isPickup
-        ? "Aguardando no Balcão"
-        : "Saiu para Entrega",
-      description: isDineIn
-        ? "O garçom está levando seu pedido até sua mesa"
-        : isPickup
-        ? "Disponível no balcão para retirada imediata"
-        : "O motoboy está a caminho do seu endereço",
-      icon: isDineIn ? UtensilsCrossed : isPickup ? ShoppingBag : Bike,
+      statusKey: "PRONTO_OU_ENTREGA",
+      label: step3Label,
+      description: step3Desc,
+      icon: step3Icon,
     },
     {
       statusKey: "ENTREGUE",

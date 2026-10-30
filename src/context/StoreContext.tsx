@@ -2285,7 +2285,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // 3. Feedback visual imediato via Toast
       const statusLabels: Record<string, string> = {
         PENDENTE: "Pendente",
-        EM_PREPARO: "Em Preparo",
+        EM_PREPARO: "Pedido Aceito",
         PRONTO: "Pronto",
         SAIU_PARA_ENTREGA: "Saiu para Entrega",
         ENTREGUE: "Entregue",

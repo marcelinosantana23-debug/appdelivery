@@ -13,6 +13,7 @@ import {
   CreditCard,
   Sparkles,
   RefreshCw,
+  UtensilsCrossed,
 } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 import { fetchOrderDetailsApi } from "@/services/api";
@@ -54,8 +55,29 @@ export function FloatingOrderTracker({
   const statusRef = useRef<OrderStatus>(status);
   statusRef.current = status;
 
-  // Mapeamento das 4 etapas visuais simples exigidas:
-  // [ Pedido Recebido ] ➔ [ Em Preparo ] ➔ [ Saiu para Entrega ] ➔ [ Entregue ]
+  const isDineIn = useMemo(() => {
+    return (
+      order?.orderType === "dine_in" ||
+      (order as any)?.delivery_type === "dine_in" ||
+      (order as any)?.orderType === "mesa" ||
+      (order as any)?.tipo_pedido === "mesa" ||
+      Boolean((order as any)?.tableNumber || (order as any)?.table_number || (order as any)?.mesa)
+    );
+  }, [order]);
+
+  const isPickupOrder = useMemo(() => {
+    return (
+      isPickup ||
+      order?.orderType === "pickup" ||
+      order?.orderType === "takeaway" ||
+      (order as any)?.delivery_type === "pickup" ||
+      (order as any)?.orderType === "retirada" ||
+      (order as any)?.tipo_pedido === "retirada"
+    );
+  }, [isPickup, order]);
+
+  // Mapeamento das 4 etapas visuais com textos dinâmicos baseados no tipo_pedido:
+  // [ Pedido Recebido ] ➔ [ Pedido Aceito ] ➔ [ Saiu para Entrega / Pronto para Retirada no Balcão / Pronto para Servir na Mesa ] ➔ [ Entregue ]
   const currentStepNumber = useMemo(() => {
     const s = normalizeOrderStatus(status);
     switch (s) {
@@ -72,6 +94,24 @@ export function FloatingOrderTracker({
     }
   }, [status]);
 
+  const step3Label = useMemo(() => {
+    if (isDineIn) return "Pronto para Servir na Mesa";
+    if (isPickupOrder) return "Pronto para Retirada no Balcão";
+    return "Saiu para Entrega";
+  }, [isDineIn, isPickupOrder]);
+
+  const step3ShortLabel = useMemo(() => {
+    if (isDineIn) return "Pronto na Mesa";
+    if (isPickupOrder) return "Pronto no Balcão";
+    return "Saiu p/ Entrega";
+  }, [isDineIn, isPickupOrder]);
+
+  const step3Icon = useMemo(() => {
+    if (isDineIn) return UtensilsCrossed;
+    if (isPickupOrder) return ShoppingBag;
+    return Bike;
+  }, [isDineIn, isPickupOrder]);
+
   const stepsConfig = useMemo(
     () => [
       {
@@ -84,26 +124,26 @@ export function FloatingOrderTracker({
       {
         step: 2,
         key: "preparing",
-        label: "Em Preparo",
-        shortLabel: "Em Preparo",
+        label: "Pedido Aceito",
+        shortLabel: "Aceito",
         icon: ChefHat,
       },
       {
         step: 3,
         key: "delivering",
-        label: isPickup ? "Pronto no Balcão" : "Saiu para Entrega",
-        shortLabel: isPickup ? "Pronto" : "A Caminho",
-        icon: isPickup ? ShoppingBag : Bike,
+        label: step3Label,
+        shortLabel: step3ShortLabel,
+        icon: step3Icon,
       },
       {
         step: 4,
         key: "done",
-        label: isPickup ? "Retirado" : "Entregue",
-        shortLabel: isPickup ? "Retirado" : "Entregue",
+        label: isDineIn ? "Servido na Mesa" : isPickupOrder ? "Pedido Retirado" : "Pedido Entregue",
+        shortLabel: isDineIn ? "Servido" : isPickupOrder ? "Retirado" : "Entregue",
         icon: CheckCircle2,
       },
     ],
-    [isPickup]
+    [isDineIn, isPickupOrder, step3Label, step3ShortLabel, step3Icon]
   );
 
   // Link para WhatsApp da loja
@@ -453,9 +493,13 @@ export function FloatingOrderTracker({
     }
     if (norm === "preparing") {
       return {
-        badge: "Em Preparo",
-        title: "Em Preparo!",
-        description: "A cozinha já aceitou seu pedido e está preparando tudo com cuidado.",
+        badge: "Pedido Aceito",
+        title: "Pedido Aceito! 🍳",
+        description: isDineIn
+          ? "Seu pedido foi aceito e está sendo preparado pelo chef."
+          : isPickupOrder
+          ? "Seu pedido foi aceito e está em preparo para o balcão."
+          : "A cozinha aceitou seu pedido e está preparando com todo cuidado.",
         accentColor: "text-orange-600 dark:text-orange-400",
         badgeBg: "bg-orange-100 dark:bg-orange-950/60 border-orange-200 dark:border-orange-800/60 text-orange-800 dark:text-orange-300",
         pulseColor: "bg-orange-500",
@@ -463,10 +507,21 @@ export function FloatingOrderTracker({
       };
     }
     if (norm === "delivering") {
-      if (isPickup) {
+      if (isDineIn) {
         return {
-          badge: "Pronto no Balcão",
-          title: "Pronto para Retirada! 🛍️",
+          badge: "Pronto para Servir na Mesa",
+          title: "Pronto para Servir na Mesa! 🍽️",
+          description: "Seus pratos já estão prontos e sendo levados até a sua mesa.",
+          accentColor: "text-purple-600 dark:text-purple-400",
+          badgeBg: "bg-purple-100 dark:bg-purple-950/60 border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300",
+          pulseColor: "bg-purple-500",
+          icon: UtensilsCrossed,
+        };
+      }
+      if (isPickupOrder) {
+        return {
+          badge: "Pronto para Retirada no Balcão",
+          title: "Pronto para Retirada no Balcão! 🛍️",
           description: "Seu pedido já está pronto! Você já pode retirar no balcão da loja.",
           accentColor: "text-emerald-600 dark:text-emerald-400",
           badgeBg: "bg-emerald-100 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300",
@@ -486,9 +541,9 @@ export function FloatingOrderTracker({
     }
     if (norm === "done") {
       return {
-        badge: isPickup ? "Retirado" : "Entregue",
-        title: isPickup ? "Pedido Retirado! 🎉" : "Pedido Entregue! 🎉",
-        description: "Seu pedido foi entregue com sucesso. Bom apetite!",
+        badge: isDineIn ? "Servido na Mesa" : isPickupOrder ? "Pedido Retirado" : "Pedido Entregue",
+        title: isDineIn ? "Servido na Mesa! 🎉" : isPickupOrder ? "Pedido Retirado! 🎉" : "Pedido Entregue! 🎉",
+        description: "Seu pedido foi finalizado com sucesso. Bom apetite!",
         accentColor: "text-emerald-600 dark:text-emerald-400",
         badgeBg: "bg-emerald-100 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300",
         pulseColor: "bg-emerald-500",

@@ -213,13 +213,13 @@ export const STATUS_MAP_PT_TO_EN: Record<string, OrderStatus> = {
 
 export const STATUS_MAP_EN_TO_PT: Record<string, string> = {
   received: "Pendente",
-  preparing: "Em Preparo",
+  preparing: "Pedido Aceito",
   ready: "Pronto",
   delivering: "Saiu para Entrega",
   done: "Concluído",
   cancelled: "Cancelado",
   PENDENTE: "Pendente",
-  EM_PREPARO: "Em Preparo",
+  EM_PREPARO: "Pedido Aceito",
   PRONTO: "Pronto",
   SAIU_PARA_ENTREGA: "Saiu para Entrega",
   ENTREGUE: "Entregue",
@@ -237,11 +237,23 @@ export function toStandardStatus(statusInput: string | undefined | null): string
     s === "PRODUCAO" ||
     s === "PREPARANDO" ||
     s === "CONFIRMED" ||
-    s === "ACEITO"
+    s === "ACEITO" ||
+    s === "PEDIDO_ACEITO"
   ) {
     return "EM_PREPARO";
   }
-  if (s === "PRONTO" || s === "READY" || s === "PRONTO_BALCAO" || s === "PRONTO_NO_BALCAO" || s === "PRONTO_COZINHA") return "PRONTO";
+  if (
+    s === "PRONTO" ||
+    s === "READY" ||
+    s === "PRONTO_BALCAO" ||
+    s === "PRONTO_NO_BALCAO" ||
+    s === "PRONTO_COZINHA" ||
+    s === "PRONTO_MESA" ||
+    s === "PRONTO_PARA_RETIRADA" ||
+    s === "PRONTO_PARA_SERVIR"
+  ) {
+    return "PRONTO";
+  }
   if (
     s === "SAIU_PARA_ENTREGA" ||
     s === "DELIVERING" ||
@@ -273,7 +285,7 @@ export function toLegacyStatus(statusInput: string | undefined | null): OrderSta
   switch (std) {
     case "PENDENTE": return "received";
     case "EM_PREPARO": return "preparing";
-    case "PRONTO": return "preparing";
+    case "PRONTO": return "ready";
     case "SAIU_PARA_ENTREGA": return "delivering";
     case "ENTREGUE": return "done";
     case "CANCELADO": return "cancelled";
@@ -1925,7 +1937,7 @@ const handleStatusUpdate = async (c: any) => {
       pedido: {
         ...atualizado,
         status: standardStatus,
-        statusPt: STATUS_MAP_EN_TO_PT[toLegacyStatus(standardStatus)] || standardStatus,
+        statusPt: STATUS_MAP_EN_TO_PT[standardStatus] || STATUS_MAP_EN_TO_PT[toLegacyStatus(standardStatus)] || standardStatus,
       },
       order: {
         ...atualizado,

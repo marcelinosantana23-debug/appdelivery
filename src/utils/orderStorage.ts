@@ -35,7 +35,8 @@ export function toStandardStatus(raw: string | undefined | null): string {
     s === "PRODUCAO" ||
     s === "PREPARANDO" ||
     s === "CONFIRMED" ||
-    s === "ACEITO"
+    s === "ACEITO" ||
+    s === "PEDIDO_ACEITO"
   ) {
     return "EM_PREPARO";
   }
@@ -44,7 +45,10 @@ export function toStandardStatus(raw: string | undefined | null): string {
     s === "READY" ||
     s === "PRONTO_BALCAO" ||
     s === "PRONTO_NO_BALCAO" ||
-    s === "PRONTO_COZINHA"
+    s === "PRONTO_COZINHA" ||
+    s === "PRONTO_MESA" ||
+    s === "PRONTO_PARA_RETIRADA" ||
+    s === "PRONTO_PARA_SERVIR"
   ) {
     return "PRONTO";
   }
@@ -84,7 +88,6 @@ export function toLegacyStatus(raw: string | undefined | null): OrderStatus {
     case "EM_PREPARO":
       return "preparing";
     case "PRONTO":
-      return "preparing";
     case "SAIU_PARA_ENTREGA":
       return "delivering";
     case "ENTREGUE":
@@ -123,11 +126,12 @@ export function getNextOrderStatus(
   const std = toStandardStatus(currentStatus);
   switch (std) {
     case "PENDENTE":
+      // Ação 1 do Lojista: Aceitar Pedido
       return "EM_PREPARO";
     case "EM_PREPARO":
-      return "PRONTO";
+      // Ação 2 do Lojista: Pronto / Concluir (dinâmico pelo tipo de pedido)
+      return isPickupOrDineIn ? "PRONTO" : "SAIU_PARA_ENTREGA";
     case "PRONTO":
-      return isPickupOrDineIn ? "ENTREGUE" : "SAIU_PARA_ENTREGA";
     case "SAIU_PARA_ENTREGA":
       return "ENTREGUE";
     default:
@@ -140,15 +144,14 @@ export function getStatusStepIndex(status: string | undefined | null): number {
   const s = toStandardStatus(status);
   switch (s) {
     case "PENDENTE":
-      return 0;
+      return 0; // 1. Pedido Recebido
     case "EM_PREPARO":
-      return 1;
+      return 1; // 2. Pedido Aceito
     case "PRONTO":
-      return 2;
     case "SAIU_PARA_ENTREGA":
-      return 3;
+      return 2; // 3. Saiu para Entrega / Pronto para Retirada no Balcão / Pronto para Servir na Mesa
     case "ENTREGUE":
-      return 4;
+      return 3; // 4. Finalizado / Entregue
     default:
       return 0;
   }
