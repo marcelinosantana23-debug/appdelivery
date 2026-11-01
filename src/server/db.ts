@@ -18,7 +18,7 @@ import type {
   StoreStory,
   AddonGroup,
 } from "./types";
-import { orderEvents } from "./events";
+import { publishOrderEvent } from "./events";
 import { hashPassword, verifyPassword } from "./security";
 import { extraTenants, extraUsers, extraProducts, extraStories, extraAddonGroups } from "./seedData";
 
@@ -2032,11 +2032,29 @@ const globalStore = new MemoryStore();
  * Data Access Layer for Multi-tenancy
  * Uses env.DB (Cloudflare D1) if configured, or falls back seamlessly to memory store
  */
+/**
+ * Normaliza o tipo do pedido salvo no banco ('delivery' | 'pickup' | 'dine_in' e variantes)
+ * para o 'tipo_pedido' canônico: 'delivery' | 'retirada' | 'mesa'.
+ */
+export function resolveTipoPedido(orderType?: string | null, tableNumber?: string | null): "delivery" | "retirada" | "mesa" {
+  const t = String(orderType || "").toLowerCase().trim();
+  if (t === "dine_in" || t === "mesa" || t === "dinein" || t === "dine-in") return "mesa";
+  if (t === "pickup" || t === "retirada" || t === "takeaway" || t === "balcao" || t === "balcão") return "retirada";
+  if (t === "delivery" || t === "entrega") return "delivery";
+  return tableNumber && String(tableNumber).trim() ? "mesa" : "delivery";
+}
+
 export class Database {
   private env?: Env;
+  private ctx?: { waitUntil(promise: Promise<unknown>): void };
 
   constructor(env?: Env) {
     this.env = env;
+  }
+
+  /** Permite que tarefas secundárias terminem depois da resposta (Cloudflare Workers). */
+  setExecutionContext(ctx?: { waitUntil(promise: Promise<unknown>): void }): void {
+    this.ctx = ctx;
   }
 
   private static tablesInitialized = false;
@@ -5257,6 +5275,7 @@ export class Database {
       pix_receipt_url: rawReceipt,
       location_url: rawLocationUrl,
       locationUrl: rawLocationUrl,
+      tipo_pedido: resolveTipoPedido((orderData as any).orderType, cleanTableNumber),
       tableNumber: cleanTableNumber,
       table_number: cleanTableNumber,
       mesa: cleanTableNumber,
@@ -5426,18 +5445,20 @@ export class Database {
         console.warn("[Background] Auto-register customer error:", custErr);
       }
 
-      // D. Emissão do evento Server-Sent Events (SSE) em tempo real para o painel do lojista
-      try {
-        orderEvents.emit(newOrder, true);
-      } catch (eventErr) {
-        console.warn("[Background] Error emitting new order event:", eventErr);
-      }
     };
 
-    // Dispara tarefas secundárias sem 'await' para retornar resposta imediata
-    runBackgroundTasks().catch((bgErr) => {
+    // Notifica o painel do lojista NA HORA (Durable Object -> SSE), sem esperar KV/itens/cliente
+    try {
+      await publishOrderEvent(this.env, newOrder, true);
+    } catch (eventErr) {
+      console.warn("Error emitting new order event:", eventErr);
+    }
+
+    // Tarefas secundárias em segundo plano; waitUntil impede que o Workers as cancele após a resposta
+    const backgroundPromise = runBackgroundTasks().catch((bgErr) => {
       console.warn("[Background] Falha geral nas tarefas secundárias:", bgErr);
     });
+    this.ctx?.waitUntil(backgroundPromise);
 
     return newOrder;
   }
@@ -5476,7 +5497,15 @@ export class Database {
       }
     }
 
-    // 3. Atualiza memória global de forma imediata
+    // 3. Publica o evento em tempo real IMEDIATAMENTE após gravar no D1
+    //    (Durable Object -> SSE do cliente e do painel, em qualquer isolate)
+    try {
+      await publishOrderEvent(this.env, order);
+    } catch (e) {
+      console.warn("Error emitting order event:", e);
+    }
+
+    // 4. Atualiza memória local do isolate
     const memIndex = globalStore.orders.findIndex(
       (o) => o.id === order.id || o.id === decoded || o.id === cleanId || o.id === rawId || (o.id && o.id.replace(/^#/, "") === rawId)
     );
@@ -5486,31 +5515,27 @@ export class Database {
       globalStore.orders.unshift(order);
     }
 
-    // 4. Atualiza Cloudflare KV
+    // 5. Cache KV em paralelo e fora do caminho crítico (não atrasa mais a resposta nem o evento)
     const kv = this.getKv();
     if (kv) {
-      try {
-        await kv.put(`order:${order.id}`, JSON.stringify(order));
-        await kv.put(`order:${cleanId}`, JSON.stringify(order));
-        await kv.put(`order:${rawId}`, JSON.stringify(order));
-        await kv.put(`order_status:${rawId}`, JSON.stringify({
-          orderId: order.id,
-          status: order.status,
-          updatedAt: Date.now(),
-        }));
-        if (order.tenantId) {
-          await kv.put(`tenant_orders_version:${order.tenantId}`, Date.now().toString());
-        }
-      } catch (e) {
-        console.warn("KV update order error:", e);
+      const serialized = JSON.stringify(order);
+      const kvTask = Promise.all([
+        kv.put(`order:${order.id}`, serialized),
+        kv.put(`order:${cleanId}`, serialized),
+        kv.put(`order:${rawId}`, serialized),
+        kv.put(
+          `order_status:${rawId}`,
+          JSON.stringify({ orderId: order.id, status: order.status, updatedAt: Date.now() })
+        ),
+        order.tenantId
+          ? kv.put(`tenant_orders_version:${order.tenantId}`, Date.now().toString())
+          : Promise.resolve(),
+      ]).catch((e) => console.warn("KV update order error:", e));
+      if (this.ctx) {
+        this.ctx.waitUntil(kvTask);
+      } else {
+        await kvTask;
       }
-    }
-
-    // 5. Emite evento em tempo real para os clientes conectados
-    try {
-      orderEvents.emit(order);
-    } catch (e) {
-      console.warn("Error emitting order event:", e);
     }
 
     return order;
@@ -5595,7 +5620,12 @@ export class Database {
         s === "concluido" ||
         s === "concluído" ||
         s === "entregue" ||
-        s === "finalizado"
+        s === "finalizado" ||
+        // Etapa final única do lojista: "Pronto / Concluir" (pronto, saiu p/ entrega)
+        s === "pronto" ||
+        s === "ready" ||
+        s === "saiu_para_entrega" ||
+        s === "delivering"
       );
     };
 
@@ -5609,7 +5639,7 @@ export class Database {
         const periodRes = await this.env.DB.prepare(`
           SELECT * FROM orders
           WHERE tenant_id = ?
-            AND status IN ('done', 'Concluído', 'concluido', 'Entregue', 'entregue', 'finalizado')
+            AND UPPER(status) IN ('DONE', 'CONCLUÍDO', 'CONCLUIDO', 'ENTREGUE', 'FINALIZADO', 'PRONTO', 'READY', 'SAIU_PARA_ENTREGA', 'DELIVERING')
             AND created_at >= ? AND created_at <= ?
           ORDER BY created_at DESC
         `)
@@ -5623,7 +5653,7 @@ export class Database {
         const todayRes = await this.env.DB.prepare(`
           SELECT * FROM orders
           WHERE tenant_id = ?
-            AND status IN ('done', 'Concluído', 'concluido', 'Entregue', 'entregue', 'finalizado')
+            AND UPPER(status) IN ('DONE', 'CONCLUÍDO', 'CONCLUIDO', 'ENTREGUE', 'FINALIZADO', 'PRONTO', 'READY', 'SAIU_PARA_ENTREGA', 'DELIVERING')
             AND created_at >= ? AND created_at <= ?
           ORDER BY created_at DESC
         `)
@@ -5984,6 +6014,7 @@ export class Database {
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       orderType: row.order_type,
+      tipo_pedido: resolveTipoPedido(row.order_type, cleanTable),
       tableNumber: cleanTable,
       table_number: cleanTable,
       mesa: cleanTable,
@@ -6269,7 +6300,7 @@ export class Database {
           LEFT JOIN (
             SELECT 
               tenant_id,
-              COUNT(CASE WHEN status IN ('done', 'Concluído', 'concluido', 'Entregue', 'entregue', 'finalizado') THEN 1 END) as completed_count,
+              COUNT(CASE WHEN UPPER(status) IN ('DONE', 'CONCLUÍDO', 'CONCLUIDO', 'ENTREGUE', 'FINALIZADO', 'PRONTO', 'READY', 'SAIU_PARA_ENTREGA', 'DELIVERING') THEN 1 END) as completed_count,
               COUNT(id) as total_count
             FROM orders
             WHERE status != 'cancelled'
@@ -6318,13 +6349,20 @@ export class Database {
     const ranked = featuredTenants.map((t) => {
       const storeOrders = globalStore.orders.filter((o) => o.tenantId === t.id);
       const completedOrders = storeOrders.filter(
-        (o) =>
-          o.status === "done" ||
-          o.status === "Concluído" ||
-          o.status === "concluido" ||
-          o.status === "Entregue" ||
-          o.status === "entregue" ||
-          o.status === "finalizado"
+        (o) => {
+          const st = String(o.status || "").toLowerCase();
+          return (
+            st === "done" ||
+            st === "concluído" ||
+            st === "concluido" ||
+            st === "entregue" ||
+            st === "finalizado" ||
+            st === "pronto" ||
+            st === "ready" ||
+            st === "saiu_para_entrega" ||
+            st === "delivering"
+          );
+        }
       );
       const nonCancelledOrders = storeOrders.filter((o) => o.status !== "cancelled");
       const loc = (t.localidade || t.location || "Gargaú").trim() || "Gargaú";

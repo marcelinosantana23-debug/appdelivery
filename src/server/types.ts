@@ -192,6 +192,8 @@ export interface Order {
   customerName: string;
   customerPhone: string;
   orderType: OrderType;
+  /** Tipo canônico salvo/derivado do banco: 'delivery' | 'retirada' | 'mesa' */
+  tipo_pedido?: "delivery" | "retirada" | "mesa";
   tableNumber?: string;
   table_number?: string;
   mesa?: string;
@@ -267,8 +269,24 @@ export interface CloudflareKVNamespace {
   delete(key: string): Promise<void>;
 }
 
+// Durable Objects (tipagem mínima para não depender de @cloudflare/workers-types)
+export interface DurableObjectIdLike {
+  toString(): string;
+}
+
+export interface DurableObjectStubLike {
+  fetch(input: Request | string, init?: RequestInit): Promise<Response>;
+}
+
+export interface DurableObjectNamespaceLike {
+  idFromName(name: string): DurableObjectIdLike;
+  get(id: DurableObjectIdLike): DurableObjectStubLike;
+}
+
 export interface Env {
   DB?: CloudflareD1Database;
+  /** Hub de eventos em tempo real (Durable Object) - ponte SSE entre isolates do Workers */
+  ORDER_HUB?: DurableObjectNamespaceLike;
   KV?: CloudflareKVNamespace;
   STORE_KV?: CloudflareKVNamespace;
   ASSETS?: { fetch: (req: Request | string) => Promise<Response> };

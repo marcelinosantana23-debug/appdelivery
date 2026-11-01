@@ -201,4 +201,7 @@ app.get("*", async (c, next) => {
   return next();
 });
 
+// Durable Object precisa ser exportado do entrypoint do Worker
+export { OrderHub } from "./server/orderHub";
+
 export default app;

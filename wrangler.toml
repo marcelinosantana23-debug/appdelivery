@@ -14,6 +14,15 @@ database_name = "delivery_db"
 database_id = "f9d56732-ee68-4120-99c2-2bad2de74d8b"
 migrations_dir = "migrations"
 
+# Durable Object: hub SSE em tempo real (ponte entre isolates - sincronização instantânea lojista -> cliente)
+[[durable_objects.bindings]]
+name = "ORDER_HUB"
+class_name = "OrderHub"
+
+[[migrations]]
+tag = "v1-order-hub"
+new_sqlite_classes = ["OrderHub"]
+
 # Cloudflare KV Namespace Binding (para cache e configurações rápidas de tenant)
 [[kv_namespaces]]
 binding = "STORE_KV"
