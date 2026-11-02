@@ -209,8 +209,6 @@ export interface Order {
   tenantId?: string;
   items: CartItem[];
   orderType: OrderType;
-  /** Tipo canônico salvo/derivado do banco: 'delivery' | 'retirada' | 'mesa' */
-  tipo_pedido?: "delivery" | "retirada" | "mesa";
   tableNumber?: string;
   table_number?: string;
   mesa?: string;

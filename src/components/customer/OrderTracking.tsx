@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft, CheckCircle2, Clock, Bike, Package, ChefHat, XCircle, Home, ShoppingBag, RefreshCw, UtensilsCrossed } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
-import { formatPrice, formatTableDisplay, formatTableNumberOnly, getOrderKind } from "@/utils/order";
+import { formatPrice, formatTableDisplay, formatTableNumberOnly } from "@/utils/order";
 import { useStore } from "@/context/StoreContext";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { updateActiveOrderStatus, toStandardStatus, toLegacyStatus, getStatusStepIndex } from "@/utils/orderStorage";
@@ -29,10 +29,19 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
   const statusRef = useRef<string>(toStandardStatus(initialOrder?.status));
   statusRef.current = toStandardStatus(order?.status);
 
-  // Tipo do pedido lido do banco: 'delivery' | 'retirada' | 'mesa'
-  const orderKind = getOrderKind(order);
-  const isDineIn = orderKind === "mesa";
-  const isPickup = orderKind === "retirada";
+  const isDineIn =
+    order?.orderType === "dine_in" ||
+    (order as any)?.delivery_type === "dine_in" ||
+    (order as any)?.orderType === "mesa" ||
+    (order as any)?.tipo_pedido === "mesa" ||
+    Boolean((order as any)?.tableNumber || (order as any)?.table_number || (order as any)?.mesa);
+
+  const isPickup =
+    order?.orderType === "pickup" ||
+    order?.orderType === "takeaway" ||
+    (order as any)?.delivery_type === "pickup" ||
+    (order as any)?.orderType === "retirada" ||
+    (order as any)?.tipo_pedido === "retirada";
 
   // Textos dinâmicos rigorosamente exigidos baseados no tipo_pedido:
   // - Se tipo_pedido for 'delivery' ➔ "Saiu para Entrega"
@@ -79,6 +88,16 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
       label: step3Label,
       description: step3Desc,
       icon: step3Icon,
+    },
+    {
+      statusKey: "ENTREGUE",
+      label: isDineIn ? "Servido na Mesa" : isPickup ? "Pedido Retirado" : "Pedido Entregue",
+      description: isDineIn
+        ? "Bom apetite! Aproveite sua refeição"
+        : isPickup
+        ? "Pedido entregue no balcão! Obrigado pela preferência"
+        : "Bom apetite! Pedido finalizado com sucesso",
+      icon: CheckCircle2,
     },
   ];
 
@@ -213,13 +232,8 @@ export function OrderTracking({ order: initialOrder, onBack, onHome }: OrderTrac
         }
       });
 
-      // Se a conexão oscilar (rede móvel), o EventSource reconecta sozinho; aqui resincroniza o status na hora
       eventSource.onerror = () => {
-        fetchOrderDetailsApi(cleanId, config.slug)
-          .then((res) => {
-            if (isMounted && res.success && res.order) applyStatus(res.order.status, res.order);
-          })
-          .catch(() => {});
+        // SSE error handled silently
       };
     } catch (err) {
       console.warn("EventSource SSE não disponível:", err);

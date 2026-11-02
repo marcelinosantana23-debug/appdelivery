@@ -41,10 +41,8 @@ import {
   groupOrdersByTemporalBlock,
   formatTableDisplay,
   formatTableNumberOnly,
-  getOrderKind,
-  getFinalStepLabel,
 } from "@/utils/order";
-import { toStandardStatus, getNextOrderStatus, isOrderConcluded } from "@/utils/orderStorage";
+import { toStandardStatus, getStatusRank, getNextOrderStatus } from "@/utils/orderStorage";
 import type { Order, OrderStatus } from "@/types";
 
 const statusFlow: { status: string; label: string; icon: React.ComponentType<{ className?: string }>; color: string }[] = [
@@ -101,16 +99,21 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
     toggle: toggleWakeLock,
   } = useScreenWakeLock(true);
 
-  // "Ativo" = ainda exige ação do lojista (Pendente -> Aceitar | Em preparo -> Pronto / Concluir)
-  const activeOrdersCount = orders.filter((o) => !isOrderConcluded(o.status)).length;
-  const pendingOrdersCount = orders.filter((o) => toStandardStatus(o.status) === "PENDENTE").length;
+  const activeOrdersCount = orders.filter((o) => {
+    const rank = getStatusRank(o.status);
+    return rank < 4 && rank !== 99;
+  }).length;
+  const pendingOrdersCount = orders.filter((o) => getStatusRank(o.status) === 0).length;
   const allOrdersCount = orders.length;
 
   // Ordenação determinística do pedido mais recente para o mais antigo
   const filtered = useMemo(() => {
     const base =
       filter === "active"
-        ? orders.filter((o) => !isOrderConcluded(o.status))
+        ? orders.filter((o) => {
+            const rank = getStatusRank(o.status);
+            return rank < 4 && rank !== 99;
+          })
         : orders;
 
     return [...base].sort((a, b) => {
@@ -366,7 +369,16 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
                       isNew={newOrderIds.includes(order.id)}
                       onView={() => clearNewOrderFlag(order.id)}
                       onAdvance={(id) => {
-                        const next = getNextOrderStatus(order.status, getOrderKind(order) !== "delivery");
+                        const isPickupOrDineIn =
+                          order.orderType === "pickup" ||
+                          order.orderType === "takeaway" ||
+                          order.orderType === "dine_in" ||
+                          (order as any).delivery_type === "pickup" ||
+                          (order as any).delivery_type === "dine_in" ||
+                          (order as any).tipo_pedido === "retirada" ||
+                          (order as any).tipo_pedido === "mesa" ||
+                          Boolean((order as any).tableNumber || (order as any).table_number || (order as any).mesa);
+                        const next = getNextOrderStatus(order.status, isPickupOrDineIn);
                         updateOrderStatus(id, next as OrderStatus);
                         clearNewOrderFlag(id);
                       }}
@@ -392,7 +404,16 @@ export function AdminOrders({ newOrderIds }: { newOrderIds: string[] }) {
               isNew={newOrderIds.includes(order.id)}
               onView={() => clearNewOrderFlag(order.id)}
               onAdvance={(id) => {
-                const next = getNextOrderStatus(order.status, getOrderKind(order) !== "delivery");
+                const isPickupOrDineIn =
+                  order.orderType === "pickup" ||
+                  order.orderType === "takeaway" ||
+                  order.orderType === "dine_in" ||
+                  (order as any).delivery_type === "pickup" ||
+                  (order as any).delivery_type === "dine_in" ||
+                  (order as any).tipo_pedido === "retirada" ||
+                  (order as any).tipo_pedido === "mesa" ||
+                  Boolean((order as any).tableNumber || (order as any).table_number || (order as any).mesa);
+                const next = getNextOrderStatus(order.status, isPickupOrDineIn);
                 updateOrderStatus(id, next as OrderStatus);
                 clearNewOrderFlag(id);
               }}
@@ -456,11 +477,17 @@ function OrderCard({
   onOpenMotoboy: (order: Order) => void;
   onPrintThermalReceipt: (order: Order) => void;
 }) {
-  // Tipo do pedido lido do banco: 'delivery' | 'retirada' | 'mesa'
-  const orderKind = getOrderKind(order);
-  const isPickup = orderKind === "retirada";
-  const isDineIn = orderKind === "mesa";
-
+  const isPickup =
+    order.orderType === "pickup" ||
+    order.orderType === "takeaway" ||
+    (order as any).delivery_type === "pickup" ||
+    (order as any).tipo_pedido === "retirada";
+  const isDineIn =
+    order.orderType === "dine_in" ||
+    (order as any).delivery_type === "dine_in" ||
+    (order as any).tipo_pedido === "mesa" ||
+    Boolean((order as any).tableNumber || (order as any).table_number || (order as any).mesa);
+  
   const stdStatus = toStandardStatus(order.status);
   const isCancelled = stdStatus === "CANCELADO";
   const isDone = stdStatus === "ENTREGUE";
@@ -966,7 +993,7 @@ function OrderCard({
           </div>
 
           {/* 2. BLOCO DE SELEÇÃO DE LOGÍSTICA / MOTOBOY */}
-          {orderKind === "delivery" && (
+          {order.orderType === "delivery" && (
             <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shrink-0 shadow-2xs">
@@ -1053,19 +1080,43 @@ function OrderCard({
               </button>
             </div>
           ) : (
-            <div className="pt-0.5 flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-emerald-950 font-bold text-xs sm:text-sm shadow-2xs">
-              <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-              <span>{getFinalStepLabel(orderKind)}</span>
-              <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[11px] font-extrabold text-emerald-900 ml-1">
-                Pedido Concluído
-              </span>
+            <div className="pt-0.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-emerald-950 font-bold text-xs sm:text-sm shadow-2xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
+                <span>
+                  {order.orderType === "delivery"
+                    ? "Saiu para Entrega"
+                    : isDineIn
+                    ? "Pronto para Servir na Mesa"
+                    : "Pronto para Retirada no Balcão"}
+                </span>
+                <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[11px] font-extrabold text-emerald-900 ml-1">
+                  Etapa Ativa Concluída
+                </span>
+              </div>
+
+              {!isDone && (
+                <button
+                  type="button"
+                  id={`finish-order-${order.id.replace(/[^a-zA-Z0-9_-]/g, "")}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdvance(order.id);
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-600 bg-white hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-bold transition cursor-pointer active:scale-95"
+                  title="Finalizar e arquivar este pedido no histórico"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Marcar como Entregue / Finalizado</span>
+                </button>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* Rodapé para Pedidos Concluídos com Botão de Reimprimir Comprovante */}
-      {(isDone || isReady || isDelivering) && (
+      {isDone && (
         <div className="flex items-center justify-between border-t border-gray-100 px-4 py-2.5 bg-slate-50/70 rounded-b-2xl">
           <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />

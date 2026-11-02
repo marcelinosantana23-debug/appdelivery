@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { sign, verify } from "hono/jwt";
 import { Database } from "./db";
-import { subscribeOrderEvents, ALL_TENANTS_ROOM } from "./events";
+import { orderEvents } from "./events";
 import { sendNewOrderPushNotification } from "./services/fcm";
 import { SW_SCRIPT_CONTENT, MANIFEST_JSON_CONTENT, ASSET_LINKS_CONTENT } from "./pwaAssets";
 import {
@@ -180,14 +180,7 @@ api.use("/api/merchant/*", requireMerchantMiddleware);
 
 // Helper para instanciar a camada de banco de dados diretamente com o objeto env da requisição Cloudflare Workers
 function getDb(c: any): Database {
-  const db = new Database(c.env);
-  try {
-    // Permite que tarefas secundárias terminem após a resposta no Cloudflare Workers
-    db.setExecutionContext(c.executionCtx);
-  } catch {
-    // Node/dev: não há executionCtx
-  }
-  return db;
+  return new Database(c.env);
 }
 
 // Mapeamento de status amigáveis para pedidos (Português <-> Inglês)
@@ -1917,7 +1910,25 @@ const handleStatusUpdate = async (c: any) => {
       return c.json({ success: false, error: "Pedido não encontrado para atualização." }, 404);
     }
 
-    // (KV já é atualizado em segundo plano dentro de db.updateOrderStatus)
+    // Persiste também no Cloudflare KV para sincronização instantânea com clientes 4G/5G
+    const kv = (c.env?.KV || c.env?.STORE_KV);
+    if (kv) {
+      try {
+        const cleanId = pedidoId.replace(/^#/, "");
+        await kv.put(`order:${atualizado.id}`, JSON.stringify(atualizado));
+        await kv.put(`order:${cleanId}`, JSON.stringify(atualizado));
+        await kv.put(`order_status:${cleanId}`, JSON.stringify({
+          orderId: atualizado.id,
+          status: standardStatus,
+          updatedAt: Date.now(),
+        }));
+        if (atualizado.tenantId) {
+          await kv.put(`tenant_orders_version:${atualizado.tenantId}`, Date.now().toString());
+        }
+      } catch (kvErr) {
+        console.warn("KV sync in status update warning:", kvErr);
+      }
+    }
 
     return c.json({
       success: true,
@@ -3280,7 +3291,7 @@ api.get("/tenants/:slugOrId/orders/stream", async (c) => {
     }
 
     // Escuta em tempo real orientada a eventos - ZERO polling no Cloudflare D1
-    const unsubscribe = await subscribeOrderEvents(c.env, tenant.id, async (payload) => {
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
       const belongsToTenant =
         payload.order?.tenantId === tenant.id ||
         payload.order?.tenantId === tenant.slug ||
@@ -3387,7 +3398,7 @@ api.get("/orders/stream", async (c) => {
       console.warn("SSE initial orders error:", e);
     }
 
-    const unsubscribe = await subscribeOrderEvents(c.env, effectiveTenantId || (isSuperAdmin ? ALL_TENANTS_ROOM : ""), async (payload) => {
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
       // Sem tenant e sem super admin, nunca propaga eventos
       if (!effectiveTenantId && !isSuperAdmin) {
         return;
@@ -3795,12 +3806,10 @@ api.get("/orders/:orderId/stream", async (c) => {
   const cleanId = rawId.replace(/^#/, "");
 
   return streamSSE(c, async (stream) => {
-    // 1. Envia estado inicial imediato (e descobre a sala/loja do pedido para assinar o hub)
-    let STREAM_ROOM = ALL_TENANTS_ROOM;
+    // 1. Envia estado inicial imediato
     try {
       const initialOrder = await db.getOrderById(rawId);
       if (initialOrder) {
-        if (initialOrder.tenantId) STREAM_ROOM = initialOrder.tenantId;
         await stream.writeSSE({
           event: "status_update",
           data: JSON.stringify({
@@ -3816,7 +3825,7 @@ api.get("/orders/:orderId/stream", async (c) => {
     }
 
     // 2. Inscreve no barramento de eventos (acionado quando o lojista altera o status no admin)
-    const unsubscribe = await subscribeOrderEvents(c.env, STREAM_ROOM, async (payload) => {
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
       const pClean = payload.orderId.replace(/^#/, "");
       if (pClean === cleanId || payload.order.id === rawId || payload.order.id === `#${cleanId}`) {
         try {
@@ -3857,11 +3866,9 @@ api.get("/tenants/:slugOrId/orders/:orderId/stream", async (c) => {
   const cleanId = rawId.replace(/^#/, "");
 
   return streamSSE(c, async (stream) => {
-    let STREAM_ROOM = ALL_TENANTS_ROOM;
     try {
       const initialOrder = await db.getOrderById(rawId);
       if (initialOrder) {
-        if (initialOrder.tenantId) STREAM_ROOM = initialOrder.tenantId;
         await stream.writeSSE({
           event: "status_update",
           data: JSON.stringify({
@@ -3876,7 +3883,7 @@ api.get("/tenants/:slugOrId/orders/:orderId/stream", async (c) => {
       console.warn("SSE tenant initial order fetch error:", e);
     }
 
-    const unsubscribe = await subscribeOrderEvents(c.env, STREAM_ROOM, async (payload) => {
+    const unsubscribe = orderEvents.subscribe(async (payload) => {
       const pClean = payload.orderId.replace(/^#/, "");
       if (pClean === cleanId || payload.order.id === rawId || payload.order.id === `#${cleanId}`) {
         try {

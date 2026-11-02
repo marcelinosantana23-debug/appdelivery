@@ -260,33 +260,6 @@ export function groupOrdersByTemporalBlock(orders: Order[], nowMs: number = Date
   return result;
 }
 
-export type OrderKind = "delivery" | "retirada" | "mesa";
-
-/**
- * Resolve o tipo do pedido ('delivery' | 'retirada' | 'mesa') lendo o que foi salvo no banco.
- * Aceita tipo_pedido, orderType, delivery_type e variantes (dine_in, pickup, takeaway...).
- * Fonte única de verdade para painel do lojista e barra de progresso do cliente.
- */
-export function getOrderKind(order?: (Partial<Order> & Record<string, any>) | null): OrderKind {
-  if (!order) return "delivery";
-  const candidates = [order.tipo_pedido, order.orderType, order.delivery_type, order.order_type];
-  for (const raw of candidates) {
-    const t = String(raw || "").toLowerCase().trim();
-    if (!t) continue;
-    if (t === "mesa" || t === "dine_in" || t === "dine-in" || t === "dinein") return "mesa";
-    if (t === "retirada" || t === "pickup" || t === "takeaway" || t === "balcao" || t === "balcão") return "retirada";
-    if (t === "delivery" || t === "entrega") return "delivery";
-  }
-  return getOrderTable(order) ? "mesa" : "delivery";
-}
-
-/** Texto da etapa final (única) conforme o tipo do pedido. */
-export function getFinalStepLabel(kind: OrderKind): string {
-  if (kind === "mesa") return "Pronto para Servir na Mesa";
-  if (kind === "retirada") return "Pronto para Retirada no Balcão";
-  return "Saiu para Entrega";
-}
-
 export function generateOrderId(): string {
   const num = Math.floor(1000 + Math.random() * 9000);
   return `#${num}`;

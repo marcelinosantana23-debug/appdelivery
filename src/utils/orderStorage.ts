@@ -126,22 +126,17 @@ export function getNextOrderStatus(
   const std = toStandardStatus(currentStatus);
   switch (std) {
     case "PENDENTE":
-      // Botão 1 do lojista: "Aceitar Pedido" -> em preparo
+      // Ação 1 do Lojista: Aceitar Pedido
       return "EM_PREPARO";
     case "EM_PREPARO":
-      // Botão 2 (final e único): "Pronto / Concluir"
-      //   delivery -> "Saiu para Entrega" | retirada -> "Pronto para Retirada" | mesa -> "Pronto para Servir"
+      // Ação 2 do Lojista: Pronto / Concluir (dinâmico pelo tipo de pedido)
       return isPickupOrDineIn ? "PRONTO" : "SAIU_PARA_ENTREGA";
+    case "PRONTO":
+    case "SAIU_PARA_ENTREGA":
+      return "ENTREGUE";
     default:
-      // Pedido já concluído pelo lojista (PRONTO / SAIU_PARA_ENTREGA / ENTREGUE): não há terceira ação
-      return std;
+      return "ENTREGUE";
   }
-}
-
-/** Pedido já passou pela etapa final do lojista (Pronto/Concluir) ou foi cancelado. */
-export function isOrderConcluded(status: string | undefined | null): boolean {
-  const rank = getStatusRank(status);
-  return rank >= 2;
 }
 
 export function getStatusStepIndex(status: string | undefined | null): number {

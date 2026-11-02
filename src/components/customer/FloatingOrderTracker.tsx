@@ -18,7 +18,7 @@ import {
 import type { Order, OrderStatus } from "@/types";
 import { fetchOrderDetailsApi } from "@/services/api";
 import { useStore } from "@/context/StoreContext";
-import { formatPrice, getOrderKind } from "@/utils/order";
+import { formatPrice } from "@/utils/order";
 import {
   getActiveOrderData,
   updateActiveOrderStatus,
@@ -55,16 +55,29 @@ export function FloatingOrderTracker({
   const statusRef = useRef<OrderStatus>(status);
   statusRef.current = status;
 
-  // Tipo do pedido lido do banco ('delivery' | 'retirada' | 'mesa'); antes de carregar, usa o tipo salvo localmente
-  const orderKind = useMemo(() => {
-    if (!order && isPickup) return "retirada" as const;
-    return getOrderKind(order);
-  }, [order, isPickup]);
-  const isDineIn = orderKind === "mesa";
-  const isPickupOrder = orderKind === "retirada";
+  const isDineIn = useMemo(() => {
+    return (
+      order?.orderType === "dine_in" ||
+      (order as any)?.delivery_type === "dine_in" ||
+      (order as any)?.orderType === "mesa" ||
+      (order as any)?.tipo_pedido === "mesa" ||
+      Boolean((order as any)?.tableNumber || (order as any)?.table_number || (order as any)?.mesa)
+    );
+  }, [order]);
 
-  // Fluxo de 3 etapas (lojista tem só 2 botões) com texto final dinâmico pelo tipo_pedido:
-  // [ Pedido Recebido ] ➔ [ Pedido Aceito ] ➔ [ Saiu para Entrega / Pronto para Retirada no Balcão / Pronto para Servir na Mesa ]
+  const isPickupOrder = useMemo(() => {
+    return (
+      isPickup ||
+      order?.orderType === "pickup" ||
+      order?.orderType === "takeaway" ||
+      (order as any)?.delivery_type === "pickup" ||
+      (order as any)?.orderType === "retirada" ||
+      (order as any)?.tipo_pedido === "retirada"
+    );
+  }, [isPickup, order]);
+
+  // Mapeamento das 4 etapas visuais com textos dinâmicos baseados no tipo_pedido:
+  // [ Pedido Recebido ] ➔ [ Pedido Aceito ] ➔ [ Saiu para Entrega / Pronto para Retirada no Balcão / Pronto para Servir na Mesa ] ➔ [ Entregue ]
   const currentStepNumber = useMemo(() => {
     const s = normalizeOrderStatus(status);
     switch (s) {
@@ -122,8 +135,15 @@ export function FloatingOrderTracker({
         shortLabel: step3ShortLabel,
         icon: step3Icon,
       },
+      {
+        step: 4,
+        key: "done",
+        label: isDineIn ? "Servido na Mesa" : isPickupOrder ? "Pedido Retirado" : "Pedido Entregue",
+        shortLabel: isDineIn ? "Servido" : isPickupOrder ? "Retirado" : "Entregue",
+        icon: CheckCircle2,
+      },
     ],
-    [step3Label, step3ShortLabel, step3Icon]
+    [isDineIn, isPickupOrder, step3Label, step3ShortLabel, step3Icon]
   );
 
   // Link para WhatsApp da loja
@@ -398,14 +418,6 @@ export function FloatingOrderTracker({
 
       eventSource.addEventListener("status_update", handleEventMessage);
       eventSource.onmessage = handleEventMessage;
-      // Reconexão automática do EventSource + resincronização imediata do status
-      eventSource.onerror = () => {
-        fetchOrderDetailsApi(cleanId, currentTenantSlug)
-          .then((res) => {
-            if (res.success && res.order?.status) applyStatusUpdate(res.order.status, res.order);
-          })
-          .catch(() => {});
-      };
     } catch (err) {
       console.warn("EventSource SSE não suportado:", err);
     }
@@ -705,12 +717,14 @@ export function FloatingOrderTracker({
                       currentStepNumber === 1
                         ? "0%"
                         : currentStepNumber === 2
-                        ? "50%"
+                        ? "33%"
+                        : currentStepNumber === 3
+                        ? "66%"
                         : "calc(100% - 2rem)",
                   }}
                 />
 
-                {/* Os 3 Nós das Etapas */}
+                {/* Os 4 Nós das Etapas */}
                 {stepsConfig.map((s) => {
                   const isPast = s.step < currentStepNumber;
                   const isCurrent = s.step === currentStepNumber;
