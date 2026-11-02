@@ -17,12 +17,14 @@ interface PWAInstallButtonProps {
   className?: string;
   variant?: "header" | "floating" | "banner";
   label?: string;
+  storeName?: string;
 }
 
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   className = "",
   variant = "header",
   label,
+  storeName: _storeName,
 }) => {
   const {
     deferredPrompt,

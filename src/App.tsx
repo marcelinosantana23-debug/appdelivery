@@ -18,7 +18,7 @@ import { OfflineIndicator } from "@/components/common/OfflineIndicator";
 import { PWAInstallButton } from "@/components/common/PWAInstallButton";
 import { PullToRefresh } from "@/components/common/PullToRefresh";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
-import type { Product, Order } from "@/types";
+import type { Product, Order, Tenant } from "@/types";
 import { TopFoodPortal } from "@/components/portal/TopFoodPortal";
 import { getActiveOrderData } from "@/utils/orderStorage";
 import { processSessionNavigation, clearWebStoreSession, markAppAsBooted } from "@/utils/sessionNavigation";
@@ -90,11 +90,14 @@ function CustomerApp({ onStoreAdminClick, onSuperAdminClick, onBackToPortal }: C
         customerName: "Cliente",
         customerPhone: "",
         items: [],
+        subtotal: active.total || 0,
+        deliveryFee: 0,
         total: active.total || 0,
         status: active.status || "received",
         orderType: active.orderType || "delivery",
         paymentMethod: "pix",
-        createdAt: new Date(active.timestamp || Date.now()).toISOString(),
+        statusHistory: [{ status: active.status || "received", timestamp: active.timestamp || Date.now() }],
+        createdAt: active.timestamp || Date.now(),
       };
     }
     return null;

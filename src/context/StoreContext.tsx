@@ -70,6 +70,7 @@ import {
   fetchMarketplaceCatalogApi,
   fetchAllActiveStoriesApi,
   activateTenantSubscriptionApi,
+  cancelTenantSubscriptionApi,
   confirmTenantPaymentApi,
   updateTenantMonthlyFeeApi,
   fetchLocalitiesApi,
@@ -210,14 +211,14 @@ interface StoreContextValue {
   activateSubscription: (
     slugOrId: string,
     billingDay?: number
-  ) => Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; message?: string; error?: string }>;
+  ) => Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; nextDueDate?: number; message?: string; error?: string }>;
   updateMonthlyFee: (
     slugOrId: string,
     monthlyFee: number
   ) => Promise<{ success: boolean; tenant?: Tenant; monthlyFee?: number; message?: string; error?: string }>;
   confirmMonthlyPayment: (
     slugOrId: string
-  ) => Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; paymentAt?: number; message?: string; error?: string }>;
+  ) => Promise<{ success: boolean; tenant?: Tenant; billingDay?: number; paymentAt?: number; nextDueDate?: number; message?: string; error?: string }>;
   cancelSubscription: (
     slugOrId: string
   ) => Promise<{ success: boolean; tenant?: Tenant; message?: string; error?: string }>;
@@ -780,14 +781,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
         const res = await fetchFeaturedStoresRankedApi(loc);
         if (res.success && res.stores) {
+          const stores = res.stores;
           setFeaturedStoresRanked((prev) => {
-            if (haveStoresRankedChanged(prev, res.stores)) {
-              saveCachedFeaturedStores(res.stores);
-              return res.stores;
+            if (haveStoresRankedChanged(prev, stores)) {
+              saveCachedFeaturedStores(stores);
+              return stores;
             }
             return prev;
           });
-          saveCachedFeaturedStores(res.stores);
+          saveCachedFeaturedStores(stores);
         }
       } catch {
         // ignore
@@ -802,17 +804,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const loc = locationOverride !== undefined ? locationOverride : selectedLocality;
         const res = await fetchTopSellingProductsApi(10, 30, loc);
         if (res.success && res.products) {
+          const products = res.products;
           setTopSellingProducts((prev) => {
             const changed =
-              prev.length !== res.products.length ||
-              prev.some((p, i) => p.id !== res.products[i]?.id);
+              prev.length !== products.length ||
+              prev.some((p, i) => p.id !== products[i]?.id);
             if (changed) {
-              saveCachedTopProducts(res.products);
-              return res.products;
+              saveCachedTopProducts(products);
+              return products;
             }
             return prev;
           });
-          saveCachedTopProducts(res.products);
+          saveCachedTopProducts(products);
         }
       } catch {
         // ignore
@@ -878,28 +881,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
 
         if (fRes.success && fRes.stores) {
+          const fStores = fRes.stores;
           setFeaturedStoresRanked((prev) => {
-            if (haveStoresRankedChanged(prev, fRes.stores)) {
-              if (isAllLoc) saveCachedFeaturedStores(fRes.stores);
-              return fRes.stores;
+            if (haveStoresRankedChanged(prev, fStores)) {
+              if (isAllLoc) saveCachedFeaturedStores(fStores);
+              return fStores;
             }
             return prev;
           });
-          if (isAllLoc) saveCachedFeaturedStores(fRes.stores);
+          if (isAllLoc) saveCachedFeaturedStores(fStores);
         }
 
         if (pRes.success && pRes.products) {
+          const pProducts = pRes.products;
           setTopSellingProducts((prev) => {
             const changed =
-              prev.length !== pRes.products.length ||
-              prev.some((p, i) => p.id !== pRes.products[i]?.id);
+              prev.length !== pProducts.length ||
+              prev.some((p, i) => p.id !== pProducts[i]?.id);
             if (changed) {
-              if (isAllLoc) saveCachedTopProducts(pRes.products);
-              return pRes.products;
+              if (isAllLoc) saveCachedTopProducts(pProducts);
+              return pProducts;
             }
             return prev;
           });
-          if (isAllLoc) saveCachedTopProducts(pRes.products);
+          if (isAllLoc) saveCachedTopProducts(pProducts);
         }
 
         if (cRes.success && Array.isArray(cRes.products) && cRes.products.length > 0) {

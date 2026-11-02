@@ -7,6 +7,15 @@ PLATFORM_NAME = "Top Food Multi-tenant"
 ENVIRONMENT = "production"
 JWT_SECRET = "topfood-jwt-secret-cloudflare-production-2026"
 
+[durable_objects]
+bindings = [
+  { name = "ORDER_HUB", class_name = "OrderHub" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["OrderHub"]
+
 # Cloudflare D1 Database Binding
 [[d1_databases]]
 binding = "DB"

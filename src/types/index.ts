@@ -42,18 +42,19 @@ export interface Product {
   id: string;
   tenantId?: string;
   name: string;
-  description: string;
+  description?: string;
   price: number;
-  image: string;
-  category: string;
-  available: boolean;
-  options: ProductOption[];
+  image?: string;
+  category?: string;
+  available?: boolean;
+  options?: ProductOption[];
   addonGroupIds?: string[];
   addonGroups?: AddonGroup[];
   position?: number;
   ordem?: number;
   order?: number;
   createdAt?: number;
+  popular?: boolean;
 }
 
 export type UserRole = "super_admin" | "tenant_admin";
@@ -183,7 +184,7 @@ export interface CartItem {
 
 export type OrderItem = CartItem;
 
-export type OrderType = "delivery" | "pickup" | "dine_in";
+export type OrderType = "delivery" | "pickup" | "dine_in" | "takeaway" | "mesa" | "retirada" | (string & {});
 export type PaymentMethod = "pix" | "card" | "cash";
 export type CardType = "credit" | "debit";
 export type StandardOrderStatus =
@@ -334,6 +335,9 @@ export interface TopSellingProduct {
   localidade?: string;
   totalSold: number;
   rank?: number;
+  popular?: boolean;
+  deliveryFee?: number;
+  deliveryTime?: string;
 }
 
 export interface FeaturedStoreRanked extends Tenant {

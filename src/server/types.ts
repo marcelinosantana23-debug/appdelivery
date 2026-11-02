@@ -59,6 +59,8 @@ export interface Tenant {
   subscriptionStatus?: SubscriptionStatus;
   billingDay?: number;
   lastPaymentAt?: number;
+  paidUntil?: number;
+  nextDueDate?: number;
   monthlyFee?: number;
   isOpen: boolean;
   createdAt: number;
@@ -142,6 +144,7 @@ export interface Product {
   ordem?: number;
   order?: number;
   createdAt?: number;
+  popular?: boolean;
 }
 
 export interface Category {
@@ -167,7 +170,23 @@ export interface EstablishmentCategory {
 export type OrderType = "delivery" | "pickup" | "dine_in";
 export type PaymentMethod = "pix" | "card" | "cash";
 export type CardType = "credit" | "debit";
-export type OrderStatus = "received" | "preparing" | "delivering" | "done" | "cancelled";
+export type StandardOrderStatus =
+  | "PENDENTE"
+  | "EM_PREPARO"
+  | "PRONTO"
+  | "SAIU_PARA_ENTREGA"
+  | "ENTREGUE"
+  | "CANCELADO";
+
+export type OrderStatus =
+  | "received"
+  | "preparing"
+  | "delivering"
+  | "done"
+  | "cancelled"
+  | "ready"
+  | StandardOrderStatus
+  | (string & {});
 
 export interface OrderItem {
   id: string;
@@ -271,6 +290,7 @@ export interface Env {
   DB?: CloudflareD1Database;
   KV?: CloudflareKVNamespace;
   STORE_KV?: CloudflareKVNamespace;
+  ORDER_HUB?: any;
   ASSETS?: { fetch: (req: Request | string) => Promise<Response> };
   __STATIC_CONTENT?: unknown;
   PLATFORM_NAME?: string;
@@ -343,6 +363,9 @@ export interface TopSellingProduct {
   localidade?: string;
   totalSold: number;
   rank?: number;
+  popular?: boolean;
+  deliveryFee?: number;
+  deliveryTime?: string;
 }
 
 export interface FeaturedStoreRanked extends Tenant {

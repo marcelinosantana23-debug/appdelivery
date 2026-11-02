@@ -53,7 +53,7 @@ function formatPhone(value: string): string {
 }
 
 export function Checkout({ onClose, onOrderPlaced }: CheckoutProps) {
-  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config } = useStore();
+  const { cart, cartSubtotal, clearCart, addOrder, isStoreOpen, isStoreActive, config, showToast } = useStore();
 
   const [orderType, setOrderType] = useState<OrderType>("delivery");
   const [tableNumber, setTableNumber] = useState("");

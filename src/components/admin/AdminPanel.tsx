@@ -502,7 +502,7 @@ export function AdminPanel({ onExit, onGoToSuperAdmin, onViewStoreFront, initial
             onClick={() => {
               toggleSound();
               if (!soundEnabled) {
-                triggerNotificationSound();
+                playAudioActivatedConfirmation();
               }
             }}
             className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl transition shrink-0 ${

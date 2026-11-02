@@ -64,8 +64,8 @@ export function StoreQrCodePlate({
     ? (tenants.find((t) => t.id === selectedTenantId) ||
        propTenant ||
        currentTenant ||
-       (config?.slug ? ({ ...config, id: config.slug } as unknown as Tenant) : null))
-    : (currentTenant || (config?.slug ? ({ ...config, id: config.slug } as unknown as Tenant) : null) || propTenant);
+       (config?.slug ? ({ ...config, id: config.slug } as unknown as Tenant) : null) || null)
+    : (currentTenant || (config?.slug ? ({ ...config, id: config.slug } as unknown as Tenant) : null) || propTenant || null);
 
   const storeName = getSafeDisplayName(
     !isSuperAdmin ? (currentTenant?.name || config.name) : (activeTenant?.name || config.name),

@@ -18,7 +18,7 @@ export function Header(props: HeaderProps = {}) {
   const storeLocality = currentTenant?.localidade || config.localidade || "Gargaú";
 
   const hasBanner = Boolean(config.bannerImage);
-  const stories = getStoreActiveStories(config.id || config.slug);
+  const stories = getStoreActiveStories(config.id || config.slug || "");
   const hasStories = stories.length > 0;
   const latestStory = hasStories ? stories[stories.length - 1] : null;
   const storyPreviewUrl = latestStory?.mediaUrl || (latestStory as any)?.imageUrl;

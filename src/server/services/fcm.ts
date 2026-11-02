@@ -127,8 +127,8 @@ export async function sendNewOrderPushNotification(
 
     if (!db) {
       // Lazy load de db
-      const { DatabaseAdapter } = await import("../db");
-      db = new DatabaseAdapter(env);
+      const { Database } = await import("../db");
+      db = new Database(env);
     }
 
     // 1. CONDIÇÃO: Verifica se o lojista está logado (possui tokens de sessão ativos)

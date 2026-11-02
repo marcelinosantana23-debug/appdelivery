@@ -19,7 +19,7 @@ import type {
   AddonGroup,
 } from "./types";
 import { orderEvents } from "./events";
-import { hashPassword, verifyPassword } from "./security";
+import { hashPassword, verifyPassword, verifyTokenSafely } from "./security";
 import { extraTenants, extraUsers, extraProducts, extraStories, extraAddonGroups } from "./seedData";
 
 // =========================================================================
@@ -2000,7 +2000,7 @@ class MemoryStore {
     }
     return list;
   })();
-  products: Product[] = initialProducts.filter((p) => !isTenantPermanentlyDeleted(p.tenantId));
+  products: Product[] = initialProducts.filter((p) => !p.tenantId || !isTenantPermanentlyDeleted(p.tenantId));
   categories: Category[] = [...defaultCategories];
   establishmentCategories: EstablishmentCategory[] = [...defaultEstablishmentCategories];
   orders: Order[] = initialOrders.filter((o) => !isTenantPermanentlyDeleted(o.tenantId));
@@ -2335,7 +2335,7 @@ export class Database {
           await this.insertUserRow(u);
         }
         for (const p of initialProducts) {
-          if (isTenantPermanentlyDeleted(p.tenantId)) continue;
+          if (p.tenantId && isTenantPermanentlyDeleted(p.tenantId)) continue;
           await this.insertProductRow(p);
         }
         for (const ec of defaultEstablishmentCategories) {
@@ -3009,6 +3009,10 @@ export class Database {
     description?: string;
     businessType?: string;
     localidade?: string;
+    motoboyPhone?: string;
+    motoboy_phone?: string;
+    motoboyName?: string;
+    motoboy_name?: string;
   }): Promise<Tenant> {
     const slug = data.slug
       ? globalStore.slugify(data.slug)
@@ -6320,11 +6324,12 @@ export class Database {
       const completedOrders = storeOrders.filter(
         (o) =>
           o.status === "done" ||
-          o.status === "Concluído" ||
-          o.status === "concluido" ||
-          o.status === "Entregue" ||
-          o.status === "entregue" ||
-          o.status === "finalizado"
+          o.status === "ENTREGUE" ||
+          (o.status as string) === "Concluído" ||
+          (o.status as string) === "concluido" ||
+          (o.status as string) === "Entregue" ||
+          (o.status as string) === "entregue" ||
+          (o.status as string) === "finalizado"
       );
       const nonCancelledOrders = storeOrders.filter((o) => o.status !== "cancelled");
       const loc = (t.localidade || t.location || "Gargaú").trim() || "Gargaú";
@@ -7018,4 +7023,92 @@ export class Database {
     const memTokens = globalStore.merchantPushTokens.get(cleanTenant) || [];
     return memTokens.filter((t) => t.isLoggedIn === true && t.token);
   }
+
+  async getUserByToken(token: string): Promise<User | null> {
+    if (!token) return null;
+    try {
+      const cleanToken = token.replace(/^Bearer\s+/i, "").trim();
+      const secret =
+        this.env?.JWT_SECRET ||
+        (typeof process !== "undefined" && process?.env?.JWT_SECRET) ||
+        "topfood-jwt-secret-cloudflare-production-2026";
+      const payload: any = await verifyTokenSafely(cleanToken, secret);
+      if (!payload) return null;
+
+      const userId = payload.sub || payload.userId || payload.id;
+      const email = payload.email?.toLowerCase();
+
+      if (this.env?.DB) {
+        if (userId) {
+          const row = await this.env.DB.prepare("SELECT * FROM users WHERE id = ? LIMIT 1").bind(userId).first<any>();
+          if (row) return this.mapUserRow(row);
+        }
+        if (email) {
+          const row = await this.env.DB.prepare("SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1").bind(email).first<any>();
+          if (row) return this.mapUserRow(row);
+        }
+      }
+
+      if (userId) {
+        const u = globalStore.users.find((u) => u.id === userId);
+        if (u) return u;
+      }
+      if (email) {
+        const u = globalStore.users.find((u) => u.email.toLowerCase() === email);
+        if (u) return u;
+      }
+
+      return {
+        id: userId || `user-${Date.now()}`,
+        email: email || "",
+        name: payload.name || "Usuário",
+        role: payload.role || "tenant_admin",
+        tenantId: payload.tenantId || null,
+        status: "active",
+        createdAt: Date.now(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async getTenantFinancialReport(tenantId: string, options?: any): Promise<FinancialReportData> {
+    return this.getFinancialReport(tenantId, options);
+  }
+
+  async getTenantCustomers(tenantId: string): Promise<Customer[]> {
+    await this.ensureTables();
+    if (this.env?.DB) {
+      try {
+        const res = await this.env.DB.prepare(
+          "SELECT * FROM customers WHERE tenant_id = ? ORDER BY last_order_at DESC"
+        )
+          .bind(tenantId)
+          .all<any>();
+        if (res.results && res.results.length > 0) {
+          return res.results.map((r: any) => ({
+            id: r.id,
+            tenantId: r.tenant_id,
+            name: r.name,
+            phone: r.phone,
+            street: r.street || undefined,
+            number: r.number || undefined,
+            district: r.district || undefined,
+            complement: r.complement || undefined,
+            reference: r.reference || undefined,
+            totalOrders: Number(r.total_orders) || 0,
+            totalSpent: Number(r.total_spent) || 0,
+            lastOrderAt: Number(r.last_order_at) || Date.now(),
+            createdAt: Number(r.created_at) || Date.now(),
+            updatedAt: Number(r.updated_at) || Date.now(),
+          }));
+        }
+      } catch (e) {
+        console.warn("D1 getTenantCustomers error:", e);
+      }
+    }
+    return globalStore.customers.filter((c) => c.tenantId === tenantId);
+  }
 }
+
+export const DatabaseAdapter = Database;

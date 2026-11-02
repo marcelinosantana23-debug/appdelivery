@@ -201,4 +201,5 @@ app.get("*", async (c, next) => {
   return next();
 });
 
+export { OrderHub } from "./server/orderHub";
 export default app;

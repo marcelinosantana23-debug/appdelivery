@@ -279,7 +279,9 @@ export function processSessionNavigation(): {
       isNewSession,
       isStandalone: false,
       shouldForceHome: false,
+      appAlreadyBooted: false,
       pwaRedirectSlug: null,
+      pwaRedirectRoute: null,
     };
   }
 
@@ -291,7 +293,9 @@ export function processSessionNavigation(): {
       isNewSession,
       isStandalone: false,
       shouldForceHome: true,
+      appAlreadyBooted: false,
       pwaRedirectSlug: null,
+      pwaRedirectRoute: null,
     };
   }
 
@@ -328,7 +332,9 @@ export function processSessionNavigation(): {
         isNewSession: true,
         isStandalone: false,
         shouldForceHome: true,
+        appAlreadyBooted: false,
         pwaRedirectSlug: null,
+        pwaRedirectRoute: null,
       };
     }
 
@@ -338,7 +344,9 @@ export function processSessionNavigation(): {
         isNewSession: true,
         isStandalone: false,
         shouldForceHome: false,
+        appAlreadyBooted: false,
         pwaRedirectSlug: null,
+        pwaRedirectRoute: null,
       };
     }
 
@@ -355,7 +363,9 @@ export function processSessionNavigation(): {
       isNewSession: true,
       isStandalone: false,
       shouldForceHome: true,
+      appAlreadyBooted: false,
       pwaRedirectSlug: null,
+      pwaRedirectRoute: null,
     };
   }
 
@@ -364,6 +374,8 @@ export function processSessionNavigation(): {
     isNewSession: false,
     isStandalone: false,
     shouldForceHome: false,
+    appAlreadyBooted: false,
     pwaRedirectSlug: null,
+    pwaRedirectRoute: null,
   };
 }

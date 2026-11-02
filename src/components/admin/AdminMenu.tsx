@@ -122,8 +122,8 @@ export function AdminMenu() {
       const catKey = (p.category || "").toLowerCase();
       if (catKey && !map.has(catKey)) {
         map.set(catKey, {
-          id: p.category,
-          name: p.category.charAt(0).toUpperCase() + p.category.slice(1).replace(/-/g, " "),
+          id: p.category || catKey,
+          name: catKey.charAt(0).toUpperCase() + catKey.slice(1).replace(/-/g, " "),
           icon: "🍽️",
         });
       }
@@ -140,7 +140,7 @@ export function AdminMenu() {
         !q ||
         p.name.toLowerCase().includes(q) ||
         (p.description && p.description.toLowerCase().includes(q)) ||
-        p.category.toLowerCase().includes(q);
+        (p.category && p.category.toLowerCase().includes(q));
 
       const isTodos = selectedCategory === "todos" || selectedCategory === "all";
       const matchesCat =

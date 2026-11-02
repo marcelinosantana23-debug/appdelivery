@@ -1,3 +1,5 @@
+import { verify } from "hono/jwt";
+
 /**
  * Top Food Delivery - Security & Shielding Layer
  * 
@@ -6,6 +8,27 @@
  * 3. JWT Expiration & Claim Validation
  * 4. Error Sanitization & D1 / Stack Trace Leak Prevention
  */
+
+export async function verifyTokenSafely(token: string, secret: string): Promise<any | null> {
+  if (!token || typeof token !== "string") return null;
+  const cleanToken = token.replace(/^Bearer\s+/i, "").trim();
+  if (!cleanToken) return null;
+
+  try {
+    const decoded: any = await verify(cleanToken, secret, "HS256");
+    if (!decoded) return null;
+
+    // Validação de expiração da sessão
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof decoded.exp === "number" && decoded.exp < now) {
+      return null; // Sessão expirada
+    }
+
+    return decoded;
+  } catch {
+    return null;
+  }
+}
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -43,7 +66,7 @@ export async function hashPassword(password: string, saltHex?: string): Promise<
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: saltBytes,
+      salt: saltBytes as unknown as BufferSource,
       iterations: 100000,
       hash: "SHA-256",
     },
@@ -83,7 +106,7 @@ export async function verifyPassword(password: string, storedHashOrPlain: string
     const derivedBits = await crypto.subtle.deriveBits(
       {
         name: "PBKDF2",
-        salt: saltBytes,
+        salt: saltBytes as unknown as BufferSource,
         iterations: iterations,
         hash: "SHA-256",
       },

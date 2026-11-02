@@ -572,6 +572,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
     localidade: "",
     isFeatured: false,
     priorityOrder: 0,
+    monthlyFee: 49.9,
   });
   const [isConfigSaving, setIsConfigSaving] = useState(false);
   const [isProcessingConfigBanner, setIsProcessingConfigBanner] = useState(false);
@@ -2769,6 +2770,7 @@ export function SuperAdminPanel({ onManageStore, onExit, onViewStoreFront }: Sup
                         localidade: "Gargaú",
                         isFeatured: false,
                         priorityOrder: 0,
+                        monthlyFee: 49.9,
                       });
                     }}
                     className="rounded-xl border border-slate-800 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"

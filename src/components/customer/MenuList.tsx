@@ -132,7 +132,8 @@ export function MenuList({ products, onProductClick }: MenuListProps) {
     .slice(0, 6);
 
   const grouped = products.reduce<Record<string, Product[]>>((acc, product) => {
-    (acc[product.category] = acc[product.category] || []).push(product);
+    const cat = product.category || "outros";
+    (acc[cat] = acc[cat] || []).push(product);
     return acc;
   }, {});
 

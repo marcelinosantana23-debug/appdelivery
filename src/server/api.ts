@@ -13,7 +13,7 @@ import {
   getGeminiClient,
   type MenuFileInput,
 } from "./geminiMenu";
-import type { Env, OrderStatus, TenantStatus, OrderItem, User } from "./types";
+import type { Env, OrderStatus, TenantStatus, OrderItem, User, Order } from "./types";
 import { isAllowedOrigin, sanitizeErrorMessage } from "./security";
 
 export const api = new Hono<{ Bindings: Env; Variables: { user?: User } }>();
@@ -876,6 +876,7 @@ const handleGerarFotoIa = async (c: any) => {
     }
     const catName = (category || "").trim();
     const desc = (description || "").trim();
+    const db = new Database(c.env);
 
     // Prioridade da chave da API do Gemini:
     // 1. Chave enviada no corpo da requisição (body.apiKey ou body.geminiApiKey)
@@ -1779,7 +1780,7 @@ const handlePedidosLoja = async (c: any) => {
           "SELECT * FROM orders WHERE tenant_id = ? OR tenant_id = ? ORDER BY created_at DESC, id DESC"
         )
           .bind(tenantIdToSearch, tenantSlugToSearch)
-          .all<any>();
+          .all();
 
         if (d1Res?.results && Array.isArray(d1Res.results)) {
           orders = d1Res.results.map((r: any) => (db as any).mapOrderRow(r));
@@ -4391,7 +4392,7 @@ api.post("/api/merchant/products", async (c) => {
     }
     const db = getDb(c);
     const body = await c.req.json();
-    const product = await db.createProduct({ ...body, tenantId });
+    const product = await db.createProduct(tenantId, body);
     return c.json({ success: true, product, message: "Produto cadastrado com sucesso." }, 201);
   } catch (err: any) {
     return c.json({ success: false, error: sanitizeErrorMessage(err) }, 500);

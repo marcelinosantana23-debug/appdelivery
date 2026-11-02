@@ -27,6 +27,7 @@ import {
   Smartphone,
   Printer,
   UtensilsCrossed,
+  BookmarkCheck,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
